@@ -1,0 +1,163 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/configuration.fma/js/app_manager</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../"><meta name="groc-document-path" content="dashboard/apps/configuration.fma/js/app_manager"><meta name="groc-project-path" content="dashboard/apps/configuration.fma/js/app_manager.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../assets/style.css"><script type="text/javascript" src="../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/configuration.fma/js/app_manager.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-built_in">module</span>.exports = <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">apps</span>(<span class="hljs-params">fabmo</span>) </span>{
+setupAppManager();
+<span class="hljs-keyword">var</span> defaultApp = <span class="hljs-string">''</span>;
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">refreshApps</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load the list of apps available on the tool</p></div></div><div class="code"><div class="wrapper">    fabmo.getApps(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, apps</span>) </span>{
+        <span class="hljs-keyword">if</span> (err) {
+            <span class="hljs-keyword">return</span> <span class="hljs-built_in">console</span>.error(err);
+        }
+        fabmo.getConfig(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+            <span class="hljs-keyword">if</span> (err){
+                <span class="hljs-built_in">console</span>.log(err);
+            } <span class="hljs-keyword">else</span> {
+                defaultApp = data.machine.default_app;
+                $(<span class="hljs-string">".app-listing"</span>).empty();
+        html = [
+            <span class="hljs-string">'&lt;tr class="app-install-row"&gt;&lt;td&gt;'</span>,
+            <span class="hljs-string">'&lt;div class="app-ghost noselect"&gt;&lt;span class="app-ghost-icon fa fa-plus"&gt;&lt;/span&gt;&lt;/div&gt;'</span>,
+            <span class="hljs-string">'&lt;/td&gt;'</span>,
+            <span class="hljs-string">'&lt;td colspan="4" class="app-install-text noselect"&gt;Click here to install an app&lt;/td&gt;'</span>,
+            <span class="hljs-string">'&lt;/tr&gt;'</span>].join(<span class="hljs-string">''</span>);
+            $(<span class="hljs-string">".app-listing"</span>).prepend(html);
+
+            $.each(apps, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key, val</span>) </span>{
+            
+                <span class="hljs-keyword">var</span> appid = <span class="hljs-string">'app_'</span> + val.id;
+                <span class="hljs-keyword">var</span> appiconid = <span class="hljs-string">'appicon_'</span> + val.id;
+                <span class="hljs-keyword">var</span> checked = <span class="hljs-string">""</span>;
+                <span class="hljs-keyword">var</span> id = val.id;
+                <span class="hljs-keyword">var</span> delete_button = <span class="hljs-string">''</span>;
+                <span class="hljs-keyword">if</span> (val.icon_display !== <span class="hljs-string">'none'</span>) {
+                    delete_button = <span class="hljs-string">'&lt;div class="delete-button" id="delete_'</span> + appid + <span class="hljs-string">'"&gt;&lt;img class="svg" src="images/recycling10.svg"&gt;&lt;/div&gt;'</span>;
+                }
+                <span class="hljs-keyword">if</span> (id === defaultApp){
+                    checked = <span class="hljs-string">'checked'</span>;
+                }
+                html = [
+                    <span class="hljs-string">'&lt;tr&gt;&lt;td&gt;'</span>,
+                    <span class="hljs-string">'&lt;input class="defaultRadio" type="radio" name="app" value="'</span>+id+<span class="hljs-string">'"'</span>+checked+<span class="hljs-string">'&gt;'</span>,
+                    <span class="hljs-string">'&lt;/td&gt;&lt;td&gt;'</span>,
+                    <span class="hljs-string">'&lt;a id="'</span> + appiconid + <span class="hljs-string">'" class="app-icon-link"&gt;'</span>,
+                    <span class="hljs-string">'&lt;img src="'</span> + location.origin + <span class="hljs-string">'/'</span> + val.icon_url + <span class="hljs-string">'" class="app-icon" style="background-color: '</span> + val.icon_background_color + <span class="hljs-string">'" /&gt;'</span>,
+                    <span class="hljs-string">'&lt;/a&gt;'</span>,
+                    <span class="hljs-string">'&lt;/td&gt;&lt;td&gt;'</span>,
+                    <span class="hljs-string">'&lt;a id="'</span> + appid + <span class="hljs-string">'" class="app-link"&gt;'</span>,
+                    val.name,
+                    <span class="hljs-string">'&lt;/a&gt;'</span>,
+                    <span class="hljs-string">'&lt;/td&gt;&lt;td&gt;'</span>,
+                    val.version || <span class="hljs-string">''</span>,
+                    <span class="hljs-string">'&lt;/td&gt;&lt;td&gt;'</span>,
+                    val.description || <span class="hljs-string">'No description.'</span>,
+                    <span class="hljs-string">'&lt;/td&gt;&lt;td&gt;&lt;/td&gt;&lt;td&gt;'</span> + delete_button + <span class="hljs-string">'&lt;/td&gt;&lt;/tr&gt;'</span>
+                ].join(<span class="hljs-string">''</span>);
+                $(<span class="hljs-string">".app-listing"</span>).append(html);
+
+                $(<span class="hljs-string">'#delete_'</span> + appid).click(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+                    fabmo.showModal({
+                        title : <span class="hljs-string">'Delete app'</span>,
+                        message : <span class="hljs-string">'Are you sure you want to delete this app?'</span>,
+                        okText : <span class="hljs-string">'Yes'</span>,
+                        cancelText : <span class="hljs-string">'No'</span>,
+                        ok : <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+                            fabmo.deleteApp(id, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+                                <span class="hljs-keyword">if</span> (err) {
+                                    fabmo.notify(<span class="hljs-string">'error'</span>, err);
+                                }
+                                refreshApps();
+                            });
+                        },
+                        cancel : <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{}
+                    })
+                });
+
+                $(<span class="hljs-string">'#'</span> + appid).click(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+                    fabmo.launchApp(id);
+                });
+                $(<span class="hljs-string">'#'</span> + appiconid).click(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+                    fabmo.launchApp(id);
+                });
+
+
+            }); <span class="hljs-comment">// each</span>
+            $(<span class="hljs-string">'.defaultRadio'</span>).on(<span class="hljs-string">'change'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>)</span>{
+                newDefault = $(<span class="hljs-keyword">this</span>).val();
+                data.machine.default_app = newDefault;
+                fabmo.setConfig({<span class="hljs-string">"machine"</span>:{<span class="hljs-string">"default_app"</span>:newDefault}}, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>)</span>{
+                    <span class="hljs-keyword">if</span> (err){
+                        <span class="hljs-built_in">console</span>.log(err);
+                    } <span class="hljs-keyword">else</span> {
+                        <span class="hljs-built_in">console</span>.log(data);
+                    }
+                });
+            });
+            $(<span class="hljs-string">'.app-install-row'</span>).click(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">evt</span>) </span>{
+                jQuery(<span class="hljs-string">'#file'</span>).trigger(<span class="hljs-string">'click'</span>);
+            });
+            }
+        });
+
+
+        });
+    };
+    fabmo.on(<span class="hljs-string">'change'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">topic</span>) </span>{
+        <span class="hljs-keyword">if</span> (topic === <span class="hljs-string">'apps'</span>) {
+            refreshApps();
+        }
+    });
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">setupAppManager</span>(<span class="hljs-params"></span>) </span>{
+        refreshApps();
+        $(<span class="hljs-string">'#file'</span>).change(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">evt</span>) </span>{
+            startBusy();
+            fabmo.submitApp($(<span class="hljs-string">'#file'</span>), {}, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+                stopBusy();
+                <span class="hljs-keyword">if</span> (err) {
+                    fabmo.notify(<span class="hljs-string">'error'</span>, <span class="hljs-string">"Could not install app:&lt;/br&gt;"</span> + (err.message || err));
+                } <span class="hljs-keyword">else</span> {
+                    fabmo.notify(<span class="hljs-string">'success'</span>, data.length + <span class="hljs-string">" app"</span> + ((data.length &gt; <span class="hljs-number">1</span>) ? <span class="hljs-string">'s'</span> : <span class="hljs-string">''</span>) + <span class="hljs-string">" installed successfully."</span>);
+                }
+                refreshApps();
+            });
+        });
+
+        $(<span class="hljs-string">'#dropzone'</span>).dragster({
+            enter: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">devt, evt</span>) </span>{
+                $(<span class="hljs-string">'#dropzone'</span>).addClass(<span class="hljs-string">'hover'</span>);
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+            },
+
+            leave: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">devt, evt</span>) </span>{
+                $(<span class="hljs-string">'#dropzone'</span>).removeClass(<span class="hljs-string">'hover'</span>);
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+            },
+            drop: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">devt, evt</span>) </span>{
+                evt.preventDefault();
+                <span class="hljs-keyword">try</span> {
+                    files = evt.originalEvent.dataTransfer.files;
+                    startBusy();
+                    fabmo.submitApp(files, {}, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+                      stopBusy();
+                        <span class="hljs-keyword">if</span> (err) {
+                            fabmo.notify(<span class="hljs-string">'error'</span>, err.message || err);
+                        } <span class="hljs-keyword">else</span> {
+                            fabmo.notify(<span class="hljs-string">'success'</span>, <span class="hljs-string">"App installed successfully."</span>);
+                        }
+                        refreshApps();
+                    });
+                } <span class="hljs-keyword">catch</span> (e) {
+                    <span class="hljs-built_in">console</span>.error(e);
+                } <span class="hljs-keyword">finally</span> {
+                    $(<span class="hljs-string">'#dropzone'</span>).removeClass(<span class="hljs-string">'hover'</span>);
+                    <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+                }
+            }
+        });
+    }
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">startBusy</span>(<span class="hljs-params"></span>) </span>{
+  $(<span class="hljs-string">".app-ghost-icon"</span>).removeClass(<span class="hljs-string">'fa-plus'</span>).addClass(<span class="hljs-string">'fa-cog fa-spin'</span>);
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">stopBusy</span>(<span class="hljs-params"></span>) </span>{
+  $(<span class="hljs-string">".app-ghost-icon"</span>).removeClass(<span class="hljs-string">'fa-cog fa-spin'</span>).addClass(<span class="hljs-string">'fa-plus'</span>);
+}
+};</div></div></div></div></body></html>

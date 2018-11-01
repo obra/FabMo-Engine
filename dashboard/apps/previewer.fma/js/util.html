@@ -1,0 +1,51 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/js/util</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/js/util"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/js/util.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../assets/style.css"><script type="text/javascript" src="../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/js/util.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-comment">/*jslint todo: true, browser: true, continue: true, white: true*/</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Written by Alex Canales for ShopBotTools, Inc.</p></div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Checks if WebGL is enabled or not.</p>
+<p><strong>Returns a boolean</strong><br/>(True is enabled)</p></div></div><div class="code"><div class="wrapper">exports.webGLEnabled = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>From <a href="http://www.browserleaks.com/webgl#howto-detect-webgl">http://www.browserleaks.com/webgl#howto-detect-webgl</a></p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span>(!!<span class="hljs-built_in">window</span>.WebGLRenderingContext) {
+        <span class="hljs-keyword">var</span> canvas = <span class="hljs-built_in">document</span>.createElement(<span class="hljs-string">"canvas"</span>);
+        <span class="hljs-keyword">var</span> names = [<span class="hljs-string">"webgl"</span>, <span class="hljs-string">"experimental-webgl"</span>, <span class="hljs-string">"moz-webgl"</span>];
+        <span class="hljs-keyword">var</span> gl = <span class="hljs-literal">false</span>;
+        <span class="hljs-keyword">var</span> i = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span>(i = <span class="hljs-number">0</span>; i &lt; names.length; i++) {
+            <span class="hljs-keyword">try</span> {
+                gl = canvas.getContext(names[i]);
+                <span class="hljs-keyword">if</span> (gl &amp;&amp; <span class="hljs-keyword">typeof</span> gl.getParameter === <span class="hljs-string">"function"</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>WebGL is enabled </p></div></div><div class="code"><div class="wrapper">                    <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+                }
+            } <span class="hljs-keyword">catch</span>(ignore) {}
+        }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>WebGL is supported, but disabled </p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>WebGL not supported</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+};</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Checks if two points in 3D are equal.</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>a must be an object.</strong><br/>(Point A.)</p>
+</li>
+<li><p><strong>b must be an object.</strong><br/>(Point B.)</p>
+</li>
+</ul>
+<p><strong>Returns a boolean</strong><br/>(True if the two points are equal.)</p></div></div><div class="code"><div class="wrapper">exports.pointsEqual = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">a, b</span>) </span>{
+    <span class="hljs-keyword">return</span> (a.x === b.x &amp;&amp; a.y === b.y &amp;&amp; a.z === b.z);
+};</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Returns a copy of a point in 3D.</p>
+<p>Parameters:</p>
+<ul>
+<li><strong>point must be an object.</strong><br/>(A point in 3D.)</li>
+</ul>
+<p><strong>Returns an object</strong><br/>(A copy of the point.)</p></div></div><div class="code"><div class="wrapper">exports.copyPoint = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">point</span>) </span>{
+    <span class="hljs-keyword">return</span> { x : point.x, y : point.y, z : point.z };
+};
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">nearlyEqual</span>(<span class="hljs-params">a, b</span>) </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-built_in">Math</span>.abs(b - a) &lt;= <span class="hljs-number">0.001</span>;
+}
+exports.nearlyEqual = nearlyEqual;</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Checks if two points in 3D are considered as &quot;equal&quot;. This function is
+useful to avoid to be too much precise (JavaScript can not do very precise
+calculations).</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>a must be an object.</strong><br/>(Point A.)</p>
+</li>
+<li><p><strong>b must be an object.</strong><br/>(Point B.)</p>
+</li>
+</ul>
+<p><strong>Returns a boolean</strong><br/>(True if the two points are nearly equal.)</p></div></div><div class="code"><div class="wrapper">exports.samePosition = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">posA, posB</span>) </span>{
+    <span class="hljs-keyword">return</span> (nearlyEqual(posA.x, posB.x) &amp;&amp;
+            nearlyEqual(posA.y, posB.y) &amp;&amp;
+            nearlyEqual(posA.z, posB.z));
+};</div></div></div></div></body></html>

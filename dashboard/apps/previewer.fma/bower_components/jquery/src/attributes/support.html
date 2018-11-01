@@ -1,0 +1,23 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/attributes/support</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/attributes/support"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/attributes/support.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/attributes/support.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"../var/support"</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> support </span>) </span>{
+
+(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">var</span> input = <span class="hljs-built_in">document</span>.createElement( <span class="hljs-string">"input"</span> ),
+		select = <span class="hljs-built_in">document</span>.createElement( <span class="hljs-string">"select"</span> ),
+		opt = select.appendChild( <span class="hljs-built_in">document</span>.createElement( <span class="hljs-string">"option"</span> ) );
+
+	input.type = <span class="hljs-string">"checkbox"</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: iOS&lt;=5.1, Android&lt;=4.2+
+Default value for a checkbox should be &quot;on&quot;</p></div></div><div class="code"><div class="wrapper">	support.checkOn = input.value !== <span class="hljs-string">""</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: IE&lt;=11+
+Must access selectedIndex to make default options select</p></div></div><div class="code"><div class="wrapper">	support.optSelected = opt.selected;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: Android&lt;=2.3
+Options inside disabled selects are incorrectly marked as disabled</p></div></div><div class="code"><div class="wrapper">	select.disabled = <span class="hljs-literal">true</span>;
+	support.optDisabled = !opt.disabled;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: IE&lt;=11+
+An input loses its value after becoming a radio</p></div></div><div class="code"><div class="wrapper">	input = <span class="hljs-built_in">document</span>.createElement( <span class="hljs-string">"input"</span> );
+	input.value = <span class="hljs-string">"t"</span>;
+	input.type = <span class="hljs-string">"radio"</span>;
+	support.radioValue = input.value === <span class="hljs-string">"t"</span>;
+})();
+
+<span class="hljs-keyword">return</span> support;
+
+});</div></div></div></div></body></html>

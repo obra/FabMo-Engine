@@ -1,0 +1,74 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/css/support</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/css/support"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/css/support.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/css/support.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"../core"</span>,
+	<span class="hljs-string">"../var/support"</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery, support </span>) </span>{
+
+(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">var</span> pixelPositionVal, boxSizingReliableVal,
+		docElem = <span class="hljs-built_in">document</span>.documentElement,
+		container = <span class="hljs-built_in">document</span>.createElement( <span class="hljs-string">"div"</span> ),
+		div = <span class="hljs-built_in">document</span>.createElement( <span class="hljs-string">"div"</span> );
+
+	<span class="hljs-keyword">if</span> ( !div.style ) {
+		<span class="hljs-keyword">return</span>;
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: IE9-11+
+Style of cloned element affects source element cloned (#8908)</p></div></div><div class="code"><div class="wrapper">	div.style.backgroundClip = <span class="hljs-string">"content-box"</span>;
+	div.cloneNode( <span class="hljs-literal">true</span> ).style.backgroundClip = <span class="hljs-string">""</span>;
+	support.clearCloneStyle = div.style.backgroundClip === <span class="hljs-string">"content-box"</span>;
+
+	container.style.cssText = <span class="hljs-string">"border:0;width:0;height:0;top:0;left:-9999px;margin-top:1px;"</span> +
+		<span class="hljs-string">"position:absolute"</span>;
+	container.appendChild( div );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Executing both pixelPosition &amp; boxSizingReliable tests require only one layout
+so they&#39;re executed at the same time to save the second computation.</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">computePixelPositionAndBoxSizingReliable</span>(<span class="hljs-params"></span>) </span>{
+		div.style.cssText =</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: Firefox&lt;29, Android 2.3
+Vendor-prefix box-sizing</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-string">"-webkit-box-sizing:border-box;-moz-box-sizing:border-box;"</span> +
+			<span class="hljs-string">"box-sizing:border-box;display:block;margin-top:1%;top:1%;"</span> +
+			<span class="hljs-string">"border:1px;padding:1px;width:4px;position:absolute"</span>;
+		div.innerHTML = <span class="hljs-string">""</span>;
+		docElem.appendChild( container );
+
+		<span class="hljs-keyword">var</span> divStyle = <span class="hljs-built_in">window</span>.getComputedStyle( div, <span class="hljs-literal">null</span> );
+		pixelPositionVal = divStyle.top !== <span class="hljs-string">"1%"</span>;
+		boxSizingReliableVal = divStyle.width === <span class="hljs-string">"4px"</span>;
+
+		docElem.removeChild( container );
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: node.js jsdom
+Don&#39;t assume that getComputedStyle is a property of the global object</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( <span class="hljs-built_in">window</span>.getComputedStyle ) {
+		jQuery.extend( support, {
+			pixelPosition: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This test is executed only once but we still do memoizing
+since we can use the boxSizingReliable pre-computing.
+No need to check if the test was already performed, though.</p></div></div><div class="code"><div class="wrapper">				computePixelPositionAndBoxSizingReliable();
+				<span class="hljs-keyword">return</span> pixelPositionVal;
+			},
+			boxSizingReliable: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+				<span class="hljs-keyword">if</span> ( boxSizingReliableVal == <span class="hljs-literal">null</span> ) {
+					computePixelPositionAndBoxSizingReliable();
+				}
+				<span class="hljs-keyword">return</span> boxSizingReliableVal;
+			},
+			reliableMarginRight: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: Android 2.3
+Check if div with explicit width and no margin-right incorrectly
+gets computed margin-right based on width of container. (#3333)
+WebKit Bug 13343 - getComputedStyle returns wrong value for margin-right
+This support function is only executed once so no memoizing is needed.</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">var</span> ret,
+					marginDiv = div.appendChild( <span class="hljs-built_in">document</span>.createElement( <span class="hljs-string">"div"</span> ) );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Reset CSS: box-sizing; display; margin; border; padding</p></div></div><div class="code"><div class="wrapper">				marginDiv.style.cssText = div.style.cssText =</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: Firefox&lt;29, Android 2.3
+Vendor-prefix box-sizing</p></div></div><div class="code"><div class="wrapper">					<span class="hljs-string">"-webkit-box-sizing:content-box;-moz-box-sizing:content-box;"</span> +
+					<span class="hljs-string">"box-sizing:content-box;display:block;margin:0;border:0;padding:0"</span>;
+				marginDiv.style.marginRight = marginDiv.style.width = <span class="hljs-string">"0"</span>;
+				div.style.width = <span class="hljs-string">"1px"</span>;
+				docElem.appendChild( container );
+
+				ret = !<span class="hljs-built_in">parseFloat</span>( <span class="hljs-built_in">window</span>.getComputedStyle( marginDiv, <span class="hljs-literal">null</span> ).marginRight );
+
+				docElem.removeChild( container );
+				div.removeChild( marginDiv );
+
+				<span class="hljs-keyword">return</span> ret;
+			}
+		});
+	}
+})();
+
+<span class="hljs-keyword">return</span> support;
+
+});</div></div></div></div></body></html>

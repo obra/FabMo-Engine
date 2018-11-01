@@ -1,0 +1,1127 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/job_manager.fma/js/Sortable</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../"><meta name="groc-document-path" content="dashboard/apps/job_manager.fma/js/Sortable"><meta name="groc-project-path" content="dashboard/apps/job_manager.fma/js/Sortable.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../assets/style.css"><script type="text/javascript" src="../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/job_manager.fma/js/Sortable.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-comment">/**!
+ * Sortable
+ * @author	RubaXa   &lt;trash@rubaxa.org&gt;
+ * @license MIT
+ */</span>
+
+
+(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">factory</span>) </span>{
+<span class="hljs-pi">	"use strict"</span>;
+
+	<span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> define === <span class="hljs-string">"function"</span> &amp;&amp; define.amd) {
+		define(factory);
+	}
+	<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> <span class="hljs-built_in">module</span> != <span class="hljs-string">"undefined"</span> &amp;&amp; <span class="hljs-keyword">typeof</span> <span class="hljs-built_in">module</span>.exports != <span class="hljs-string">"undefined"</span>) {
+		<span class="hljs-built_in">module</span>.exports = factory();
+	}
+	<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> Package !== <span class="hljs-string">"undefined"</span>) {
+		Sortable = factory();  <span class="hljs-comment">// export for Meteor.js</span>
+	}
+	<span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>jshint sub:true </p></div></div><div class="code"><div class="wrapper">		<span class="hljs-built_in">window</span>[<span class="hljs-string">"Sortable"</span>] = factory();
+	}
+})(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+<span class="hljs-pi">	"use strict"</span>;
+
+	<span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> <span class="hljs-built_in">window</span> == <span class="hljs-string">"undefined"</span> || <span class="hljs-keyword">typeof</span> <span class="hljs-built_in">window</span>.document == <span class="hljs-string">"undefined"</span>) {
+		<span class="hljs-keyword">return</span> <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>( <span class="hljs-string">"Sortable.js requires a window with a document"</span> );
+		}
+	}
+
+	<span class="hljs-keyword">var</span> dragEl,
+		parentEl,
+		ghostEl,
+		cloneEl,
+		rootEl,
+		nextEl,
+
+		scrollEl,
+		scrollParentEl,
+
+		lastEl,
+		lastCSS,
+		lastParentCSS,
+
+		oldIndex,
+		newIndex,
+
+		activeGroup,
+		autoScroll = {},
+
+		tapEvt,
+		touchEvt,
+
+		moved,</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> const</span></p></div></div><div class="code"><div class="wrapper">		RSPACE = <span class="hljs-regexp">/\s+/g</span>,
+
+		expando = <span class="hljs-string">'Sortable'</span> + (<span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>).getTime(),
+
+		win = <span class="hljs-built_in">window</span>,
+		<span class="hljs-built_in">document</span> = win.document,
+		<span class="hljs-built_in">parseInt</span> = win.parseInt,
+
+		supportDraggable = !!(<span class="hljs-string">'draggable'</span> <span class="hljs-keyword">in</span> <span class="hljs-built_in">document</span>.createElement(<span class="hljs-string">'div'</span>)),
+		supportCssPointerEvents = (<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">el</span>) </span>{
+			el = <span class="hljs-built_in">document</span>.createElement(<span class="hljs-string">'x'</span>);
+			el.style.cssText = <span class="hljs-string">'pointer-events:auto'</span>;
+			<span class="hljs-keyword">return</span> el.style.pointerEvents === <span class="hljs-string">'auto'</span>;
+		})(),
+
+		_silent = <span class="hljs-literal">false</span>,
+
+		abs = <span class="hljs-built_in">Math</span>.abs,
+		slice = [].slice,
+
+		touchDragOverListeners = [],
+
+		_autoScroll = _throttle(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"><span class="hljs-comment">/**Event*/</span>evt, <span class="hljs-comment">/**Object*/</span>options, <span class="hljs-comment">/**HTMLElement*/</span>rootEl</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Bug: <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=505521">https://bugzilla.mozilla.org/show_bug.cgi?id=505521</a></p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> (rootEl &amp;&amp; options.scroll) {
+				<span class="hljs-keyword">var</span> el,
+					rect,
+					sens = options.scrollSensitivity,
+					speed = options.scrollSpeed,
+
+					x = evt.clientX,
+					y = evt.clientY,
+
+					winWidth = <span class="hljs-built_in">window</span>.innerWidth,
+					winHeight = <span class="hljs-built_in">window</span>.innerHeight,
+
+					vx,
+					vy
+				;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Delect scrollEl</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> (scrollParentEl !== rootEl) {
+					scrollEl = options.scroll;
+					scrollParentEl = rootEl;
+
+					<span class="hljs-keyword">if</span> (scrollEl === <span class="hljs-literal">true</span>) {
+						scrollEl = rootEl;
+
+						<span class="hljs-keyword">do</span> {
+							<span class="hljs-keyword">if</span> ((scrollEl.offsetWidth &lt; scrollEl.scrollWidth) ||
+								(scrollEl.offsetHeight &lt; scrollEl.scrollHeight)
+							) {
+								<span class="hljs-keyword">break</span>;
+							}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>jshint boss:true </p></div></div><div class="code"><div class="wrapper">						} <span class="hljs-keyword">while</span> (scrollEl = scrollEl.parentNode);
+					}
+				}
+
+				<span class="hljs-keyword">if</span> (scrollEl) {
+					el = scrollEl;
+					rect = scrollEl.getBoundingClientRect();
+					vx = (abs(rect.right - x) &lt;= sens) - (abs(rect.left - x) &lt;= sens);
+					vy = (abs(rect.bottom - y) &lt;= sens) - (abs(rect.top - y) &lt;= sens);
+				}
+
+
+				<span class="hljs-keyword">if</span> (!(vx || vy)) {
+					vx = (winWidth - x &lt;= sens) - (x &lt;= sens);
+					vy = (winHeight - y &lt;= sens) - (y &lt;= sens);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>jshint expr:true </p></div></div><div class="code"><div class="wrapper">					(vx || vy) &amp;&amp; (el = win);
+				}
+
+
+				<span class="hljs-keyword">if</span> (autoScroll.vx !== vx || autoScroll.vy !== vy || autoScroll.el !== el) {
+					autoScroll.el = el;
+					autoScroll.vx = vx;
+					autoScroll.vy = vy;
+
+					clearInterval(autoScroll.pid);
+
+					<span class="hljs-keyword">if</span> (el) {
+						autoScroll.pid = setInterval(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+							<span class="hljs-keyword">if</span> (el === win) {
+								win.scrollTo(win.pageXOffset + vx * speed, win.pageYOffset + vy * speed);
+							} <span class="hljs-keyword">else</span> {
+								vy &amp;&amp; (el.scrollTop += vy * speed);
+								vx &amp;&amp; (el.scrollLeft += vx * speed);
+							}
+						}, <span class="hljs-number">24</span>);
+					}
+				}
+			}
+		}, <span class="hljs-number">30</span>),
+
+		_prepareGroup = <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">options</span>) </span>{
+			<span class="hljs-keyword">var</span> group = options.group;
+
+			<span class="hljs-keyword">if</span> (!group || <span class="hljs-keyword">typeof</span> group != <span class="hljs-string">'object'</span>) {
+				group = options.group = {name: group};
+			}
+
+			[<span class="hljs-string">'pull'</span>, <span class="hljs-string">'put'</span>].forEach(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">key</span>) </span>{
+				<span class="hljs-keyword">if</span> (!(key <span class="hljs-keyword">in</span> group)) {
+					group[key] = <span class="hljs-literal">true</span>;
+				}
+			});
+
+			options.groups = <span class="hljs-string">' '</span> + group.name + (group.put.join ? <span class="hljs-string">' '</span> + group.put.join(<span class="hljs-string">' '</span>) : <span class="hljs-string">''</span>) + <span class="hljs-string">' '</span>;
+		}
+	;</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> class Sortable</span></p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>el must be a HTMLElement.</strong></p>
+</li>
+<li><p><strong>options is optional and must be an Object.</strong></p>
+</li>
+</ul></div></div><div class="code"><div class="wrapper">	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">Sortable</span>(<span class="hljs-params">el, options</span>) </span>{
+		<span class="hljs-keyword">if</span> (!(el &amp;&amp; el.nodeType &amp;&amp; el.nodeType === <span class="hljs-number">1</span>)) {
+			<span class="hljs-keyword">throw</span> <span class="hljs-string">'Sortable: `el` must be HTMLElement, and not '</span> + {}.toString.call(el);
+		}
+
+		<span class="hljs-keyword">this</span>.el = el; <span class="hljs-comment">// root element</span>
+		<span class="hljs-keyword">this</span>.options = options = _extend({}, options);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Export instance</p></div></div><div class="code"><div class="wrapper">		el[expando] = <span class="hljs-keyword">this</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Default options</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">var</span> defaults = {
+			group: <span class="hljs-built_in">Math</span>.random(),
+			sort: <span class="hljs-literal">true</span>,
+			disabled: <span class="hljs-literal">false</span>,
+			store: <span class="hljs-literal">null</span>,
+			handle: <span class="hljs-literal">null</span>,
+			scroll: <span class="hljs-literal">true</span>,
+			scrollSensitivity: <span class="hljs-number">30</span>,
+			scrollSpeed: <span class="hljs-number">10</span>,
+			draggable: <span class="hljs-regexp">/[uo]l/i</span>.test(el.nodeName) ? <span class="hljs-string">'li'</span> : <span class="hljs-string">'&gt;*'</span>,
+			ghostClass: <span class="hljs-string">'sortable-ghost'</span>,
+			chosenClass: <span class="hljs-string">'sortable-chosen'</span>,
+			ignore: <span class="hljs-string">'a, img'</span>,
+			filter: <span class="hljs-literal">null</span>,
+			animation: <span class="hljs-number">0</span>,
+			setData: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">dataTransfer, dragEl</span>) </span>{
+				dataTransfer.setData(<span class="hljs-string">'Text'</span>, dragEl.textContent);
+			},
+			dropBubble: <span class="hljs-literal">false</span>,
+			dragoverBubble: <span class="hljs-literal">false</span>,
+			dataIdAttr: <span class="hljs-string">'data-id'</span>,
+			delay: <span class="hljs-number">0</span>,
+			clickDelay: <span class="hljs-number">0</span>,
+			touchDelay: <span class="hljs-number">0</span>,
+			forceFallback: <span class="hljs-literal">false</span>,
+			fallbackClass: <span class="hljs-string">'sortable-fallback'</span>,
+			fallbackOnBody: <span class="hljs-literal">false</span>
+		};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set default options</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> name <span class="hljs-keyword">in</span> defaults) {
+			!(name <span class="hljs-keyword">in</span> options) &amp;&amp; (options[name] = defaults[name]);
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If delay is specified, it applies to both click and touch</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span>(options.delay) {
+			options.clickDelay = options.delay
+			options.touchDelay = options.delay
+		}
+
+		_prepareGroup(options);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Bind all private methods</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> fn <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>) {
+			<span class="hljs-keyword">if</span> (fn.charAt(<span class="hljs-number">0</span>) === <span class="hljs-string">'_'</span>) {
+				<span class="hljs-keyword">this</span>[fn] = <span class="hljs-keyword">this</span>[fn].bind(<span class="hljs-keyword">this</span>);
+			}
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Setup drag mode</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">this</span>.nativeDraggable = options.forceFallback ? <span class="hljs-literal">false</span> : supportDraggable;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Bind events</p></div></div><div class="code"><div class="wrapper">		_on(el, <span class="hljs-string">'mousedown'</span>, <span class="hljs-keyword">this</span>._onTapStart);
+		_on(el, <span class="hljs-string">'touchstart'</span>, <span class="hljs-keyword">this</span>._onTapStart);
+
+		<span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.nativeDraggable) {
+			_on(el, <span class="hljs-string">'dragover'</span>, <span class="hljs-keyword">this</span>);
+			_on(el, <span class="hljs-string">'dragenter'</span>, <span class="hljs-keyword">this</span>);
+		}
+
+		touchDragOverListeners.push(<span class="hljs-keyword">this</span>._onDragOver);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Restore sorting</p></div></div><div class="code"><div class="wrapper">		options.store &amp;&amp; <span class="hljs-keyword">this</span>.sort(options.store.get(<span class="hljs-keyword">this</span>));
+	}
+
+
+	Sortable.prototype = <span class="hljs-comment">/** @lends Sortable.prototype */</span> {
+		constructor: Sortable,
+
+		_onTapStart: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"><span class="hljs-comment">/** Event|TouchEvent */</span>evt</span>) </span>{
+			<span class="hljs-keyword">var</span> _this = <span class="hljs-keyword">this</span>,
+				el = <span class="hljs-keyword">this</span>.el,
+				options = <span class="hljs-keyword">this</span>.options,
+				type = evt.type,
+				touch = evt.touches &amp;&amp; evt.touches[<span class="hljs-number">0</span>],
+				target = (touch || evt).target,
+				originalTarget = target,
+				filter = options.filter;
+
+
+			<span class="hljs-keyword">if</span> (type === <span class="hljs-string">'mousedown'</span> &amp;&amp; evt.button !== <span class="hljs-number">0</span> || options.disabled) {
+				<span class="hljs-keyword">return</span>; <span class="hljs-comment">// only left button or enabled</span>
+			}
+
+			target = _closest(target, options.draggable, el);
+
+			<span class="hljs-keyword">if</span> (!target) {
+				<span class="hljs-keyword">return</span>;
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>get the index of the dragged element within its parent</p></div></div><div class="code"><div class="wrapper">			oldIndex = _index(target, options.draggable);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check filter</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> filter === <span class="hljs-string">'function'</span>) {
+				<span class="hljs-keyword">if</span> (filter.call(<span class="hljs-keyword">this</span>, evt, target, <span class="hljs-keyword">this</span>)) {
+					_dispatchEvent(_this, originalTarget, <span class="hljs-string">'filter'</span>, target, el, oldIndex);
+					evt.preventDefault();
+					<span class="hljs-keyword">return</span>; <span class="hljs-comment">// cancel dnd</span>
+				}
+			}
+			<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (filter) {
+				filter = filter.split(<span class="hljs-string">','</span>).some(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">criteria</span>) </span>{
+					criteria = _closest(originalTarget, criteria.trim(), el);
+
+					<span class="hljs-keyword">if</span> (criteria) {
+						_dispatchEvent(_this, criteria, <span class="hljs-string">'filter'</span>, target, el, oldIndex);
+						<span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+					}
+				});
+
+				<span class="hljs-keyword">if</span> (filter) {
+					evt.preventDefault();
+					<span class="hljs-keyword">return</span>; <span class="hljs-comment">// cancel dnd</span>
+				}
+			}
+
+
+			<span class="hljs-keyword">if</span> (options.handle &amp;&amp; !_closest(originalTarget, options.handle, el)) {
+				<span class="hljs-keyword">return</span>;
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Prepare <code>dragstart</code></p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">this</span>._prepareDragStart(evt, touch, target);
+		},
+
+		_prepareDragStart: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"><span class="hljs-comment">/** Event */</span>evt, <span class="hljs-comment">/** Touch */</span>touch, <span class="hljs-comment">/** HTMLElement */</span>target</span>) </span>{
+			<span class="hljs-keyword">var</span> _this = <span class="hljs-keyword">this</span>,
+				el = _this.el,
+				options = _this.options,
+				ownerDocument = el.ownerDocument,
+				dragStartFn;
+
+			<span class="hljs-keyword">if</span> (target &amp;&amp; !dragEl &amp;&amp; (target.parentNode === el)) {
+				tapEvt = evt;
+
+				rootEl = el;
+				dragEl = target;
+				parentEl = dragEl.parentNode;
+				nextEl = dragEl.nextSibling;
+				activeGroup = options.group;
+
+				dragStartFn = <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Delayed drag has been triggered
+we can re-enable the events: touchmove/mousemove</p></div></div><div class="code"><div class="wrapper">					_this._disableDelayedDrag();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Make the element draggable</p></div></div><div class="code"><div class="wrapper">					dragEl.draggable = <span class="hljs-literal">true</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Chosen item</p></div></div><div class="code"><div class="wrapper">					_toggleClass(dragEl, _this.options.chosenClass, <span class="hljs-literal">true</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Bind the events: dragstart/dragend</p></div></div><div class="code"><div class="wrapper">					_this._triggerDragStart(touch);
+				};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Disable &quot;draggable&quot;</p></div></div><div class="code"><div class="wrapper">				options.ignore.split(<span class="hljs-string">','</span>).forEach(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">criteria</span>) </span>{
+					_find(dragEl, criteria.trim(), _disableDraggable);
+				});
+
+				_on(ownerDocument, <span class="hljs-string">'mouseup'</span>, _this._onDrop);
+				_on(ownerDocument, <span class="hljs-string">'touchend'</span>, _this._onDrop);
+				_on(ownerDocument, <span class="hljs-string">'touchcancel'</span>, _this._onDrop);
+
+				<span class="hljs-keyword">var</span> delay = <span class="hljs-number">0</span>;
+				<span class="hljs-keyword">if</span>(evt.type.indexOf(<span class="hljs-string">'mouse'</span>) != -<span class="hljs-number">1</span>) {
+					delay = options.clickDelay;
+				}
+				<span class="hljs-keyword">if</span>(evt.type.indexOf(<span class="hljs-string">'touch'</span>) != -<span class="hljs-number">1</span>) {
+					delay = options.touchDelay;
+				}
+
+				<span class="hljs-keyword">if</span> (delay) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If the user moves the pointer or let go the click or touch
+before the delay has been reached:
+disable the delayed drag</p></div></div><div class="code"><div class="wrapper">					_on(ownerDocument, <span class="hljs-string">'mouseup'</span>, _this._disableDelayedDrag);
+					_on(ownerDocument, <span class="hljs-string">'touchend'</span>, _this._disableDelayedDrag);
+					_on(ownerDocument, <span class="hljs-string">'touchcancel'</span>, _this._disableDelayedDrag);
+					_on(ownerDocument, <span class="hljs-string">'mousemove'</span>, _this._disableDelayedDrag);
+					_on(ownerDocument, <span class="hljs-string">'touchmove'</span>, _this._disableDelayedDrag);
+
+					_this._dragStartTimer = setTimeout(dragStartFn, delay);
+				} <span class="hljs-keyword">else</span> {
+					dragStartFn();
+				}
+			}
+		},
+
+		_disableDelayedDrag: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">var</span> ownerDocument = <span class="hljs-keyword">this</span>.el.ownerDocument;
+
+			clearTimeout(<span class="hljs-keyword">this</span>._dragStartTimer);
+			_off(ownerDocument, <span class="hljs-string">'mouseup'</span>, <span class="hljs-keyword">this</span>._disableDelayedDrag);
+			_off(ownerDocument, <span class="hljs-string">'touchend'</span>, <span class="hljs-keyword">this</span>._disableDelayedDrag);
+			_off(ownerDocument, <span class="hljs-string">'touchcancel'</span>, <span class="hljs-keyword">this</span>._disableDelayedDrag);
+			_off(ownerDocument, <span class="hljs-string">'mousemove'</span>, <span class="hljs-keyword">this</span>._disableDelayedDrag);
+			_off(ownerDocument, <span class="hljs-string">'touchmove'</span>, <span class="hljs-keyword">this</span>._disableDelayedDrag);
+		},
+
+		_triggerDragStart: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"><span class="hljs-comment">/** Touch */</span>touch</span>) </span>{
+			<span class="hljs-keyword">if</span> (touch) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Touch device support</p></div></div><div class="code"><div class="wrapper">				tapEvt = {
+					target: dragEl,
+					clientX: touch.clientX,
+					clientY: touch.clientY
+				};
+
+				<span class="hljs-keyword">this</span>._onDragStart(tapEvt, <span class="hljs-string">'touch'</span>);
+			}
+			<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (!<span class="hljs-keyword">this</span>.nativeDraggable) {
+				<span class="hljs-keyword">this</span>._onDragStart(tapEvt, <span class="hljs-literal">true</span>);
+			}
+			<span class="hljs-keyword">else</span> {
+				_on(dragEl, <span class="hljs-string">'dragend'</span>, <span class="hljs-keyword">this</span>);
+				_on(rootEl, <span class="hljs-string">'dragstart'</span>, <span class="hljs-keyword">this</span>._onDragStart);
+			}
+
+			<span class="hljs-keyword">try</span> {
+				<span class="hljs-keyword">if</span> (<span class="hljs-built_in">document</span>.selection) {
+					<span class="hljs-built_in">document</span>.selection.empty();
+				} <span class="hljs-keyword">else</span> {
+					<span class="hljs-built_in">window</span>.getSelection().removeAllRanges();
+				}
+			} <span class="hljs-keyword">catch</span> (err) {
+			}
+		},
+
+		_dragStarted: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">if</span> (rootEl &amp;&amp; dragEl) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Apply effect</p></div></div><div class="code"><div class="wrapper">				_toggleClass(dragEl, <span class="hljs-keyword">this</span>.options.ghostClass, <span class="hljs-literal">true</span>);
+
+				Sortable.active = <span class="hljs-keyword">this</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Drag start event</p></div></div><div class="code"><div class="wrapper">				_dispatchEvent(<span class="hljs-keyword">this</span>, rootEl, <span class="hljs-string">'start'</span>, dragEl, rootEl, oldIndex);
+			}
+		},
+
+		_emulateDragOver: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">if</span> (touchEvt) {
+				<span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>._lastX === touchEvt.clientX &amp;&amp; <span class="hljs-keyword">this</span>._lastY === touchEvt.clientY) {
+					<span class="hljs-keyword">return</span>;
+				}
+
+				<span class="hljs-keyword">this</span>._lastX = touchEvt.clientX;
+				<span class="hljs-keyword">this</span>._lastY = touchEvt.clientY;
+
+				<span class="hljs-keyword">if</span> (!supportCssPointerEvents) {
+					_css(ghostEl, <span class="hljs-string">'display'</span>, <span class="hljs-string">'none'</span>);
+				}
+
+				<span class="hljs-keyword">var</span> target = <span class="hljs-built_in">document</span>.elementFromPoint(touchEvt.clientX, touchEvt.clientY),
+					parent = target,
+					groupName = <span class="hljs-string">' '</span> + <span class="hljs-keyword">this</span>.options.group.name + <span class="hljs-string">''</span>,
+					i = touchDragOverListeners.length;
+
+				<span class="hljs-keyword">if</span> (parent) {
+					<span class="hljs-keyword">do</span> {
+						<span class="hljs-keyword">if</span> (parent[expando] &amp;&amp; parent[expando].options.groups.indexOf(groupName) &gt; -<span class="hljs-number">1</span>) {
+							<span class="hljs-keyword">while</span> (i--) {
+								touchDragOverListeners[i]({
+									clientX: touchEvt.clientX,
+									clientY: touchEvt.clientY,
+									target: target,
+									rootEl: parent
+								});
+							}
+
+							<span class="hljs-keyword">break</span>;
+						}
+
+						target = parent; <span class="hljs-comment">// store last element</span>
+					}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>jshint boss:true </p></div></div><div class="code"><div class="wrapper">					<span class="hljs-keyword">while</span> (parent = parent.parentNode);
+				}
+
+				<span class="hljs-keyword">if</span> (!supportCssPointerEvents) {
+					_css(ghostEl, <span class="hljs-string">'display'</span>, <span class="hljs-string">''</span>);
+				}
+			}
+		},
+
+
+		_onTouchMove: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"><span class="hljs-comment">/**TouchEvent*/</span>evt</span>) </span>{
+			<span class="hljs-keyword">if</span> (tapEvt) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>only set the status to dragging, when we are actually dragging</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> (!Sortable.active) {
+					<span class="hljs-keyword">this</span>._dragStarted();
+				}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>as well as creating the ghost element on the document body</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">this</span>._appendGhost();
+
+				<span class="hljs-keyword">var</span> touch = evt.touches ? evt.touches[<span class="hljs-number">0</span>] : evt,
+					dx = touch.clientX - tapEvt.clientX,
+					dy = touch.clientY - tapEvt.clientY,
+					translate3d = evt.touches ? <span class="hljs-string">'translate3d('</span> + dx + <span class="hljs-string">'px,'</span> + dy + <span class="hljs-string">'px,0)'</span> : <span class="hljs-string">'translate('</span> + dx + <span class="hljs-string">'px,'</span> + dy + <span class="hljs-string">'px)'</span>;
+
+				moved = <span class="hljs-literal">true</span>;
+				touchEvt = touch;
+
+				_css(ghostEl, <span class="hljs-string">'webkitTransform'</span>, translate3d);
+				_css(ghostEl, <span class="hljs-string">'mozTransform'</span>, translate3d);
+				_css(ghostEl, <span class="hljs-string">'msTransform'</span>, translate3d);
+				_css(ghostEl, <span class="hljs-string">'transform'</span>, translate3d);
+
+				evt.preventDefault();
+			}
+		},
+
+		_appendGhost: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">if</span> (!ghostEl) {
+				<span class="hljs-keyword">var</span> rect = dragEl.getBoundingClientRect(),
+					css = _css(dragEl),
+					options = <span class="hljs-keyword">this</span>.options,
+					ghostRect;
+
+				ghostEl = dragEl.cloneNode(<span class="hljs-literal">true</span>);
+
+				_toggleClass(ghostEl, options.ghostClass, <span class="hljs-literal">false</span>);
+				_toggleClass(ghostEl, options.fallbackClass, <span class="hljs-literal">true</span>);
+
+				_css(ghostEl, <span class="hljs-string">'top'</span>, rect.top - <span class="hljs-built_in">parseInt</span>(css.marginTop, <span class="hljs-number">10</span>));
+				_css(ghostEl, <span class="hljs-string">'left'</span>, rect.left - <span class="hljs-built_in">parseInt</span>(css.marginLeft, <span class="hljs-number">10</span>));
+				_css(ghostEl, <span class="hljs-string">'width'</span>, rect.width);
+				_css(ghostEl, <span class="hljs-string">'height'</span>, rect.height);
+				_css(ghostEl, <span class="hljs-string">'opacity'</span>, <span class="hljs-string">'0.8'</span>);
+				_css(ghostEl, <span class="hljs-string">'position'</span>, <span class="hljs-string">'fixed'</span>);
+				_css(ghostEl, <span class="hljs-string">'zIndex'</span>, <span class="hljs-string">'100000'</span>);
+				_css(ghostEl, <span class="hljs-string">'pointerEvents'</span>, <span class="hljs-string">'none'</span>);
+
+				options.fallbackOnBody &amp;&amp; <span class="hljs-built_in">document</span>.body.appendChild(ghostEl) || rootEl.appendChild(ghostEl);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Fixing dimensions.</p></div></div><div class="code"><div class="wrapper">				ghostRect = ghostEl.getBoundingClientRect();
+				_css(ghostEl, <span class="hljs-string">'width'</span>, rect.width * <span class="hljs-number">2</span> - ghostRect.width);
+				_css(ghostEl, <span class="hljs-string">'height'</span>, rect.height * <span class="hljs-number">2</span> - ghostRect.height);
+			}
+		},
+
+		_onDragStart: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"><span class="hljs-comment">/**Event*/</span>evt, <span class="hljs-comment">/**boolean*/</span>useFallback</span>) </span>{
+			<span class="hljs-keyword">var</span> dataTransfer = evt.dataTransfer,
+				options = <span class="hljs-keyword">this</span>.options;
+
+			<span class="hljs-keyword">this</span>._offUpEvents();
+
+			<span class="hljs-keyword">if</span> (activeGroup.pull == <span class="hljs-string">'clone'</span>) {
+				cloneEl = dragEl.cloneNode(<span class="hljs-literal">true</span>);
+				_css(cloneEl, <span class="hljs-string">'display'</span>, <span class="hljs-string">'none'</span>);
+				rootEl.insertBefore(cloneEl, dragEl);
+			}
+
+			<span class="hljs-keyword">if</span> (useFallback) {
+
+				<span class="hljs-keyword">if</span> (useFallback === <span class="hljs-string">'touch'</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Bind touch events</p></div></div><div class="code"><div class="wrapper">					_on(<span class="hljs-built_in">document</span>, <span class="hljs-string">'touchmove'</span>, <span class="hljs-keyword">this</span>._onTouchMove);
+					_on(<span class="hljs-built_in">document</span>, <span class="hljs-string">'touchend'</span>, <span class="hljs-keyword">this</span>._onDrop);
+					_on(<span class="hljs-built_in">document</span>, <span class="hljs-string">'touchcancel'</span>, <span class="hljs-keyword">this</span>._onDrop);
+				} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Old brwoser</p></div></div><div class="code"><div class="wrapper">					_on(<span class="hljs-built_in">document</span>, <span class="hljs-string">'mousemove'</span>, <span class="hljs-keyword">this</span>._onTouchMove);
+					_on(<span class="hljs-built_in">document</span>, <span class="hljs-string">'mouseup'</span>, <span class="hljs-keyword">this</span>._onDrop);
+				}
+
+				<span class="hljs-keyword">this</span>._loopId = setInterval(<span class="hljs-keyword">this</span>._emulateDragOver, <span class="hljs-number">50</span>);
+			}
+			<span class="hljs-keyword">else</span> {
+				<span class="hljs-keyword">if</span> (dataTransfer) {
+					dataTransfer.effectAllowed = <span class="hljs-string">'move'</span>;
+					options.setData &amp;&amp; options.setData.call(<span class="hljs-keyword">this</span>, dataTransfer, dragEl);
+				}
+
+				_on(<span class="hljs-built_in">document</span>, <span class="hljs-string">'drop'</span>, <span class="hljs-keyword">this</span>);
+				setTimeout(<span class="hljs-keyword">this</span>._dragStarted, <span class="hljs-number">0</span>);
+			}
+		},
+
+		_onDragOver: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"><span class="hljs-comment">/**Event*/</span>evt</span>) </span>{
+			<span class="hljs-keyword">var</span> el = <span class="hljs-keyword">this</span>.el,
+				target,
+				dragRect,
+				revert,
+				options = <span class="hljs-keyword">this</span>.options,
+				group = options.group,
+				groupPut = group.put,
+				isOwner = (activeGroup === group),
+				canSort = options.sort;
+
+			<span class="hljs-keyword">if</span> (evt.preventDefault !== <span class="hljs-keyword">void</span> <span class="hljs-number">0</span>) {
+				evt.preventDefault();
+				!options.dragoverBubble &amp;&amp; evt.stopPropagation();
+			}
+
+			moved = <span class="hljs-literal">true</span>;
+
+			<span class="hljs-keyword">if</span> (activeGroup &amp;&amp; !options.disabled &amp;&amp;
+				(isOwner
+					? canSort || (revert = !rootEl.contains(dragEl)) <span class="hljs-comment">// Reverting item into the original list</span>
+					: activeGroup.pull &amp;&amp; groupPut &amp;&amp; (
+						(activeGroup.name === group.name) || <span class="hljs-comment">// by Name</span>
+						(groupPut.indexOf &amp;&amp; ~groupPut.indexOf(activeGroup.name)) <span class="hljs-comment">// by Array</span>
+					)
+				) &amp;&amp;
+				(evt.rootEl === <span class="hljs-keyword">void</span> <span class="hljs-number">0</span> || evt.rootEl === <span class="hljs-keyword">this</span>.el) <span class="hljs-comment">// touch fallback</span>
+			) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Smart auto-scrolling</p></div></div><div class="code"><div class="wrapper">				_autoScroll(evt, options, <span class="hljs-keyword">this</span>.el);
+
+				<span class="hljs-keyword">if</span> (_silent) {
+					<span class="hljs-keyword">return</span>;
+				}
+
+				target = _closest(evt.target, options.draggable, el);
+				dragRect = dragEl.getBoundingClientRect();
+
+				<span class="hljs-keyword">if</span> (revert) {
+					_cloneHide(<span class="hljs-literal">true</span>);
+
+					<span class="hljs-keyword">if</span> (cloneEl || nextEl) {
+						rootEl.insertBefore(dragEl, cloneEl || nextEl);
+					}
+					<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (!canSort) {
+						rootEl.appendChild(dragEl);
+					}
+
+					<span class="hljs-keyword">return</span>;
+				}
+
+
+				<span class="hljs-keyword">if</span> ((el.children.length === <span class="hljs-number">0</span>) || (el.children[<span class="hljs-number">0</span>] === ghostEl) ||
+					(el === evt.target) &amp;&amp; (target = _ghostIsLast(el, evt))
+				) {
+
+					<span class="hljs-keyword">if</span> (target) {
+						<span class="hljs-keyword">if</span> (target.animated) {
+							<span class="hljs-keyword">return</span>;
+						}
+
+						targetRect = target.getBoundingClientRect();
+					}
+
+					_cloneHide(isOwner);
+
+					<span class="hljs-keyword">if</span> (_onMove(rootEl, el, dragEl, dragRect, target, targetRect) !== <span class="hljs-literal">false</span>) {
+						<span class="hljs-keyword">if</span> (!dragEl.contains(el)) {
+							el.appendChild(dragEl);
+							parentEl = el; <span class="hljs-comment">// actualization</span>
+						}
+
+						<span class="hljs-keyword">this</span>._animate(dragRect, dragEl);
+						target &amp;&amp; <span class="hljs-keyword">this</span>._animate(targetRect, target);
+					}
+				}
+				<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (target &amp;&amp; !target.animated &amp;&amp; target !== dragEl &amp;&amp; (target.parentNode[expando] !== <span class="hljs-keyword">void</span> <span class="hljs-number">0</span>)) {
+					<span class="hljs-keyword">if</span> (lastEl !== target) {
+						lastEl = target;
+						lastCSS = _css(target);
+						lastParentCSS = _css(target.parentNode);
+					}
+
+
+					<span class="hljs-keyword">var</span> targetRect = target.getBoundingClientRect(),
+						width = targetRect.right - targetRect.left,
+						height = targetRect.bottom - targetRect.top,
+						floating = <span class="hljs-regexp">/left|right|inline/</span>.test(lastCSS.cssFloat + lastCSS.display)
+							|| (lastParentCSS.display == <span class="hljs-string">'flex'</span> &amp;&amp; lastParentCSS[<span class="hljs-string">'flex-direction'</span>].indexOf(<span class="hljs-string">'row'</span>) === <span class="hljs-number">0</span>),
+						isWide = (target.offsetWidth &gt; dragEl.offsetWidth),
+						isLong = (target.offsetHeight &gt; dragEl.offsetHeight),
+						halfway = (floating ? (evt.clientX - targetRect.left) / width : (evt.clientY - targetRect.top) / height) &gt; <span class="hljs-number">0.5</span>,
+						nextSibling = target.nextElementSibling,
+						moveVector = _onMove(rootEl, el, dragEl, dragRect, target, targetRect),
+						after
+					;
+
+					<span class="hljs-keyword">if</span> (moveVector !== <span class="hljs-literal">false</span>) {
+						_silent = <span class="hljs-literal">true</span>;
+						setTimeout(_unsilent, <span class="hljs-number">30</span>);
+
+						_cloneHide(isOwner);
+
+						<span class="hljs-keyword">if</span> (moveVector === <span class="hljs-number">1</span> || moveVector === -<span class="hljs-number">1</span>) {
+							after = (moveVector === <span class="hljs-number">1</span>);
+						}
+						<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (floating) {
+							<span class="hljs-keyword">var</span> elTop = dragEl.offsetTop,
+								tgTop = target.offsetTop;
+
+							<span class="hljs-keyword">if</span> (elTop === tgTop) {
+								after = (target.previousElementSibling === dragEl) &amp;&amp; !isWide || halfway &amp;&amp; isWide;
+							} <span class="hljs-keyword">else</span> {
+								after = tgTop &gt; elTop;
+							}
+						} <span class="hljs-keyword">else</span> {
+							after = (nextSibling !== dragEl) &amp;&amp; !isLong || halfway &amp;&amp; isLong;
+						}
+
+						<span class="hljs-keyword">if</span> (!dragEl.contains(el)) {
+							<span class="hljs-keyword">if</span> (after &amp;&amp; !nextSibling) {
+								el.appendChild(dragEl);
+							} <span class="hljs-keyword">else</span> {
+								target.parentNode.insertBefore(dragEl, after ? nextSibling : target);
+							}
+						}
+
+						parentEl = dragEl.parentNode; <span class="hljs-comment">// actualization</span>
+
+						<span class="hljs-keyword">this</span>._animate(dragRect, dragEl);
+						<span class="hljs-keyword">this</span>._animate(targetRect, target);
+					}
+				}
+			}
+		},
+
+		_animate: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">prevRect, target</span>) </span>{
+			<span class="hljs-keyword">var</span> ms = <span class="hljs-keyword">this</span>.options.animation;
+
+			<span class="hljs-keyword">if</span> (ms) {
+				<span class="hljs-keyword">var</span> currentRect = target.getBoundingClientRect();
+
+				_css(target, <span class="hljs-string">'transition'</span>, <span class="hljs-string">'none'</span>);
+				_css(target, <span class="hljs-string">'transform'</span>, <span class="hljs-string">'translate3d('</span>
+					+ (prevRect.left - currentRect.left) + <span class="hljs-string">'px,'</span>
+					+ (prevRect.top - currentRect.top) + <span class="hljs-string">'px,0)'</span>
+				);
+
+				target.offsetWidth; <span class="hljs-comment">// repaint</span>
+
+				_css(target, <span class="hljs-string">'transition'</span>, <span class="hljs-string">'all '</span> + ms + <span class="hljs-string">'ms'</span>);
+				_css(target, <span class="hljs-string">'transform'</span>, <span class="hljs-string">'translate3d(0,0,0)'</span>);
+
+				clearTimeout(target.animated);
+				target.animated = setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+					_css(target, <span class="hljs-string">'transition'</span>, <span class="hljs-string">''</span>);
+					_css(target, <span class="hljs-string">'transform'</span>, <span class="hljs-string">''</span>);
+					target.animated = <span class="hljs-literal">false</span>;
+				}, ms);
+			}
+		},
+
+		_offUpEvents: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">var</span> ownerDocument = <span class="hljs-keyword">this</span>.el.ownerDocument;
+
+			_off(<span class="hljs-built_in">document</span>, <span class="hljs-string">'touchmove'</span>, <span class="hljs-keyword">this</span>._onTouchMove);
+			_off(ownerDocument, <span class="hljs-string">'mouseup'</span>, <span class="hljs-keyword">this</span>._onDrop);
+			_off(ownerDocument, <span class="hljs-string">'touchend'</span>, <span class="hljs-keyword">this</span>._onDrop);
+			_off(ownerDocument, <span class="hljs-string">'touchcancel'</span>, <span class="hljs-keyword">this</span>._onDrop);
+		},
+
+		_onDrop: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"><span class="hljs-comment">/**Event*/</span>evt</span>) </span>{
+			<span class="hljs-keyword">var</span> el = <span class="hljs-keyword">this</span>.el,
+				options = <span class="hljs-keyword">this</span>.options;
+
+			clearInterval(<span class="hljs-keyword">this</span>._loopId);
+			clearInterval(autoScroll.pid);
+			clearTimeout(<span class="hljs-keyword">this</span>._dragStartTimer);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Unbind events</p></div></div><div class="code"><div class="wrapper">			_off(<span class="hljs-built_in">document</span>, <span class="hljs-string">'mousemove'</span>, <span class="hljs-keyword">this</span>._onTouchMove);
+
+			<span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.nativeDraggable) {
+				_off(<span class="hljs-built_in">document</span>, <span class="hljs-string">'drop'</span>, <span class="hljs-keyword">this</span>);
+				_off(el, <span class="hljs-string">'dragstart'</span>, <span class="hljs-keyword">this</span>._onDragStart);
+			}
+
+			<span class="hljs-keyword">this</span>._offUpEvents();
+
+			<span class="hljs-keyword">if</span> (evt) {
+				<span class="hljs-keyword">if</span> (moved) {
+					evt.preventDefault();
+					!options.dropBubble &amp;&amp; evt.stopPropagation();
+				}
+
+				ghostEl &amp;&amp; ghostEl.parentNode.removeChild(ghostEl);
+
+				<span class="hljs-keyword">if</span> (dragEl) {
+					<span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.nativeDraggable) {
+						_off(dragEl, <span class="hljs-string">'dragend'</span>, <span class="hljs-keyword">this</span>);
+					}
+
+					_disableDraggable(dragEl);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Remove class&#39;s</p></div></div><div class="code"><div class="wrapper">					_toggleClass(dragEl, <span class="hljs-keyword">this</span>.options.ghostClass, <span class="hljs-literal">false</span>);
+					_toggleClass(dragEl, <span class="hljs-keyword">this</span>.options.chosenClass, <span class="hljs-literal">false</span>);
+
+					<span class="hljs-keyword">if</span> (rootEl !== parentEl) {
+						newIndex = _index(dragEl, options.draggable);
+
+						<span class="hljs-keyword">if</span> (newIndex &gt;= <span class="hljs-number">0</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>drag from one list and drop into another</p></div></div><div class="code"><div class="wrapper">							_dispatchEvent(<span class="hljs-literal">null</span>, parentEl, <span class="hljs-string">'sort'</span>, dragEl, rootEl, oldIndex, newIndex);
+							_dispatchEvent(<span class="hljs-keyword">this</span>, rootEl, <span class="hljs-string">'sort'</span>, dragEl, rootEl, oldIndex, newIndex);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Add event</p></div></div><div class="code"><div class="wrapper">							_dispatchEvent(<span class="hljs-literal">null</span>, parentEl, <span class="hljs-string">'add'</span>, dragEl, rootEl, oldIndex, newIndex);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Remove event</p></div></div><div class="code"><div class="wrapper">							_dispatchEvent(<span class="hljs-keyword">this</span>, rootEl, <span class="hljs-string">'remove'</span>, dragEl, rootEl, oldIndex, newIndex);
+						}
+					}
+					<span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Remove clone</p></div></div><div class="code"><div class="wrapper">						cloneEl &amp;&amp; cloneEl.parentNode.removeChild(cloneEl);
+
+						<span class="hljs-keyword">if</span> (dragEl.nextSibling !== nextEl) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get the index of the dragged element within its parent</p></div></div><div class="code"><div class="wrapper">							newIndex = _index(dragEl, options.draggable);
+
+							<span class="hljs-keyword">if</span> (newIndex &gt;= <span class="hljs-number">0</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>drag &amp; drop within the same list</p></div></div><div class="code"><div class="wrapper">								_dispatchEvent(<span class="hljs-keyword">this</span>, rootEl, <span class="hljs-string">'update'</span>, dragEl, rootEl, oldIndex, newIndex);
+								_dispatchEvent(<span class="hljs-keyword">this</span>, rootEl, <span class="hljs-string">'sort'</span>, dragEl, rootEl, oldIndex, newIndex);
+							}
+						}
+					}
+
+					<span class="hljs-keyword">if</span> (Sortable.active) {
+						<span class="hljs-keyword">if</span> (newIndex === <span class="hljs-literal">null</span> || newIndex === -<span class="hljs-number">1</span>) {
+							newIndex = oldIndex;
+						}
+
+						_dispatchEvent(<span class="hljs-keyword">this</span>, rootEl, <span class="hljs-string">'end'</span>, dragEl, rootEl, oldIndex, newIndex);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Save sorting</p></div></div><div class="code"><div class="wrapper">						<span class="hljs-keyword">this</span>.save();
+					}
+				}
+
+			}
+			<span class="hljs-keyword">this</span>._nulling();
+		},
+
+		_nulling: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Nulling</p></div></div><div class="code"><div class="wrapper">			rootEl =
+			dragEl =
+			parentEl =
+			ghostEl =
+			nextEl =
+			cloneEl =
+
+			scrollEl =
+			scrollParentEl =
+
+			tapEvt =
+			touchEvt =
+
+			moved =
+			newIndex =
+
+			lastEl =
+			lastCSS =
+
+			activeGroup =
+			Sortable.active = <span class="hljs-literal">null</span>;
+		},
+
+		handleEvent: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"><span class="hljs-comment">/**Event*/</span>evt</span>) </span>{
+			<span class="hljs-keyword">var</span> type = evt.type;
+
+			<span class="hljs-keyword">if</span> (type === <span class="hljs-string">'dragover'</span> || type === <span class="hljs-string">'dragenter'</span>) {
+				<span class="hljs-keyword">if</span> (dragEl) {
+					<span class="hljs-keyword">this</span>._onDragOver(evt);
+					_globalDragOver(evt);
+				}
+			}
+			<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (type === <span class="hljs-string">'drop'</span> || type === <span class="hljs-string">'dragend'</span>) {
+				<span class="hljs-keyword">this</span>._onDrop(evt);
+			}
+		},</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Serializes the item into an array of string.</p>
+<p><strong>Returns a String[]</strong></p></div></div><div class="code"><div class="wrapper">		toArray: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">var</span> order = [],
+				el,
+				children = <span class="hljs-keyword">this</span>.el.children,
+				i = <span class="hljs-number">0</span>,
+				n = children.length,
+				options = <span class="hljs-keyword">this</span>.options;
+
+			<span class="hljs-keyword">for</span> (; i &lt; n; i++) {
+				el = children[i];
+				<span class="hljs-keyword">if</span> (_closest(el, options.draggable, <span class="hljs-keyword">this</span>.el)) {
+					order.push(el.getAttribute(options.dataIdAttr) || _generateId(el));
+				}
+			}
+
+			<span class="hljs-keyword">return</span> order;
+		},</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Sorts the elements according to the array.</p>
+<p>Parameters:</p>
+<ul>
+<li><strong>order must be an Array of Strings.</strong><br/>(order of the items)</li>
+</ul></div></div><div class="code"><div class="wrapper">		sort: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">order</span>) </span>{
+			<span class="hljs-keyword">var</span> items = {}, rootEl = <span class="hljs-keyword">this</span>.el;
+
+			<span class="hljs-keyword">this</span>.toArray().forEach(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">id, i</span>) </span>{
+				<span class="hljs-keyword">var</span> el = rootEl.children[i];
+
+				<span class="hljs-keyword">if</span> (_closest(el, <span class="hljs-keyword">this</span>.options.draggable, rootEl)) {
+					items[id] = el;
+				}
+			}, <span class="hljs-keyword">this</span>);
+
+			order.forEach(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">id</span>) </span>{
+				<span class="hljs-keyword">if</span> (items[id]) {
+					rootEl.removeChild(items[id]);
+					rootEl.appendChild(items[id]);
+				}
+			});
+		},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Save the current sorting</p></div></div><div class="code"><div class="wrapper">		save: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">var</span> store = <span class="hljs-keyword">this</span>.options.store;
+			store &amp;&amp; store.set(<span class="hljs-keyword">this</span>);
+		},</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>For each element in the set, get the first element that matches the selector by testing the element itself and traversing up through its ancestors in the DOM tree.</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>el must be a HTMLElement.</strong></p>
+</li>
+<li><p><strong>selector is optional and must be a String.</strong><br/>(default: <code>options.draggable</code>)</p>
+</li>
+</ul>
+<p><strong>Returns a HTMLElement or a null</strong></p></div></div><div class="code"><div class="wrapper">		closest: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">el, selector</span>) </span>{
+			<span class="hljs-keyword">return</span> _closest(el, selector || <span class="hljs-keyword">this</span>.options.draggable, <span class="hljs-keyword">this</span>.el);
+		},</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Set/get option</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>name must be a string.</strong></p>
+</li>
+<li><p><strong>value is optional and must be a *.</strong></p>
+</li>
+</ul>
+<p><strong>Returns a *</strong></p></div></div><div class="code"><div class="wrapper">		option: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">name, value</span>) </span>{
+			<span class="hljs-keyword">var</span> options = <span class="hljs-keyword">this</span>.options;
+
+			<span class="hljs-keyword">if</span> (value === <span class="hljs-keyword">void</span> <span class="hljs-number">0</span>) {
+				<span class="hljs-keyword">return</span> options[name];
+			} <span class="hljs-keyword">else</span> {
+				options[name] = value;
+
+				<span class="hljs-keyword">if</span> (name === <span class="hljs-string">'group'</span>) {
+					_prepareGroup(options);
+				}
+			}
+		},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Destroy</p></div></div><div class="code"><div class="wrapper">		destroy: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">var</span> el = <span class="hljs-keyword">this</span>.el;
+
+			el[expando] = <span class="hljs-literal">null</span>;
+
+			_off(el, <span class="hljs-string">'mousedown'</span>, <span class="hljs-keyword">this</span>._onTapStart);
+			_off(el, <span class="hljs-string">'touchstart'</span>, <span class="hljs-keyword">this</span>._onTapStart);
+
+			<span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.nativeDraggable) {
+				_off(el, <span class="hljs-string">'dragover'</span>, <span class="hljs-keyword">this</span>);
+				_off(el, <span class="hljs-string">'dragenter'</span>, <span class="hljs-keyword">this</span>);
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Remove draggable attributes</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-built_in">Array</span>.prototype.forEach.call(el.querySelectorAll(<span class="hljs-string">'[draggable]'</span>), <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">el</span>) </span>{
+				el.removeAttribute(<span class="hljs-string">'draggable'</span>);
+			});
+
+			touchDragOverListeners.splice(touchDragOverListeners.indexOf(<span class="hljs-keyword">this</span>._onDragOver), <span class="hljs-number">1</span>);
+
+			<span class="hljs-keyword">this</span>._onDrop();
+
+			<span class="hljs-keyword">this</span>.el = el = <span class="hljs-literal">null</span>;
+		}
+	};
+
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_cloneHide</span>(<span class="hljs-params">state</span>) </span>{
+		<span class="hljs-keyword">if</span> (cloneEl &amp;&amp; (cloneEl.state !== state)) {
+			_css(cloneEl, <span class="hljs-string">'display'</span>, state ? <span class="hljs-string">'none'</span> : <span class="hljs-string">''</span>);
+			!state &amp;&amp; cloneEl.state &amp;&amp; rootEl.insertBefore(cloneEl, dragEl);
+			cloneEl.state = state;
+		}
+	}
+
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_closest</span>(<span class="hljs-params"><span class="hljs-comment">/**HTMLElement*/</span>el, <span class="hljs-comment">/**String*/</span>selector, <span class="hljs-comment">/**HTMLElement*/</span>ctx</span>) </span>{
+		<span class="hljs-keyword">if</span> (el) {
+			ctx = ctx || <span class="hljs-built_in">document</span>;
+
+			<span class="hljs-keyword">do</span> {
+				<span class="hljs-keyword">if</span> (
+					(selector === <span class="hljs-string">'&gt;*'</span> &amp;&amp; el.parentNode === ctx)
+					|| _matches(el, selector)
+				) {
+					<span class="hljs-keyword">return</span> el;
+				}
+			}
+			<span class="hljs-keyword">while</span> (el !== ctx &amp;&amp; (el = el.parentNode));
+		}
+
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+	}
+
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_globalDragOver</span>(<span class="hljs-params"><span class="hljs-comment">/**Event*/</span>evt</span>) </span>{
+		<span class="hljs-keyword">if</span> (evt.dataTransfer) {
+			evt.dataTransfer.dropEffect = <span class="hljs-string">'move'</span>;
+		}
+		evt.preventDefault();
+	}
+
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_on</span>(<span class="hljs-params">el, event, fn</span>) </span>{
+		el.addEventListener(event, fn, <span class="hljs-literal">false</span>);
+	}
+
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_off</span>(<span class="hljs-params">el, event, fn</span>) </span>{
+		el.removeEventListener(event, fn, <span class="hljs-literal">false</span>);
+	}
+
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_toggleClass</span>(<span class="hljs-params">el, name, state</span>) </span>{
+		<span class="hljs-keyword">if</span> (el) {
+			<span class="hljs-keyword">if</span> (el.classList) {
+				el.classList[state ? <span class="hljs-string">'add'</span> : <span class="hljs-string">'remove'</span>](name);
+			}
+			<span class="hljs-keyword">else</span> {
+				<span class="hljs-keyword">var</span> className = (<span class="hljs-string">' '</span> + el.className + <span class="hljs-string">' '</span>).replace(RSPACE, <span class="hljs-string">' '</span>).replace(<span class="hljs-string">' '</span> + name + <span class="hljs-string">' '</span>, <span class="hljs-string">' '</span>);
+				el.className = (className + (state ? <span class="hljs-string">' '</span> + name : <span class="hljs-string">''</span>)).replace(RSPACE, <span class="hljs-string">' '</span>);
+			}
+		}
+	}
+
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_css</span>(<span class="hljs-params">el, prop, val</span>) </span>{
+		<span class="hljs-keyword">var</span> style = el &amp;&amp; el.style;
+
+		<span class="hljs-keyword">if</span> (style) {
+			<span class="hljs-keyword">if</span> (val === <span class="hljs-keyword">void</span> <span class="hljs-number">0</span>) {
+				<span class="hljs-keyword">if</span> (<span class="hljs-built_in">document</span>.defaultView &amp;&amp; <span class="hljs-built_in">document</span>.defaultView.getComputedStyle) {
+					val = <span class="hljs-built_in">document</span>.defaultView.getComputedStyle(el, <span class="hljs-string">''</span>);
+				}
+				<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (el.currentStyle) {
+					val = el.currentStyle;
+				}
+
+				<span class="hljs-keyword">return</span> prop === <span class="hljs-keyword">void</span> <span class="hljs-number">0</span> ? val : val[prop];
+			}
+			<span class="hljs-keyword">else</span> {
+				<span class="hljs-keyword">if</span> (!(prop <span class="hljs-keyword">in</span> style)) {
+					prop = <span class="hljs-string">'-webkit-'</span> + prop;
+				}
+
+				style[prop] = val + (<span class="hljs-keyword">typeof</span> val === <span class="hljs-string">'string'</span> ? <span class="hljs-string">''</span> : <span class="hljs-string">'px'</span>);
+			}
+		}
+	}
+
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_find</span>(<span class="hljs-params">ctx, tagName, iterator</span>) </span>{
+		<span class="hljs-keyword">if</span> (ctx) {
+			<span class="hljs-keyword">var</span> list = ctx.getElementsByTagName(tagName), i = <span class="hljs-number">0</span>, n = list.length;
+
+			<span class="hljs-keyword">if</span> (iterator) {
+				<span class="hljs-keyword">for</span> (; i &lt; n; i++) {
+					iterator(list[i], i);
+				}
+			}
+
+			<span class="hljs-keyword">return</span> list;
+		}
+
+		<span class="hljs-keyword">return</span> [];
+	}
+
+
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_dispatchEvent</span>(<span class="hljs-params">sortable, rootEl, name, targetEl, fromEl, startIndex, newIndex</span>) </span>{
+		<span class="hljs-keyword">var</span> evt = <span class="hljs-built_in">document</span>.createEvent(<span class="hljs-string">'Event'</span>),
+			options = (sortable || rootEl[expando]).options,
+			onName = <span class="hljs-string">'on'</span> + name.charAt(<span class="hljs-number">0</span>).toUpperCase() + name.substr(<span class="hljs-number">1</span>);
+
+		evt.initEvent(name, <span class="hljs-literal">true</span>, <span class="hljs-literal">true</span>);
+
+		evt.to = rootEl;
+		evt.from = fromEl || rootEl;
+		evt.item = targetEl || rootEl;
+		evt.clone = cloneEl;
+
+		evt.oldIndex = startIndex;
+		evt.newIndex = newIndex;
+
+		rootEl.dispatchEvent(evt);
+
+		<span class="hljs-keyword">if</span> (options[onName]) {
+			options[onName].call(sortable, evt);
+		}
+	}
+
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_onMove</span>(<span class="hljs-params">fromEl, toEl, dragEl, dragRect, targetEl, targetRect</span>) </span>{
+		<span class="hljs-keyword">var</span> evt,
+			sortable = fromEl[expando],
+			onMoveFn = sortable.options.onMove,
+			retVal;
+
+		evt = <span class="hljs-built_in">document</span>.createEvent(<span class="hljs-string">'Event'</span>);
+		evt.initEvent(<span class="hljs-string">'move'</span>, <span class="hljs-literal">true</span>, <span class="hljs-literal">true</span>);
+
+		evt.to = toEl;
+		evt.from = fromEl;
+		evt.dragged = dragEl;
+		evt.draggedRect = dragRect;
+		evt.related = targetEl || toEl;
+		evt.relatedRect = targetRect || toEl.getBoundingClientRect();
+
+		fromEl.dispatchEvent(evt);
+
+		<span class="hljs-keyword">if</span> (onMoveFn) {
+			retVal = onMoveFn.call(sortable, evt);
+		}
+
+		<span class="hljs-keyword">return</span> retVal;
+	}
+
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_disableDraggable</span>(<span class="hljs-params">el</span>) </span>{
+		el.draggable = <span class="hljs-literal">false</span>;
+	}
+
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_unsilent</span>(<span class="hljs-params"></span>) </span>{
+		_silent = <span class="hljs-literal">false</span>;
+	}</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><strong>Returns a HTMLElement or a false</strong></p></div></div><div class="code"><div class="wrapper">	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_ghostIsLast</span>(<span class="hljs-params">el, evt</span>) </span>{
+		<span class="hljs-keyword">var</span> lastEl = el.lastElementChild,
+				rect = lastEl.getBoundingClientRect();
+
+		<span class="hljs-keyword">return</span> ((evt.clientY - (rect.top + rect.height) &gt; <span class="hljs-number">5</span>) || (evt.clientX - (rect.right + rect.width) &gt; <span class="hljs-number">5</span>)) &amp;&amp; lastEl; <span class="hljs-comment">// min delta</span>
+	}</div></div></div><div class="segment"><div class="comments doc-section doc-section-private"><div class="wrapper"><p><span class='doc-section-header'>Private</span></p>
+<p>Generate id</p>
+<p>Parameters:</p>
+<ul>
+<li><strong>el must be a HTMLElement.</strong></li>
+</ul>
+<p><strong>Returns a String</strong></p></div></div><div class="code"><div class="wrapper">	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_generateId</span>(<span class="hljs-params">el</span>) </span>{
+		<span class="hljs-keyword">var</span> str = el.tagName + el.className + el.src + el.href + el.textContent,
+			i = str.length,
+			sum = <span class="hljs-number">0</span>;
+
+		<span class="hljs-keyword">while</span> (i--) {
+			sum += str.charCodeAt(i);
+		}
+
+		<span class="hljs-keyword">return</span> sum.toString(<span class="hljs-number">36</span>);
+	}</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Returns the index of an element within its parent for a selected set of
+elements</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>el must be a HTMLElement.</strong></p>
+</li>
+<li><p><strong>selector must be a selector.</strong></p>
+</li>
+</ul>
+<p><strong>Returns a number</strong></p></div></div><div class="code"><div class="wrapper">	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_index</span>(<span class="hljs-params">el, selector</span>) </span>{
+		<span class="hljs-keyword">var</span> index = <span class="hljs-number">0</span>;
+
+		<span class="hljs-keyword">if</span> (!el || !el.parentNode) {
+			<span class="hljs-keyword">return</span> -<span class="hljs-number">1</span>;
+		}
+
+		<span class="hljs-keyword">while</span> (el &amp;&amp; (el = el.previousElementSibling)) {
+			<span class="hljs-keyword">if</span> (el.nodeName.toUpperCase() !== <span class="hljs-string">'TEMPLATE'</span>
+					&amp;&amp; _matches(el, selector)) {
+				index++;
+			}
+		}
+
+		<span class="hljs-keyword">return</span> index;
+	}
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_matches</span>(<span class="hljs-params"><span class="hljs-comment">/**HTMLElement*/</span>el, <span class="hljs-comment">/**String*/</span>selector</span>) </span>{
+		<span class="hljs-keyword">if</span> (el) {
+			selector = selector.split(<span class="hljs-string">'.'</span>);
+
+			<span class="hljs-keyword">var</span> tag = selector.shift().toUpperCase(),
+				re = <span class="hljs-keyword">new</span> <span class="hljs-built_in">RegExp</span>(<span class="hljs-string">'\\s('</span> + selector.join(<span class="hljs-string">'|'</span>) + <span class="hljs-string">')(?=\\s)'</span>, <span class="hljs-string">'g'</span>);
+
+			<span class="hljs-keyword">return</span> (
+				(tag === <span class="hljs-string">''</span> || el.nodeName.toUpperCase() == tag) &amp;&amp;
+				(!selector.length || ((<span class="hljs-string">' '</span> + el.className + <span class="hljs-string">' '</span>).match(re) || []).length == selector.length)
+			);
+		}
+
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+	}
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_throttle</span>(<span class="hljs-params">callback, ms</span>) </span>{
+		<span class="hljs-keyword">var</span> args, _this;
+
+		<span class="hljs-keyword">return</span> <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">if</span> (args === <span class="hljs-keyword">void</span> <span class="hljs-number">0</span>) {
+				args = <span class="hljs-built_in">arguments</span>;
+				_this = <span class="hljs-keyword">this</span>;
+
+				setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+					<span class="hljs-keyword">if</span> (args.length === <span class="hljs-number">1</span>) {
+						callback.call(_this, args[<span class="hljs-number">0</span>]);
+					} <span class="hljs-keyword">else</span> {
+						callback.apply(_this, args);
+					}
+
+					args = <span class="hljs-keyword">void</span> <span class="hljs-number">0</span>;
+				}, ms);
+			}
+		};
+	}
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">_extend</span>(<span class="hljs-params">dst, src</span>) </span>{
+		<span class="hljs-keyword">if</span> (dst &amp;&amp; src) {
+			<span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> key <span class="hljs-keyword">in</span> src) {
+				<span class="hljs-keyword">if</span> (src.hasOwnProperty(key)) {
+					dst[key] = src[key];
+				}
+			}
+		}
+
+		<span class="hljs-keyword">return</span> dst;
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Export utils</p></div></div><div class="code"><div class="wrapper">	Sortable.utils = {
+		on: _on,
+		off: _off,
+		css: _css,
+		find: _find,
+		is: <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">el, selector</span>) </span>{
+			<span class="hljs-keyword">return</span> !!_closest(el, selector, el);
+		},
+		extend: _extend,
+		throttle: _throttle,
+		closest: _closest,
+		toggleClass: _toggleClass,
+		index: _index
+	};</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Create sortable instance</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>el must be a HTMLElement.</strong></p>
+</li>
+<li><p><strong>options is optional and must be an Object.</strong></p>
+</li>
+</ul></div></div><div class="code"><div class="wrapper">	Sortable.create = <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">el, options</span>) </span>{
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> Sortable(el, options);
+	};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Export</p></div></div><div class="code"><div class="wrapper">	Sortable.version = <span class="hljs-string">'1.4.2'</span>;
+	<span class="hljs-keyword">return</span> Sortable;
+});</div></div></div></div></body></html>

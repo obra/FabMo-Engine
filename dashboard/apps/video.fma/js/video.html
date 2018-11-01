@@ -1,0 +1,25 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/video.fma/js/video</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../"><meta name="groc-document-path" content="dashboard/apps/video.fma/js/video"><meta name="groc-project-path" content="dashboard/apps/video.fma/js/video.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../assets/style.css"><script type="text/javascript" src="../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/video.fma/js/video.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-built_in">require</span>(<span class="hljs-string">'jquery'</span>);
+<span class="hljs-keyword">var</span> Fabmo = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../static/js/libs/fabmo.js'</span>);
+<span class="hljs-keyword">var</span> fabmo = <span class="hljs-keyword">new</span> Fabmo();
+
+$(<span class="hljs-built_in">document</span>).ready(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+<span class="hljs-keyword">var</span> canvas = <span class="hljs-built_in">document</span>.getElementById(<span class="hljs-string">'videostream'</span>);
+<span class="hljs-keyword">var</span> context = canvas.getContext(<span class="hljs-string">'2d'</span>);
+fabmo.startVideoStreaming(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>)</span>{
+  <span class="hljs-keyword">if</span> (err){
+    context.font = <span class="hljs-string">"30px Arial"</span>;
+    context.fillStyle = <span class="hljs-string">"grey"</span>;
+    context.textAlign = <span class="hljs-string">"center"</span>;
+    context.fillText(<span class="hljs-string">"No video input."</span>, canvas.width/<span class="hljs-number">2</span>, canvas.height/<span class="hljs-number">2</span>);
+    <span class="hljs-keyword">return</span>;
+  }
+  fabmo.onVideoFrame(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">imageObj</span>)</span>{
+    context.height = imageObj.height;
+    context.width = imageObj.width;
+    canvas.width  = imageObj.width;
+    canvas.height = imageObj.height;
+    context.drawImage(imageObj,<span class="hljs-number">0</span>,<span class="hljs-number">0</span>,context.width,context.height);
+  });
+
+});
+});</div></div></div></div></body></html>

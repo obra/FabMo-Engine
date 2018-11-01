@@ -1,0 +1,96 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/deferred</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/deferred"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/deferred.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/deferred.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"./core"</span>,
+	<span class="hljs-string">"./var/slice"</span>,
+	<span class="hljs-string">"./callbacks"</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery, slice </span>) </span>{
+
+jQuery.extend({
+
+	Deferred: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> func </span>) </span>{
+		<span class="hljs-keyword">var</span> tuples = [</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>action, add listener, listener list, final state</p></div></div><div class="code"><div class="wrapper">				[ <span class="hljs-string">"resolve"</span>, <span class="hljs-string">"done"</span>, jQuery.Callbacks(<span class="hljs-string">"once memory"</span>), <span class="hljs-string">"resolved"</span> ],
+				[ <span class="hljs-string">"reject"</span>, <span class="hljs-string">"fail"</span>, jQuery.Callbacks(<span class="hljs-string">"once memory"</span>), <span class="hljs-string">"rejected"</span> ],
+				[ <span class="hljs-string">"notify"</span>, <span class="hljs-string">"progress"</span>, jQuery.Callbacks(<span class="hljs-string">"memory"</span>) ]
+			],
+			state = <span class="hljs-string">"pending"</span>,
+			promise = {
+				state: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+					<span class="hljs-keyword">return</span> state;
+				},
+				always: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+					deferred.done( <span class="hljs-built_in">arguments</span> ).fail( <span class="hljs-built_in">arguments</span> );
+					<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+				},
+				then: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> <span class="hljs-comment">/* fnDone, fnFail, fnProgress */</span> </span>) </span>{
+					<span class="hljs-keyword">var</span> fns = <span class="hljs-built_in">arguments</span>;
+					<span class="hljs-keyword">return</span> jQuery.Deferred(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> newDefer </span>) </span>{
+						jQuery.each( tuples, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> i, tuple </span>) </span>{
+							<span class="hljs-keyword">var</span> fn = jQuery.isFunction( fns[ i ] ) &amp;&amp; fns[ i ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>deferred[ done | fail | progress ] for forwarding actions to newDefer</p></div></div><div class="code"><div class="wrapper">							deferred[ tuple[<span class="hljs-number">1</span>] ](<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+								<span class="hljs-keyword">var</span> returned = fn &amp;&amp; fn.apply( <span class="hljs-keyword">this</span>, <span class="hljs-built_in">arguments</span> );
+								<span class="hljs-keyword">if</span> ( returned &amp;&amp; jQuery.isFunction( returned.promise ) ) {
+									returned.promise()
+										.done( newDefer.resolve )
+										.fail( newDefer.reject )
+										.progress( newDefer.notify );
+								} <span class="hljs-keyword">else</span> {
+									newDefer[ tuple[ <span class="hljs-number">0</span> ] + <span class="hljs-string">"With"</span> ]( <span class="hljs-keyword">this</span> === promise ? newDefer.promise() : <span class="hljs-keyword">this</span>, fn ? [ returned ] : <span class="hljs-built_in">arguments</span> );
+								}
+							});
+						});
+						fns = <span class="hljs-literal">null</span>;
+					}).promise();
+				},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get a promise for this deferred
+If obj is provided, the promise aspect is added to the object</p></div></div><div class="code"><div class="wrapper">				promise: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> obj </span>) </span>{
+					<span class="hljs-keyword">return</span> obj != <span class="hljs-literal">null</span> ? jQuery.extend( obj, promise ) : promise;
+				}
+			},
+			deferred = {};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Keep pipe for back-compat</p></div></div><div class="code"><div class="wrapper">		promise.pipe = promise.then;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Add list-specific methods</p></div></div><div class="code"><div class="wrapper">		jQuery.each( tuples, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> i, tuple </span>) </span>{
+			<span class="hljs-keyword">var</span> list = tuple[ <span class="hljs-number">2</span> ],
+				stateString = tuple[ <span class="hljs-number">3</span> ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>promise[ done | fail | progress ] = list.add</p></div></div><div class="code"><div class="wrapper">			promise[ tuple[<span class="hljs-number">1</span>] ] = list.add;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle state</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( stateString ) {
+				list.add(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>state = [ resolved | rejected ]</p></div></div><div class="code"><div class="wrapper">					state = stateString;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>[ reject_list | resolve_list ].disable; progress_list.lock</p></div></div><div class="code"><div class="wrapper">				}, tuples[ i ^ <span class="hljs-number">1</span> ][ <span class="hljs-number">2</span> ].disable, tuples[ <span class="hljs-number">2</span> ][ <span class="hljs-number">2</span> ].lock );
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>deferred[ resolve | reject | notify ]</p></div></div><div class="code"><div class="wrapper">			deferred[ tuple[<span class="hljs-number">0</span>] ] = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+				deferred[ tuple[<span class="hljs-number">0</span>] + <span class="hljs-string">"With"</span> ]( <span class="hljs-keyword">this</span> === deferred ? promise : <span class="hljs-keyword">this</span>, <span class="hljs-built_in">arguments</span> );
+				<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+			};
+			deferred[ tuple[<span class="hljs-number">0</span>] + <span class="hljs-string">"With"</span> ] = list.fireWith;
+		});</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Make the deferred a promise</p></div></div><div class="code"><div class="wrapper">		promise.promise( deferred );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Call given func if any</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( func ) {
+			func.call( deferred, deferred );
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>All done!</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">return</span> deferred;
+	},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deferred helper</p></div></div><div class="code"><div class="wrapper">	when: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> subordinate <span class="hljs-comment">/* , ..., subordinateN */</span> </span>) </span>{
+		<span class="hljs-keyword">var</span> i = <span class="hljs-number">0</span>,
+			resolveValues = slice.call( <span class="hljs-built_in">arguments</span> ),
+			length = resolveValues.length,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>the count of uncompleted subordinates</p></div></div><div class="code"><div class="wrapper">			remaining = length !== <span class="hljs-number">1</span> || ( subordinate &amp;&amp; jQuery.isFunction( subordinate.promise ) ) ? length : <span class="hljs-number">0</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>the master Deferred. If resolveValues consist of only a single Deferred, just use that.</p></div></div><div class="code"><div class="wrapper">			deferred = remaining === <span class="hljs-number">1</span> ? subordinate : jQuery.Deferred(),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update function for both resolve and progress values</p></div></div><div class="code"><div class="wrapper">			updateFunc = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> i, contexts, values </span>) </span>{
+				<span class="hljs-keyword">return</span> <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> value </span>) </span>{
+					contexts[ i ] = <span class="hljs-keyword">this</span>;
+					values[ i ] = <span class="hljs-built_in">arguments</span>.length &gt; <span class="hljs-number">1</span> ? slice.call( <span class="hljs-built_in">arguments</span> ) : value;
+					<span class="hljs-keyword">if</span> ( values === progressValues ) {
+						deferred.notifyWith( contexts, values );
+					} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( !( --remaining ) ) {
+						deferred.resolveWith( contexts, values );
+					}
+				};
+			},
+
+			progressValues, progressContexts, resolveContexts;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Add listeners to Deferred subordinates; treat others as resolved</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( length &gt; <span class="hljs-number">1</span> ) {
+			progressValues = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Array</span>( length );
+			progressContexts = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Array</span>( length );
+			resolveContexts = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Array</span>( length );
+			<span class="hljs-keyword">for</span> ( ; i &lt; length; i++ ) {
+				<span class="hljs-keyword">if</span> ( resolveValues[ i ] &amp;&amp; jQuery.isFunction( resolveValues[ i ].promise ) ) {
+					resolveValues[ i ].promise()
+						.done( updateFunc( i, resolveContexts, resolveValues ) )
+						.fail( deferred.reject )
+						.progress( updateFunc( i, progressContexts, progressValues ) );
+				} <span class="hljs-keyword">else</span> {
+					--remaining;
+				}
+			}
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If we&#39;re not waiting on anything, resolve the master</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( !remaining ) {
+			deferred.resolveWith( resolveContexts, resolveValues );
+		}
+
+		<span class="hljs-keyword">return</span> deferred.promise();
+	}
+});
+
+<span class="hljs-keyword">return</span> jQuery;
+});</div></div></div></div></body></html>

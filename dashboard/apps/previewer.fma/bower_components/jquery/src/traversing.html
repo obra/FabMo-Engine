@@ -1,0 +1,172 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/traversing</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/traversing"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/traversing.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/traversing.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"./core"</span>,
+	<span class="hljs-string">"./var/indexOf"</span>,
+	<span class="hljs-string">"./traversing/var/rneedsContext"</span>,
+	<span class="hljs-string">"./core/init"</span>,
+	<span class="hljs-string">"./traversing/findFilter"</span>,
+	<span class="hljs-string">"./selector"</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery, indexOf, rneedsContext </span>) </span>{
+
+<span class="hljs-keyword">var</span> rparentsprev = <span class="hljs-regexp">/^(?:parents|prev(?:Until|All))/</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Methods guaranteed to produce a unique set when starting from a unique set</p></div></div><div class="code"><div class="wrapper">	guaranteedUnique = {
+		children: <span class="hljs-literal">true</span>,
+		contents: <span class="hljs-literal">true</span>,
+		next: <span class="hljs-literal">true</span>,
+		prev: <span class="hljs-literal">true</span>
+	};
+
+jQuery.extend({
+	dir: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem, dir, until </span>) </span>{
+		<span class="hljs-keyword">var</span> matched = [],
+			truncate = until !== <span class="hljs-literal">undefined</span>;
+
+		<span class="hljs-keyword">while</span> ( (elem = elem[ dir ]) &amp;&amp; elem.nodeType !== <span class="hljs-number">9</span> ) {
+			<span class="hljs-keyword">if</span> ( elem.nodeType === <span class="hljs-number">1</span> ) {
+				<span class="hljs-keyword">if</span> ( truncate &amp;&amp; jQuery( elem ).is( until ) ) {
+					<span class="hljs-keyword">break</span>;
+				}
+				matched.push( elem );
+			}
+		}
+		<span class="hljs-keyword">return</span> matched;
+	},
+
+	sibling: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> n, elem </span>) </span>{
+		<span class="hljs-keyword">var</span> matched = [];
+
+		<span class="hljs-keyword">for</span> ( ; n; n = n.nextSibling ) {
+			<span class="hljs-keyword">if</span> ( n.nodeType === <span class="hljs-number">1</span> &amp;&amp; n !== elem ) {
+				matched.push( n );
+			}
+		}
+
+		<span class="hljs-keyword">return</span> matched;
+	}
+});
+
+jQuery.fn.extend({
+	has: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> target </span>) </span>{
+		<span class="hljs-keyword">var</span> targets = jQuery( target, <span class="hljs-keyword">this</span> ),
+			l = targets.length;
+
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.filter(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">var</span> i = <span class="hljs-number">0</span>;
+			<span class="hljs-keyword">for</span> ( ; i &lt; l; i++ ) {
+				<span class="hljs-keyword">if</span> ( jQuery.contains( <span class="hljs-keyword">this</span>, targets[i] ) ) {
+					<span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+				}
+			}
+		});
+	},
+
+	closest: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> selectors, context </span>) </span>{
+		<span class="hljs-keyword">var</span> cur,
+			i = <span class="hljs-number">0</span>,
+			l = <span class="hljs-keyword">this</span>.length,
+			matched = [],
+			pos = rneedsContext.test( selectors ) || <span class="hljs-keyword">typeof</span> selectors !== <span class="hljs-string">"string"</span> ?
+				jQuery( selectors, context || <span class="hljs-keyword">this</span>.context ) :
+				<span class="hljs-number">0</span>;
+
+		<span class="hljs-keyword">for</span> ( ; i &lt; l; i++ ) {
+			<span class="hljs-keyword">for</span> ( cur = <span class="hljs-keyword">this</span>[i]; cur &amp;&amp; cur !== context; cur = cur.parentNode ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Always skip document fragments</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( cur.nodeType &lt; <span class="hljs-number">11</span> &amp;&amp; (pos ?
+					pos.index(cur) &gt; -<span class="hljs-number">1</span> :</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Don&#39;t pass non-elements to Sizzle</p></div></div><div class="code"><div class="wrapper">					cur.nodeType === <span class="hljs-number">1</span> &amp;&amp;
+						jQuery.find.matchesSelector(cur, selectors)) ) {
+
+					matched.push( cur );
+					<span class="hljs-keyword">break</span>;
+				}
+			}
+		}
+
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.pushStack( matched.length &gt; <span class="hljs-number">1</span> ? jQuery.unique( matched ) : matched );
+	},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Determine the position of an element within the set</p></div></div><div class="code"><div class="wrapper">	index: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>No argument, return index in parent</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( !elem ) {
+			<span class="hljs-keyword">return</span> ( <span class="hljs-keyword">this</span>[ <span class="hljs-number">0</span> ] &amp;&amp; <span class="hljs-keyword">this</span>[ <span class="hljs-number">0</span> ].parentNode ) ? <span class="hljs-keyword">this</span>.first().prevAll().length : -<span class="hljs-number">1</span>;
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Index in selector</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">typeof</span> elem === <span class="hljs-string">"string"</span> ) {
+			<span class="hljs-keyword">return</span> indexOf.call( jQuery( elem ), <span class="hljs-keyword">this</span>[ <span class="hljs-number">0</span> ] );
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Locate the position of the desired element</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">return</span> indexOf.call( <span class="hljs-keyword">this</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If it receives a jQuery object, the first element is used</p></div></div><div class="code"><div class="wrapper">			elem.jquery ? elem[ <span class="hljs-number">0</span> ] : elem
+		);
+	},
+
+	add: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> selector, context </span>) </span>{
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.pushStack(
+			jQuery.unique(
+				jQuery.merge( <span class="hljs-keyword">this</span>.get(), jQuery( selector, context ) )
+			)
+		);
+	},
+
+	addBack: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> selector </span>) </span>{
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.add( selector == <span class="hljs-literal">null</span> ?
+			<span class="hljs-keyword">this</span>.prevObject : <span class="hljs-keyword">this</span>.prevObject.filter(selector)
+		);
+	}
+});
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">sibling</span>(<span class="hljs-params"> cur, dir </span>) </span>{
+	<span class="hljs-keyword">while</span> ( (cur = cur[dir]) &amp;&amp; cur.nodeType !== <span class="hljs-number">1</span> ) {}
+	<span class="hljs-keyword">return</span> cur;
+}
+
+jQuery.each({
+	parent: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem </span>) </span>{
+		<span class="hljs-keyword">var</span> parent = elem.parentNode;
+		<span class="hljs-keyword">return</span> parent &amp;&amp; parent.nodeType !== <span class="hljs-number">11</span> ? parent : <span class="hljs-literal">null</span>;
+	},
+	parents: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem </span>) </span>{
+		<span class="hljs-keyword">return</span> jQuery.dir( elem, <span class="hljs-string">"parentNode"</span> );
+	},
+	parentsUntil: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem, i, until </span>) </span>{
+		<span class="hljs-keyword">return</span> jQuery.dir( elem, <span class="hljs-string">"parentNode"</span>, until );
+	},
+	next: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem </span>) </span>{
+		<span class="hljs-keyword">return</span> sibling( elem, <span class="hljs-string">"nextSibling"</span> );
+	},
+	prev: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem </span>) </span>{
+		<span class="hljs-keyword">return</span> sibling( elem, <span class="hljs-string">"previousSibling"</span> );
+	},
+	nextAll: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem </span>) </span>{
+		<span class="hljs-keyword">return</span> jQuery.dir( elem, <span class="hljs-string">"nextSibling"</span> );
+	},
+	prevAll: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem </span>) </span>{
+		<span class="hljs-keyword">return</span> jQuery.dir( elem, <span class="hljs-string">"previousSibling"</span> );
+	},
+	nextUntil: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem, i, until </span>) </span>{
+		<span class="hljs-keyword">return</span> jQuery.dir( elem, <span class="hljs-string">"nextSibling"</span>, until );
+	},
+	prevUntil: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem, i, until </span>) </span>{
+		<span class="hljs-keyword">return</span> jQuery.dir( elem, <span class="hljs-string">"previousSibling"</span>, until );
+	},
+	siblings: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem </span>) </span>{
+		<span class="hljs-keyword">return</span> jQuery.sibling( ( elem.parentNode || {} ).firstChild, elem );
+	},
+	children: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem </span>) </span>{
+		<span class="hljs-keyword">return</span> jQuery.sibling( elem.firstChild );
+	},
+	contents: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem </span>) </span>{
+		<span class="hljs-keyword">return</span> elem.contentDocument || jQuery.merge( [], elem.childNodes );
+	}
+}, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> name, fn </span>) </span>{
+	jQuery.fn[ name ] = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> until, selector </span>) </span>{
+		<span class="hljs-keyword">var</span> matched = jQuery.map( <span class="hljs-keyword">this</span>, fn, until );
+
+		<span class="hljs-keyword">if</span> ( name.slice( -<span class="hljs-number">5</span> ) !== <span class="hljs-string">"Until"</span> ) {
+			selector = until;
+		}
+
+		<span class="hljs-keyword">if</span> ( selector &amp;&amp; <span class="hljs-keyword">typeof</span> selector === <span class="hljs-string">"string"</span> ) {
+			matched = jQuery.filter( selector, matched );
+		}
+
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.length &gt; <span class="hljs-number">1</span> ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Remove duplicates</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( !guaranteedUnique[ name ] ) {
+				jQuery.unique( matched );
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Reverse order for parents* and prev-derivatives</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( rparentsprev.test( name ) ) {
+				matched.reverse();
+			}
+		}
+
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.pushStack( matched );
+	};
+});
+
+<span class="hljs-keyword">return</span> jQuery;
+});</div></div></div></div></body></html>

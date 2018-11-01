@@ -1,0 +1,22 @@
+<!DOCTYPE html><html lang="en"><head><title>runtime/opensbp/commands/index</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../"><meta name="groc-document-path" content="runtime/opensbp/commands/index"><meta name="groc-project-path" content="runtime/opensbp/commands/index.js"><link rel="stylesheet" type="text/css" media="all" href="../../../assets/style.css"><script type="text/javascript" src="../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">runtime/opensbp/commands/index.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs'</span>)
+<span class="hljs-keyword">var</span> path = <span class="hljs-built_in">require</span>(<span class="hljs-string">'path'</span>);
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../log'</span>).logger(<span class="hljs-string">'opensbp'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load all the files in the &#39;routes&#39; directory and process them as route-producing modules</p></div></div><div class="code"><div class="wrapper">exports.load = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">var</span> commandDir = __dirname;
+	<span class="hljs-keyword">var</span> files = fs.readdirSync(commandDir);
+	<span class="hljs-keyword">var</span> retval = {};
+    files.forEach(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">file</span>) </span>{
+      filePath = path.resolve(<span class="hljs-string">'./'</span>, commandDir, file)
+      <span class="hljs-keyword">if</span>((path.extname(filePath) == <span class="hljs-string">'.js'</span>) &amp;&amp; (path.basename(filePath) != <span class="hljs-string">'index.js'</span>)) {
+        <span class="hljs-keyword">try</span> {
+          commands = <span class="hljs-built_in">require</span>(filePath);
+	        <span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> attr <span class="hljs-keyword">in</span> commands) { retval[attr] = commands[attr]; }
+            log.debug(<span class="hljs-string">'Loaded OpenSBP commands from "'</span> + filePath + <span class="hljs-string">'"'</span>);
+        } 
+        <span class="hljs-keyword">catch</span>(e) {
+          log.warn(<span class="hljs-string">'Could not load OpenSBP Commands from "'</span> + filePath + <span class="hljs-string">'": '</span> + e);
+		      log.error(e);            
+        }
+	    }
+    });
+    <span class="hljs-keyword">return</span> retval;
+}</div></div></div></div></body></html>

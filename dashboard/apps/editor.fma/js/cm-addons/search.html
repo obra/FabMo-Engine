@@ -1,0 +1,241 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/editor.fma/js/cm-addons/search</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../"><meta name="groc-document-path" content="dashboard/apps/editor.fma/js/cm-addons/search"><meta name="groc-project-path" content="dashboard/apps/editor.fma/js/cm-addons/search.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../assets/style.css"><script type="text/javascript" src="../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/editor.fma/js/cm-addons/search.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>CodeMirror, copyright (c) by Marijn Haverbeke and others
+Distributed under an MIT license: <a href="http://codemirror.net/LICENSE">http://codemirror.net/LICENSE</a></p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Define search commands. Depends on dialog.js or another
+implementation of the openDialog method.</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Replace works a little oddly -- it will do the replace on the next
+Ctrl-G (or whatever is bound to findNext) press. You prevent a
+replace by making sure the match is no longer selected when hitting
+Ctrl-G.</p></div></div><div class="code"><div class="wrapper">(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">mod</span>) </span>{
+  <span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> exports == <span class="hljs-string">"object"</span> &amp;&amp; <span class="hljs-keyword">typeof</span> <span class="hljs-built_in">module</span> == <span class="hljs-string">"object"</span>) <span class="hljs-comment">// CommonJS</span>
+    mod(<span class="hljs-built_in">require</span>(<span class="hljs-string">"../../lib/codemirror"</span>), <span class="hljs-built_in">require</span>(<span class="hljs-string">"./searchcursor"</span>), <span class="hljs-built_in">require</span>(<span class="hljs-string">"../dialog/dialog"</span>));
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> define == <span class="hljs-string">"function"</span> &amp;&amp; define.amd) <span class="hljs-comment">// AMD</span>
+    define([<span class="hljs-string">"../../lib/codemirror"</span>, <span class="hljs-string">"./searchcursor"</span>, <span class="hljs-string">"../dialog/dialog"</span>], mod);
+  <span class="hljs-keyword">else</span> <span class="hljs-comment">// Plain browser env</span>
+    mod(CodeMirror);
+})(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">CodeMirror</span>) </span>{
+<span class="hljs-pi">  "use strict"</span>;
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">searchOverlay</span>(<span class="hljs-params">query, caseInsensitive</span>) </span>{
+    <span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> query == <span class="hljs-string">"string"</span>)
+      query = <span class="hljs-keyword">new</span> <span class="hljs-built_in">RegExp</span>(query.replace(<span class="hljs-regexp">/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g</span>, <span class="hljs-string">"\\$&amp;"</span>), caseInsensitive ? <span class="hljs-string">"gi"</span> : <span class="hljs-string">"g"</span>);
+    <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (!query.global)
+      query = <span class="hljs-keyword">new</span> <span class="hljs-built_in">RegExp</span>(query.source, query.ignoreCase ? <span class="hljs-string">"gi"</span> : <span class="hljs-string">"g"</span>);
+
+    <span class="hljs-keyword">return</span> {token: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stream</span>) </span>{
+      query.lastIndex = stream.pos;
+      <span class="hljs-keyword">var</span> match = query.exec(stream.string);
+      <span class="hljs-keyword">if</span> (match &amp;&amp; match.index == stream.pos) {
+        stream.pos += match[<span class="hljs-number">0</span>].length || <span class="hljs-number">1</span>;
+        <span class="hljs-keyword">return</span> <span class="hljs-string">"searching"</span>;
+      } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (match) {
+        stream.pos = match.index;
+      } <span class="hljs-keyword">else</span> {
+        stream.skipToEnd();
+      }
+    }};
+  }
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">SearchState</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">this</span>.posFrom = <span class="hljs-keyword">this</span>.posTo = <span class="hljs-keyword">this</span>.lastQuery = <span class="hljs-keyword">this</span>.query = <span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">this</span>.overlay = <span class="hljs-literal">null</span>;
+  }
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getSearchState</span>(<span class="hljs-params">cm</span>) </span>{
+    <span class="hljs-keyword">return</span> cm.state.search || (cm.state.search = <span class="hljs-keyword">new</span> SearchState());
+  }
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">queryCaseInsensitive</span>(<span class="hljs-params">query</span>) </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">typeof</span> query == <span class="hljs-string">"string"</span> &amp;&amp; query == query.toLowerCase();
+  }
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getSearchCursor</span>(<span class="hljs-params">cm, query, pos</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Heuristic: if the query string is all lowercase, do a case insensitive search.</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">return</span> cm.getSearchCursor(query, pos, queryCaseInsensitive(query));
+  }
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">persistentDialog</span>(<span class="hljs-params">cm, text, deflt, onEnter, onKeyDown</span>) </span>{
+    cm.openDialog(text, onEnter, {
+      value: deflt,
+      selectValueOnOpen: <span class="hljs-literal">true</span>,
+      closeOnEnter: <span class="hljs-literal">false</span>,
+      onClose: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{ clearSearch(cm); },
+      onKeyDown: onKeyDown
+    });
+  }
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">dialog</span>(<span class="hljs-params">cm, text, shortText, deflt, f</span>) </span>{
+    <span class="hljs-keyword">if</span> (cm.openDialog) cm.openDialog(text, f, {value: deflt, selectValueOnOpen: <span class="hljs-literal">true</span>});
+    <span class="hljs-keyword">else</span> f(prompt(shortText, deflt));
+  }
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">confirmDialog</span>(<span class="hljs-params">cm, text, shortText, fs</span>) </span>{
+    <span class="hljs-keyword">if</span> (cm.openConfirm) cm.openConfirm(text, fs);
+    <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (confirm(shortText)) fs[<span class="hljs-number">0</span>]();
+  }
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">parseString</span>(<span class="hljs-params">string</span>) </span>{
+    <span class="hljs-keyword">return</span> string.replace(<span class="hljs-regexp">/\\(.)/g</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">_, ch</span>) </span>{
+      <span class="hljs-keyword">if</span> (ch == <span class="hljs-string">"n"</span>) <span class="hljs-keyword">return</span> <span class="hljs-string">"\n"</span>
+      <span class="hljs-keyword">if</span> (ch == <span class="hljs-string">"r"</span>) <span class="hljs-keyword">return</span> <span class="hljs-string">"\r"</span>
+      <span class="hljs-keyword">return</span> ch
+    })
+  }
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">parseQuery</span>(<span class="hljs-params">query</span>) </span>{
+    <span class="hljs-keyword">var</span> isRE = query.match(<span class="hljs-regexp">/^\/(.*)\/([a-z]*)$/</span>);
+    <span class="hljs-keyword">if</span> (isRE) {
+      <span class="hljs-keyword">try</span> { query = <span class="hljs-keyword">new</span> <span class="hljs-built_in">RegExp</span>(isRE[<span class="hljs-number">1</span>], isRE[<span class="hljs-number">2</span>].indexOf(<span class="hljs-string">"i"</span>) == -<span class="hljs-number">1</span> ? <span class="hljs-string">""</span> : <span class="hljs-string">"i"</span>); }
+      <span class="hljs-keyword">catch</span>(e) {} <span class="hljs-comment">// Not a regular expression after all, do a string search</span>
+    } <span class="hljs-keyword">else</span> {
+      query = parseString(query)
+    }
+    <span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> query == <span class="hljs-string">"string"</span> ? query == <span class="hljs-string">""</span> : query.test(<span class="hljs-string">""</span>))
+      query = <span class="hljs-regexp">/x^/</span>;
+    <span class="hljs-keyword">return</span> query;
+  }
+
+  <span class="hljs-keyword">var</span> queryDialog =
+    <span class="hljs-string">'Search: &lt;input type="text" style="width: 10em" class="CodeMirror-search-field"/&gt; &lt;span style="color: #888" class="CodeMirror-search-hint"&gt;(Use /re/ syntax for regexp search)&lt;/span&gt;'</span>;
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">startSearch</span>(<span class="hljs-params">cm, state, query</span>) </span>{
+    state.queryText = query;
+    state.query = parseQuery(query);
+    cm.removeOverlay(state.overlay, queryCaseInsensitive(state.query));
+    state.overlay = searchOverlay(state.query, queryCaseInsensitive(state.query));
+    cm.addOverlay(state.overlay);
+    <span class="hljs-keyword">if</span> (cm.showMatchesOnScrollbar) {
+      <span class="hljs-keyword">if</span> (state.annotate) { state.annotate.clear(); state.annotate = <span class="hljs-literal">null</span>; }
+      state.annotate = cm.showMatchesOnScrollbar(state.query, queryCaseInsensitive(state.query));
+    }
+  }
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">doSearch</span>(<span class="hljs-params">cm, rev, persistent, immediate</span>) </span>{
+    <span class="hljs-keyword">var</span> state = getSearchState(cm);
+    <span class="hljs-keyword">if</span> (state.query) <span class="hljs-keyword">return</span> findNext(cm, rev);
+    <span class="hljs-keyword">var</span> q = cm.getSelection() || state.lastQuery;
+    <span class="hljs-keyword">if</span> (persistent &amp;&amp; cm.openDialog) {
+      <span class="hljs-keyword">var</span> hiding = <span class="hljs-literal">null</span>
+      <span class="hljs-keyword">var</span> searchNext = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">query, event</span>) </span>{
+        CodeMirror.e_stop(event);
+        <span class="hljs-keyword">if</span> (!query) <span class="hljs-keyword">return</span>;
+        <span class="hljs-keyword">if</span> (query != state.queryText) {
+          startSearch(cm, state, query);
+          state.posFrom = state.posTo = cm.getCursor();
+        }
+        <span class="hljs-keyword">if</span> (hiding) hiding.style.opacity = <span class="hljs-number">1</span>
+        findNext(cm, event.shiftKey, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">_, to</span>) </span>{
+          <span class="hljs-keyword">var</span> dialog
+          <span class="hljs-keyword">if</span> (to.line &lt; <span class="hljs-number">3</span> &amp;&amp; <span class="hljs-built_in">document</span>.querySelector &amp;&amp;
+              (dialog = cm.display.wrapper.querySelector(<span class="hljs-string">".CodeMirror-dialog"</span>)) &amp;&amp;
+              dialog.getBoundingClientRect().bottom - <span class="hljs-number">4</span> &gt; cm.cursorCoords(to, <span class="hljs-string">"window"</span>).top)
+            (hiding = dialog).style.opacity = <span class="hljs-number">.4</span>
+        })
+      };
+      persistentDialog(cm, queryDialog, q, searchNext, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">event, query</span>) </span>{
+        <span class="hljs-keyword">var</span> cmd = CodeMirror.keyMap[cm.getOption(<span class="hljs-string">"keyMap"</span>)][CodeMirror.keyName(event)];
+        <span class="hljs-keyword">if</span> (cmd == <span class="hljs-string">"findNext"</span> || cmd == <span class="hljs-string">"findPrev"</span>) {
+          CodeMirror.e_stop(event);
+          startSearch(cm, getSearchState(cm), query);
+          cm.execCommand(cmd);
+        } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (cmd == <span class="hljs-string">"find"</span> || cmd == <span class="hljs-string">"findPersistent"</span>) {
+          CodeMirror.e_stop(event);
+          searchNext(query, event);
+        }
+      });
+      <span class="hljs-keyword">if</span> (immediate) {
+        startSearch(cm, state, q);
+        findNext(cm, rev);
+      }
+    } <span class="hljs-keyword">else</span> {
+      dialog(cm, queryDialog, <span class="hljs-string">"Search for:"</span>, q, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">query</span>) </span>{
+        <span class="hljs-keyword">if</span> (query &amp;&amp; !state.query) cm.operation(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+          startSearch(cm, state, query);
+          state.posFrom = state.posTo = cm.getCursor();
+          findNext(cm, rev);
+        });
+      });
+    }
+  }
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">findNext</span>(<span class="hljs-params">cm, rev, callback</span>) </span>{cm.operation(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">var</span> state = getSearchState(cm);
+    <span class="hljs-keyword">var</span> cursor = getSearchCursor(cm, state.query, rev ? state.posFrom : state.posTo);
+    <span class="hljs-keyword">if</span> (!cursor.find(rev)) {
+      cursor = getSearchCursor(cm, state.query, rev ? CodeMirror.Pos(cm.lastLine()) : CodeMirror.Pos(cm.firstLine(), <span class="hljs-number">0</span>));
+      <span class="hljs-keyword">if</span> (!cursor.find(rev)) <span class="hljs-keyword">return</span>;
+    }
+    cm.setSelection(cursor.from(), cursor.to());
+    cm.scrollIntoView({from: cursor.from(), to: cursor.to()}, <span class="hljs-number">20</span>);
+    state.posFrom = cursor.from(); state.posTo = cursor.to();
+    <span class="hljs-keyword">if</span> (callback) callback(cursor.from(), cursor.to())
+  });}
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">clearSearch</span>(<span class="hljs-params">cm</span>) </span>{cm.operation(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">var</span> state = getSearchState(cm);
+    state.lastQuery = state.query;
+    <span class="hljs-keyword">if</span> (!state.query) <span class="hljs-keyword">return</span>;
+    state.query = state.queryText = <span class="hljs-literal">null</span>;
+    cm.removeOverlay(state.overlay);
+    <span class="hljs-keyword">if</span> (state.annotate) { state.annotate.clear(); state.annotate = <span class="hljs-literal">null</span>; }
+  });}
+
+  <span class="hljs-keyword">var</span> replaceQueryDialog =
+    <span class="hljs-string">' &lt;input type="text" style="width: 10em" class="CodeMirror-search-field"/&gt; &lt;span style="color: #888" class="CodeMirror-search-hint"&gt;(Use /re/ syntax for regexp search)&lt;/span&gt;'</span>;
+  <span class="hljs-keyword">var</span> replacementQueryDialog = <span class="hljs-string">'With: &lt;input type="text" style="width: 10em" class="CodeMirror-search-field"/&gt;'</span>;
+  <span class="hljs-keyword">var</span> doReplaceConfirm = <span class="hljs-string">"Replace? &lt;button&gt;Yes&lt;/button&gt; &lt;button&gt;No&lt;/button&gt; &lt;button&gt;All&lt;/button&gt; &lt;button&gt;Stop&lt;/button&gt;"</span>;
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">replaceAll</span>(<span class="hljs-params">cm, query, text</span>) </span>{
+    cm.operation(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+      <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> cursor = getSearchCursor(cm, query); cursor.findNext();) {
+        <span class="hljs-keyword">if</span> (<span class="hljs-keyword">typeof</span> query != <span class="hljs-string">"string"</span>) {
+          <span class="hljs-keyword">var</span> match = cm.getRange(cursor.from(), cursor.to()).match(query);
+          cursor.replace(text.replace(<span class="hljs-regexp">/\$(\d)/g</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">_, i</span>) </span>{<span class="hljs-keyword">return</span> match[i];}));
+        } <span class="hljs-keyword">else</span> cursor.replace(text);
+      }
+    });
+  }
+
+  <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">replace</span>(<span class="hljs-params">cm, all</span>) </span>{
+    <span class="hljs-keyword">if</span> (cm.getOption(<span class="hljs-string">"readOnly"</span>)) <span class="hljs-keyword">return</span>;
+    <span class="hljs-keyword">var</span> query = cm.getSelection() || getSearchState(cm).lastQuery;
+    <span class="hljs-keyword">var</span> dialogText = all ? <span class="hljs-string">"Replace all:"</span> : <span class="hljs-string">"Replace:"</span>
+    dialog(cm, dialogText + replaceQueryDialog, dialogText, query, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">query</span>) </span>{
+      <span class="hljs-keyword">if</span> (!query) <span class="hljs-keyword">return</span>;
+      query = parseQuery(query);
+      dialog(cm, replacementQueryDialog, <span class="hljs-string">"Replace with:"</span>, <span class="hljs-string">""</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">text</span>) </span>{
+        text = parseString(text)
+        <span class="hljs-keyword">if</span> (all) {
+          replaceAll(cm, query, text)
+        } <span class="hljs-keyword">else</span> {
+          clearSearch(cm);
+          <span class="hljs-keyword">var</span> cursor = getSearchCursor(cm, query, cm.getCursor(<span class="hljs-string">"from"</span>));
+          <span class="hljs-keyword">var</span> advance = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+            <span class="hljs-keyword">var</span> start = cursor.from(), match;
+            <span class="hljs-keyword">if</span> (!(match = cursor.findNext())) {
+              cursor = getSearchCursor(cm, query);
+              <span class="hljs-keyword">if</span> (!(match = cursor.findNext()) ||
+                  (start &amp;&amp; cursor.from().line == start.line &amp;&amp; cursor.from().ch == start.ch)) <span class="hljs-keyword">return</span>;
+            }
+            cm.setSelection(cursor.from(), cursor.to());
+            cm.scrollIntoView({from: cursor.from(), to: cursor.to()});
+            confirmDialog(cm, doReplaceConfirm, <span class="hljs-string">"Replace?"</span>,
+                          [<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{doReplace(match);}, advance,
+                           <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{replaceAll(cm, query, text)}]);
+          };
+          <span class="hljs-keyword">var</span> doReplace = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">match</span>) </span>{
+            cursor.replace(<span class="hljs-keyword">typeof</span> query == <span class="hljs-string">"string"</span> ? text :
+                           text.replace(<span class="hljs-regexp">/\$(\d)/g</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">_, i</span>) </span>{<span class="hljs-keyword">return</span> match[i];}));
+            advance();
+          };
+          advance();
+        }
+      });
+    });
+  }
+
+  CodeMirror.commands.find = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">cm</span>) </span>{clearSearch(cm); doSearch(cm);};
+  CodeMirror.commands.findPersistent = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">cm</span>) </span>{clearSearch(cm); doSearch(cm, <span class="hljs-literal">false</span>, <span class="hljs-literal">true</span>);};
+  CodeMirror.commands.findPersistentNext = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">cm</span>) </span>{doSearch(cm, <span class="hljs-literal">false</span>, <span class="hljs-literal">true</span>, <span class="hljs-literal">true</span>);};
+  CodeMirror.commands.findPersistentPrev = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">cm</span>) </span>{doSearch(cm, <span class="hljs-literal">true</span>, <span class="hljs-literal">true</span>, <span class="hljs-literal">true</span>);};
+  CodeMirror.commands.findNext = doSearch;
+  CodeMirror.commands.findPrev = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">cm</span>) </span>{doSearch(cm, <span class="hljs-literal">true</span>);};
+  CodeMirror.commands.clearSearch = clearSearch;
+  CodeMirror.commands.replace = replace;
+  CodeMirror.commands.replaceAll = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">cm</span>) </span>{replace(cm, <span class="hljs-literal">true</span>);};
+});</div></div></div></div></body></html>

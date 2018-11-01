@@ -1,0 +1,144 @@
+<!DOCTYPE html><html lang="en"><head><title>runtime/opensbp/commands/setting</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../"><meta name="groc-document-path" content="runtime/opensbp/commands/setting"><meta name="groc-project-path" content="runtime/opensbp/commands/setting.js"><link rel="stylesheet" type="text/css" media="all" href="../../../assets/style.css"><script type="text/javascript" src="../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">runtime/opensbp/commands/setting.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../log'</span>).logger(<span class="hljs-string">'sbp'</span>);
+<span class="hljs-keyword">var</span> g2 = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../g2'</span>);
+<span class="hljs-keyword">var</span> sb3_commands = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../sb3_commands'</span>);
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../config'</span>);
+<span class="hljs-keyword">var</span> openSBP = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../opensbp.js'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>SETTINGS </p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set to Absolute coordinates</p></div></div><div class="code"><div class="wrapper">exports.SA = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	<span class="hljs-keyword">this</span>.absoluteMode = <span class="hljs-literal">true</span>;
+	<span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">"G90"</span>);
+	<span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">"M0"</span>);
+};
+
+exports.SC = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{
+	<span class="hljs-keyword">try</span> {
+	<span class="hljs-keyword">switch</span>(args[<span class="hljs-number">0</span>]) {
+		<span class="hljs-keyword">case</span> <span class="hljs-number">0</span>:
+			cs = <span class="hljs-string">"G54"</span>;
+			<span class="hljs-keyword">break</span>;
+		<span class="hljs-keyword">case</span> <span class="hljs-number">1</span>:
+			cs = <span class="hljs-string">"G55"</span>;
+			<span class="hljs-keyword">break</span>;
+		<span class="hljs-keyword">default</span>:
+			<span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Invalid coordinate system specified: "</span> + args[<span class="hljs-number">0</span>])
+			<span class="hljs-keyword">break</span>;
+	}
+	<span class="hljs-keyword">this</span>.emit_gcode(cs)
+	<span class="hljs-keyword">this</span>.coordinateSystem = cs;
+	} <span class="hljs-keyword">catch</span>(e) {
+		<span class="hljs-keyword">return</span> callback(e)
+	}
+	<span class="hljs-keyword">this</span>.cmd_posx = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.cmd_posy = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.cmd_posz = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.cmd_posa = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.cmd_posb = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.cmd_posc = <span class="hljs-literal">null</span>;
+
+	callback();
+}
+
+exports.SK = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.manualEnter(args[<span class="hljs-number">0</span>], callback);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p> Set to Relative coordinates</p></div></div><div class="code"><div class="wrapper">exports.SR = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	<span class="hljs-keyword">this</span>.absoluteMode = <span class="hljs-literal">false</span>;
+	<span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">"G91"</span>);
+	<span class="hljs-comment">//this.emit_gcode("M0");</span>
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set to MOVE mode
+exports.SM = function(args) {</p></div></div><div class="code"><div class="wrapper"><span class="hljs-comment">// ;</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set to PREVIEW mode
+exports.SP = function(args) {</p></div></div><div class="code"><div class="wrapper"><span class="hljs-comment">// ;</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set to table base coordinates</p></div></div><div class="code"><div class="wrapper">exports.ST = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'mpo'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, MPO</span>) </span>{
+		log.debug(<span class="hljs-string">"ST-MPO = "</span> + <span class="hljs-built_in">JSON</span>.stringify(MPO));
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+		<span class="hljs-keyword">var</span> stObj = {};
+		unitConv = <span class="hljs-number">1.0</span>;
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.machine.driver.status.unit === <span class="hljs-string">'in'</span> ) {  <span class="hljs-comment">// inches</span>
+			unitConv = <span class="hljs-number">0.039370079</span>;
+		}
+		stObj.g55x = <span class="hljs-number">0.0</span>;
+		stObj.g55y = <span class="hljs-number">0.0</span>;
+		stObj.g55z = <span class="hljs-number">0.0</span>;
+		stObj.g55a = <span class="hljs-number">0.0</span>;
+		stObj.g55b = <span class="hljs-number">0.0</span>;
+		stObj.g55c = <span class="hljs-number">0.0</span>;
+		config.driver.setMany(stObj, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+			<span class="hljs-keyword">this</span>.cmd_posx = <span class="hljs-keyword">this</span>.posx = stObj.g55x;
+			<span class="hljs-keyword">this</span>.cmd_posy = <span class="hljs-keyword">this</span>.posy = stObj.g55y;
+			<span class="hljs-keyword">this</span>.cmd_posz = <span class="hljs-keyword">this</span>.posz = stObj.g55z;
+			<span class="hljs-keyword">this</span>.cmd_posa = <span class="hljs-keyword">this</span>.posa = stObj.g55a;
+			<span class="hljs-keyword">this</span>.cmd_posb = <span class="hljs-keyword">this</span>.posb = stObj.g55b;
+			<span class="hljs-keyword">this</span>.cmd_posc = <span class="hljs-keyword">this</span>.posc = stObj.g55c;
+			callback();
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+};
+
+exports.SO = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	outnum = <span class="hljs-built_in">parseInt</span>(args[<span class="hljs-number">0</span>]);
+	state = <span class="hljs-built_in">parseInt</span>(args[<span class="hljs-number">1</span>]);
+	<span class="hljs-keyword">if</span>(outnum &gt;= <span class="hljs-number">1</span> &amp;&amp; outnum &lt;= <span class="hljs-number">12</span>) {
+		<span class="hljs-keyword">if</span>(state == <span class="hljs-number">1</span> || state == <span class="hljs-number">0</span>) {
+			<span class="hljs-keyword">if</span>(outnum === <span class="hljs-number">1</span>) {
+				<span class="hljs-keyword">if</span>(state === <span class="hljs-number">1</span>) {
+					<span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">'M3'</span>);
+				} <span class="hljs-keyword">else</span> {
+					<span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">'M5'</span>);
+				}
+			} <span class="hljs-keyword">else</span> {
+				<span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">'M100 ({out'</span> + outnum + <span class="hljs-string">':'</span> + state + <span class="hljs-string">'})'</span>);
+			}
+		} <span class="hljs-keyword">else</span> {
+			log.warn(<span class="hljs-string">"Value passed to SO that's not a 1 or 0"</span>);
+		}
+	}
+};
+
+exports.SP = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	outnum = <span class="hljs-built_in">parseInt</span>(args[<span class="hljs-number">0</span>]);
+	state = <span class="hljs-built_in">parseFloat</span>(args[<span class="hljs-number">1</span>]);
+	<span class="hljs-keyword">if</span>(outnum &gt;= <span class="hljs-number">0</span> &amp;&amp; outnum &lt;= <span class="hljs-number">1</span>) {
+		outnum += <span class="hljs-number">11</span>
+		<span class="hljs-keyword">if</span>(state &gt;= <span class="hljs-number">0.0</span> &amp;&amp; state &lt;= <span class="hljs-number">1.0</span>) {
+			<span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">'M100 ({out'</span> + outnum + <span class="hljs-string">':'</span> + state + <span class="hljs-string">'})'</span>);
+		} <span class="hljs-keyword">else</span> {
+			log.warn(<span class="hljs-string">"Value passed to SP that's not between 0 and 1"</span>);
+		}
+	} <span class="hljs-keyword">else</span> {
+		log.warn(<span class="hljs-string">"PWM number passed to SP thats not 0 or 1"</span>);
+	}
+};
+
+exports.SU = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	<span class="hljs-keyword">var</span> units = ((args[<span class="hljs-number">0</span>] || <span class="hljs-string">'in'</span>) + <span class="hljs-string">''</span>).toLowerCase();
+
+	<span class="hljs-keyword">switch</span>(units) {
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'in'</span>:
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'inch'</span>:
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'inches'</span>:
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'0'</span>:
+				<span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">'G20'</span>);
+				<span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">'G4 P0.001'</span>);
+			<span class="hljs-keyword">break</span>;
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'mm'</span>:
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'millimeter'</span>:
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'millimeters:'</span>:
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'1'</span>:
+				<span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">'G21'</span>);
+				<span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">'G4 P0.001'</span>);
+			<span class="hljs-keyword">break</span>;
+		<span class="hljs-keyword">default</span>:
+			log.warn(<span class="hljs-string">'Unknown unit specified: '</span> + units);
+			<span class="hljs-keyword">break</span>;
+	}
+}
+
+exports.SV = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>)</span>{
+	<span class="hljs-keyword">this</span>._saveDriverSettings(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, values</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { log.error(err); }
+		<span class="hljs-keyword">this</span>._saveConfig(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, values</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { log.error(err); }
+			config.machine.set(<span class="hljs-string">'units'</span>, <span class="hljs-keyword">this</span>.units, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+				callback();
+			});
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+};</div></div></div></div></body></html>

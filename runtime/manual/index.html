@@ -1,0 +1,131 @@
+<!DOCTYPE html><html lang="en"><head><title>runtime/manual/index</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../"><meta name="groc-document-path" content="runtime/manual/index"><meta name="groc-project-path" content="runtime/manual/index.js"><link rel="stylesheet" type="text/css" media="all" href="../../assets/style.css"><script type="text/javascript" src="../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">runtime/manual/index.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>runtime/manual/index.js</p>
+<p>This module defines the ManualRuntime, which is the runtime used for interactive
+control over the tool, such as would be used by a pendant, or interactive control app.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../log'</span>).logger(<span class="hljs-string">'manual'</span>);
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../config'</span>);
+<span class="hljs-keyword">var</span> stream = <span class="hljs-built_in">require</span>(<span class="hljs-string">'stream'</span>);
+<span class="hljs-keyword">var</span> ManualDriver = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./driver'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - these should probably all be taken out - I don&#39;t believe they are used</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> T_RENEW = <span class="hljs-number">200</span>;
+<span class="hljs-keyword">var</span> SAFETY_FACTOR = <span class="hljs-number">2.0</span>;
+<span class="hljs-keyword">var</span> RENEW_SEGMENTS = <span class="hljs-number">10</span>;
+<span class="hljs-keyword">var</span> FIXED_MOVES_QUEUE_SIZE = <span class="hljs-number">3</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - member of the instance rather than global to this file?!</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> currentCmd;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>ManualRuntime constructor</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">ManualRuntime</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">this</span>.machine = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.driver = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.fixedQueue = [];
+}
+
+
+ManualRuntime.prototype.toString = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">return</span> <span class="hljs-string">"[ManualRuntime]"</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check if auth is neeeded to execute code</p></div></div><div class="code"><div class="wrapper">ManualRuntime.prototype.needsAuth = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">s</span>) </span>{
+	<span class="hljs-comment">//all manual needs auth (check) so just return true</span>
+	<span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+}
+
+ManualRuntime.prototype.connect = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">machine</span>) </span>{
+	<span class="hljs-keyword">this</span>.machine = machine;
+	<span class="hljs-keyword">this</span>.driver = machine.driver;
+	<span class="hljs-keyword">this</span>.ok_to_disconnect = <span class="hljs-literal">true</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>True while the tool is known to be in motion</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.moving = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>True while the user intends (as far as we know) for the tool to continue moving</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.keep_moving = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set to true to exit the manual state once the current operation is completed</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.exit_pending = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Current trajectory</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.current_axis = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.current_speed = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.completeCallback = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.status_handler = <span class="hljs-keyword">this</span>._onG2Status.bind(<span class="hljs-keyword">this</span>);
+	<span class="hljs-keyword">this</span>.driver.on(<span class="hljs-string">'status'</span>,<span class="hljs-keyword">this</span>.status_handler);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Disconnect from the machine model</p></div></div><div class="code"><div class="wrapper">ManualRuntime.prototype.disconnect = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.ok_to_disconnect &amp;&amp; !<span class="hljs-keyword">this</span>.stream) {
+		<span class="hljs-keyword">this</span>.driver.removeListener(<span class="hljs-string">'status'</span>, <span class="hljs-keyword">this</span>.status_handler);
+		<span class="hljs-comment">//this.machine.setState(this, 'idle');</span>
+	} <span class="hljs-keyword">else</span> {
+		<span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Cannot disconnect while manually driving the tool."</span>);
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Enter the manual drive state (and thus, the machining cycle)</p></div></div><div class="code"><div class="wrapper">ManualRuntime.prototype.enter = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">this</span>.stream = <span class="hljs-keyword">new</span> stream.PassThrough();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>At a high level, this opens a stream to the driver, that subsequent commands
+will pump commands into.  When we exit the machining cycle with an M2 or M30, 
+we clean up and exit the manual state.</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.driver.runStream(<span class="hljs-keyword">this</span>.stream).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.stream;
+		<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.helper;
+		<span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'idle'</span>);
+	}.bind(<span class="hljs-keyword">this</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create a helper that is used to do the pumping of commands.</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.helper = <span class="hljs-keyword">new</span> ManualDriver(<span class="hljs-keyword">this</span>.driver, <span class="hljs-keyword">this</span>.stream);
+	<span class="hljs-keyword">this</span>.helper.enter().then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		<span class="hljs-keyword">this</span>.driver.quit();
+	}.bind(<span class="hljs-keyword">this</span>));
+	<span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">"manual"</span>);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Execute a command.  Command structure follows:
+{cmd:&quot;start&quot;,axis:&quot;X&quot;,speed:2} - Start moving in +X direction at 2ips
+TODO: The 2-axis form of &#39;start&#39; is bonkers, we should just get to specify an N-dimensional speed vector
+{cmd:&quot;start&quot;,axis:&quot;X&quot;,speed:2, second_axis:&quot;Y&quot;, second_speed:2}
+{cmd:&quot;exit&quot;} - Exit the manual mode (return to idle)
+{cmd:&quot;stop&quot;} - Stop movement, but do not exit the manual mode
+{cmd:&quot;quit&quot;} - Quit motion (TODO - what&#39;s the diff between this and exit?)
+{cmd:&quot;maint&quot;} - Maintain motion along the current vector
+{cmd:&quot;goto&quot;,move:{X:1,Y:2,Z:3}} - Go to x,y,z = 1,2,3
+{cmd:&quot;set&quot;, move:{X:1,Y:2,Z:3}} - Set current x,y,z to 1,2,3 (No movement)</p></div></div><div class="code"><div class="wrapper">ManualRuntime.prototype.executeCode = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">code, callback</span>) </span>{
+	currentCmd = code.cmd;
+	<span class="hljs-keyword">this</span>.completeCallback = callback;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Don&#39;t honor commands if we&#39;re not in a position to do so</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">switch</span>(<span class="hljs-keyword">this</span>.machine.status.state) {
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'stopped'</span>:
+			<span class="hljs-keyword">return</span>;
+	}
+
+	<span class="hljs-keyword">switch</span>(code.cmd) {
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'enter'</span>:
+			<span class="hljs-keyword">this</span>.enter();
+			<span class="hljs-keyword">break</span>;
+		<span class="hljs-keyword">default</span>:
+			<span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.helper) {
+				log.warn(<span class="hljs-string">"Can't accept command '"</span> + code.cmd + <span class="hljs-string">"' - not entered."</span>);
+				<span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'idle'</span>);
+				<span class="hljs-keyword">return</span>;
+			}
+			<span class="hljs-keyword">switch</span>(code.cmd) {
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'exit'</span>:
+					log.debug(<span class="hljs-string">'---- MANUAL DRIVE EXIT ----'</span>)
+					<span class="hljs-keyword">this</span>.helper.exit();
+					<span class="hljs-keyword">break</span>;
+
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'start'</span>:
+					<span class="hljs-keyword">this</span>.helper.startMotion(code.axis, code.speed, code.second_axis, code.second_speed);
+					<span class="hljs-keyword">break</span>;
+
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'stop'</span>:
+					<span class="hljs-keyword">this</span>.helper.stopMotion();
+					<span class="hljs-keyword">break</span>;
+
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'quit'</span>:
+					<span class="hljs-keyword">this</span>.helper.quitMove();
+					<span class="hljs-keyword">break</span>;
+
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'maint'</span>:
+					<span class="hljs-keyword">this</span>.helper.maintainMotion();
+					<span class="hljs-keyword">break</span>;
+					
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'goto'</span>:
+					<span class="hljs-keyword">this</span>.helper.goto(code.move)
+					<span class="hljs-keyword">break</span>;
+
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'set'</span>:
+					<span class="hljs-keyword">this</span>.helper.set(code.move)
+					<span class="hljs-keyword">break</span>;
+
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'fixed'</span>:
+					<span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.helper) {
+						<span class="hljs-keyword">this</span>.enter();
+					}
+					<span class="hljs-keyword">this</span>.helper.nudge(code.axis, code.speed, code.dist, code.second_axis, code.second_dist);
+					<span class="hljs-keyword">break</span>;
+
+				<span class="hljs-keyword">default</span>:
+					log.error(<span class="hljs-string">"Don't know what to do with '"</span> + code.cmd + <span class="hljs-string">"' in manual command."</span>);
+					<span class="hljs-keyword">break</span>;
+
+			}
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Commands that need to be implemented for runtime interface, but don&#39;t do anything</p></div></div><div class="code"><div class="wrapper">ManualRuntime.prototype.pause = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{}
+ManualRuntime.prototype.quit = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{}
+ManualRuntime.prototype.resume = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Internal handler for machine status</p></div></div><div class="code"><div class="wrapper">ManualRuntime.prototype._onG2Status = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">status</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update machine copy of the system status</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> key <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.machine.status) {
+		<span class="hljs-keyword">if</span>(key <span class="hljs-keyword">in</span> status) {
+			<span class="hljs-keyword">this</span>.machine.status[key] = status[key];
+		}
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update machine status further</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.machine.status.currentCmd = currentCmd;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - Is this needed?  isn&#39;t it done in the loop above?</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.machine.status.stat = status.stat;
+
+	<span class="hljs-keyword">this</span>.machine.emit(<span class="hljs-string">'status'</span>,<span class="hljs-keyword">this</span>.machine.status);
+};
+
+exports.ManualRuntime = ManualRuntime;
+exports.ManualDriver = ManualDriver</div></div></div></div></body></html>

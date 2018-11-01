@@ -1,0 +1,1512 @@
+<!DOCTYPE html><html lang="en"><head><title>runtime/opensbp/opensbp</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../"><meta name="groc-document-path" content="runtime/opensbp/opensbp"><meta name="groc-project-path" content="runtime/opensbp/opensbp.js"><link rel="stylesheet" type="text/css" media="all" href="../../assets/style.css"><script type="text/javascript" src="../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">runtime/opensbp/opensbp.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>runtime/opensbp/opensbp.js</p>
+<p>This module defines SBPRuntime which is the runtime responsible for
+running OpenSBP files.  The SBPRuntime interprets OpenSBP code, generating
+g-code and streaming it to the motion controller when appropriate.</p>
+<p>OpenSBP is a more feature-rich language in many ways than &quot;strict&quot; g-code.
+It is essentially an answer to the &quot;vendor extensions&quot; to g-code that other
+systems apply to allow for complex constructs like expression parsing, program control flow, 
+and control of systems not conventionally accessible to the g-code canonical machine.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> parser = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./parser'</span>);
+<span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs'</span>);
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../log'</span>).logger(<span class="hljs-string">'sbp'</span>);
+<span class="hljs-keyword">var</span> g2 = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../g2'</span>);
+<span class="hljs-keyword">var</span> sb3_commands = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./sb3_commands'</span>);
+<span class="hljs-keyword">var</span> events = <span class="hljs-built_in">require</span>(<span class="hljs-string">'events'</span>);
+<span class="hljs-keyword">var</span> tform = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./transformation'</span>);
+<span class="hljs-keyword">var</span> macros = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../macros'</span>);
+<span class="hljs-keyword">var</span> interp = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./interpolate'</span>);
+<span class="hljs-keyword">var</span> Leveler = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./commands/leveler'</span>).Leveler;
+<span class="hljs-keyword">var</span> u = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../util'</span>);
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../config'</span>);
+<span class="hljs-keyword">var</span> stream = <span class="hljs-built_in">require</span>(<span class="hljs-string">'stream'</span>);
+<span class="hljs-keyword">var</span> ManualDriver = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../manual'</span>).ManualDriver;
+
+<span class="hljs-keyword">var</span> SYSVAR_RE = <span class="hljs-regexp">/\%\(([0-9]+)\)/i</span> ;
+<span class="hljs-keyword">var</span> USERVAR_RE = <span class="hljs-regexp">/\&amp;([a-zA-Z_]+[A-Za-z0-9_]*)/i</span> ;
+<span class="hljs-keyword">var</span> PERSISTENTVAR_RE = <span class="hljs-regexp">/\$([a-zA-Z_]+[A-Za-z0-9_]*)/i</span> ;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Constructor for the OpenSBP runtime
+The SBPRuntime object is responsible for running OpenSBP code.
+For more info and command reference: <a href="http://www.opensbp.com/">http://www.opensbp.com/</a>
+Note that not ALL of the OpenSBP standard listed at the above URL is supported.
+FabMo supports a limited subset of the original standard, as not all commands make sense
+to use in the FabMo universe.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">SBPRuntime</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle Inheritance</p></div></div><div class="code"><div class="wrapper">    events.EventEmitter.call(<span class="hljs-keyword">this</span>);
+    <span class="hljs-keyword">this</span>.connected = <span class="hljs-literal">false</span>;
+    <span class="hljs-keyword">this</span>.ok_to_disconnect = <span class="hljs-literal">true</span>;
+    <span class="hljs-keyword">this</span>.stack = [];
+    <span class="hljs-keyword">this</span>.program = [];
+    <span class="hljs-keyword">this</span>.pc = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.start_of_the_chunk = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.user_vars = {};
+    <span class="hljs-keyword">this</span>.label_index = {};
+    <span class="hljs-keyword">this</span>.stack = [];
+    <span class="hljs-keyword">this</span>.file_stack = [];
+
+    <span class="hljs-keyword">this</span>.output = [];
+    <span class="hljs-keyword">this</span>.running = <span class="hljs-literal">false</span>;
+    <span class="hljs-keyword">this</span>.quit_pending = <span class="hljs-literal">false</span>;
+    <span class="hljs-keyword">this</span>.cmd_result = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.cmd_posx = <span class="hljs-literal">undefined</span>;
+    <span class="hljs-keyword">this</span>.cmd_posy = <span class="hljs-literal">undefined</span>;
+    <span class="hljs-keyword">this</span>.cmd_posz = <span class="hljs-literal">undefined</span>;
+    <span class="hljs-keyword">this</span>.cmd_posa = <span class="hljs-literal">undefined</span>;
+    <span class="hljs-keyword">this</span>.cmd_posb = <span class="hljs-literal">undefined</span>;
+    <span class="hljs-keyword">this</span>.cmd_posc = <span class="hljs-literal">undefined</span>;
+
+    <span class="hljs-keyword">this</span>.jogspeed_xy = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.jogspeed_z = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.jogspeed_a = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.jogspeed_b = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.jogspeed_c = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.maxjerk_xy = <span class="hljs-number">100</span>;
+    <span class="hljs-keyword">this</span>.maxjerk_z = <span class="hljs-number">50</span>;
+    <span class="hljs-keyword">this</span>.maxjerk_a = <span class="hljs-number">20</span>;
+    <span class="hljs-keyword">this</span>.maxjerk_b = <span class="hljs-number">20</span>;
+    <span class="hljs-keyword">this</span>.maxjerk_c = <span class="hljs-number">20</span>;
+    <span class="hljs-keyword">this</span>.cmd_StartX = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.cmd_StartY = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.cmd_StartZ = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.cmd_StartA = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.cmd_StartB = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.cmd_StartC = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.paused = <span class="hljs-literal">false</span>;
+    <span class="hljs-keyword">this</span>.resumeAllowed = <span class="hljs-literal">true</span>;
+    <span class="hljs-keyword">this</span>.lastNoZPullup = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.continue_callback = <span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">this</span>.vs_change = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.units = <span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">this</span>.absoluteMode = <span class="hljs-literal">true</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Physical machine state</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">this</span>.machine = <span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">this</span>.driver = <span class="hljs-literal">null</span>;
+
+    <span class="hljs-keyword">this</span>.inManualMode = <span class="hljs-literal">false</span>;
+
+}
+util.inherits(SBPRuntime, events.EventEmitter);
+
+SBPRuntime.prototype.toString = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-string">"[SBPRuntime]"</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This must be called at least once before instantiating an SBPRuntime object
+TODO Make this a &quot;class method&quot; rather than an instance method</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.loadCommands = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+    commands=<span class="hljs-built_in">require</span>(<span class="hljs-string">'./commands'</span>).load();
+    proto = <span class="hljs-built_in">Object</span>.getPrototypeOf(<span class="hljs-keyword">this</span>);
+    <span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> attr <span class="hljs-keyword">in</span> commands) {
+        proto[attr] = commands[attr];
+    }
+    callback(<span class="hljs-literal">null</span>, <span class="hljs-keyword">this</span>)
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Connect this runtime to the machine model
+   machine - The machine model to connect</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.connect = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">machine</span>) </span>{
+    <span class="hljs-keyword">this</span>.machine = machine;
+    <span class="hljs-keyword">this</span>.driver = machine.driver;
+    <span class="hljs-keyword">this</span>.machine.status.line=<span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">this</span>.machine.status.nb_lines=<span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">this</span>._update();
+    <span class="hljs-keyword">this</span>.cmd_posx = <span class="hljs-keyword">this</span>.posx;
+    <span class="hljs-keyword">this</span>.cmd_posy = <span class="hljs-keyword">this</span>.posy;
+    <span class="hljs-keyword">this</span>.cmd_posz = <span class="hljs-keyword">this</span>.posz;
+    <span class="hljs-keyword">this</span>.cmd_posa = <span class="hljs-keyword">this</span>.posa;
+    <span class="hljs-keyword">this</span>.cmd_posb = <span class="hljs-keyword">this</span>.posb;
+    <span class="hljs-keyword">this</span>.cmd_posc = <span class="hljs-keyword">this</span>.posc;
+    <span class="hljs-comment">//this.status_handler = this._onG2Status.bind(this);</span>
+    <span class="hljs-comment">//this.driver.on('status', this.status_handler);</span>
+    <span class="hljs-keyword">this</span>.connected = <span class="hljs-literal">true</span>;
+    <span class="hljs-keyword">this</span>.ok_to_disconnect = <span class="hljs-literal">false</span>;
+    log.info(<span class="hljs-string">'Connected OpenSBP runtime.'</span>);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Disconnect this runtime from the machine model.
+Throws an exception if the runtime can&#39;t be disconnected.
+(Runtime can&#39;t be disconnected when it is busy running a file)</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.disconnect = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.machine) {
+        <span class="hljs-keyword">return</span>;
+    }
+
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.ok_to_disconnect) {
+        <span class="hljs-keyword">this</span>.machine = <span class="hljs-literal">null</span>;
+        <span class="hljs-keyword">this</span>.driver = <span class="hljs-literal">null</span>;
+        <span class="hljs-keyword">this</span>.connected = <span class="hljs-literal">false</span>;
+        log.info(<span class="hljs-string">'Disconnected OpenSBP runtime.'</span>);
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Cannot disconnect OpenSBP runtime."</span>)
+    }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Execute the provided code
+If the code is a string, interpret it as OpenSBP code
+If it is an object, interpret it as a manual drive command
+         s - The command to execute (string or object)
+  callback - Called once the command is issued (or with error if error) - NOT when the command is done executing   </p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.executeCode = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">s, callback</span>) </span>{
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">typeof</span> s === <span class="hljs-string">"string"</span> || s <span class="hljs-keyword">instanceof</span> <span class="hljs-built_in">String</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Plain old string interprets as OpenSBP code segment</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">this</span>.runString(s, callback);        
+    } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If we&#39;re in manual mode, interpret an object as a command for that mode
+The OpenSBP runtime can enter manual mode with the &#39;SK&#39; command so we have this code here to mimick that mode</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.inManualMode) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The code here is essentially taken from the manual runtime, and uses the same underlying helper class,
+ManualDriver (/runtime/manual/driver.js) to actually manage the machine state</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">switch</span>(s.cmd) {
+                <span class="hljs-keyword">case</span> <span class="hljs-string">'enter'</span>:
+                    <span class="hljs-keyword">this</span>.enter();
+                    <span class="hljs-keyword">break</span>;
+                <span class="hljs-keyword">default</span>:
+                    <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.helper) {
+                        log.warn(<span class="hljs-string">"Can't accept command '"</span> + s.cmd + <span class="hljs-string">"' - not entered."</span>);
+                        <span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'idle'</span>);
+                        <span class="hljs-keyword">return</span>;
+                    }
+                    <span class="hljs-keyword">switch</span>(s.cmd) {
+                        <span class="hljs-keyword">case</span> <span class="hljs-string">'exit'</span>:
+                            log.debug(<span class="hljs-string">'---- MANUAL DRIVE EXIT ----'</span>)
+                            <span class="hljs-keyword">this</span>.helper.exit();
+                            <span class="hljs-keyword">break</span>;
+        
+                        <span class="hljs-keyword">case</span> <span class="hljs-string">'start'</span>:
+                            <span class="hljs-keyword">this</span>.helper.startMotion(s.axis, s.speed, s.second_axis, s.second_speed);
+                            <span class="hljs-keyword">break</span>;
+        
+                        <span class="hljs-keyword">case</span> <span class="hljs-string">'stop'</span>:
+                            <span class="hljs-keyword">this</span>.helper.stopMotion();
+                            <span class="hljs-keyword">break</span>;
+        
+                        <span class="hljs-keyword">case</span> <span class="hljs-string">'quit'</span>:
+                            <span class="hljs-keyword">this</span>.helper.quitMove();
+                            <span class="hljs-keyword">break</span>;
+        
+                        <span class="hljs-keyword">case</span> <span class="hljs-string">'maint'</span>:
+                            <span class="hljs-keyword">this</span>.helper.maintainMotion();
+                            <span class="hljs-keyword">break</span>;
+                            
+                        <span class="hljs-keyword">case</span> <span class="hljs-string">'goto'</span>:
+                            <span class="hljs-keyword">this</span>.helper.goto(s.move)
+                            <span class="hljs-keyword">break</span>;
+        
+                        <span class="hljs-keyword">case</span> <span class="hljs-string">'set'</span>:
+                            <span class="hljs-keyword">this</span>.helper.set(s.move)
+                            <span class="hljs-keyword">break</span>;
+        
+                        <span class="hljs-keyword">case</span> <span class="hljs-string">'fixed'</span>:
+                            <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.helper) {
+                                <span class="hljs-keyword">this</span>.enter();
+                            }
+                            <span class="hljs-keyword">this</span>.helper.nudge(s.axis, s.speed, s.dist, s.second_axis, s.second_dist);
+                            <span class="hljs-keyword">break</span>;
+        
+                        <span class="hljs-keyword">default</span>:
+                            log.error(<span class="hljs-string">"Don't know what to do with '"</span> + s.cmd + <span class="hljs-string">"' in manual command."</span>);
+                            <span class="hljs-keyword">break</span>;
+        
+                    }
+            }
+
+        }
+    }
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check whether the code needs auth
+There are lots of SBP commands that do not require authorization to run, 
+but we&#39;ve kept it simple here and only green-lit Zeroing (Z) commands</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.needsAuth = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">s</span>) </span>{
+    <span class="hljs-keyword">var</span> lines =  s.split(<span class="hljs-string">'\n'</span>);
+    lines = lines.filter(<span class="hljs-built_in">Boolean</span>);
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> i = <span class="hljs-number">0</span>, x = lines.length; i &lt; x; i++) {
+        <span class="hljs-keyword">if</span> ( lines[i].toUpperCase().charAt( <span class="hljs-number">0</span> ) !==<span class="hljs-string">'Z'</span>) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+        }
+    };
+    <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Run the provided string in OpenSBP format.
+Unfortunately, because of operations that require the WHOLE file to be analyzed (analyzing labels, mainly)
+the entire file has to be read into memory and processed before motion can start.  This causes substantial slowdown
+for big files that really isn&#39;t necessary.
+Returns
+TODO The &quot;load the whole file&quot; thing can be fixed, or at least worked around.  It&#39;s been suggested that subroutines
+     are typically at the beginning and end of a file, so prefetching the last N lines of code from a file to fish labels out of it
+     might provide a way for <em>most</em> files to work properly, falling back to slower behavior only on truly weird files, which are rare
+     enough not to count at all.
+TODO At the very least, this function should simply take the string provided and stream it into runStream - they do the same thing.
+         s - The string to run
+  callback - Called when the program has ended </p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.runString = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">s, callback</span>) </span>{
+    <span class="hljs-keyword">try</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Remember the callback - we&#39;ll call it at the end of the file</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">this</span>.end_callback = callback;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Break the string into lines</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">var</span> lines =  s.split(<span class="hljs-string">'\n'</span>);
+        </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The machine status <code>nb_lines</code> indicates the total number of lines in the currently running file
+If this is a &quot;top level&quot; file (that is, the file being directly run and not a macro being called) set that value
+TODO I&#39;ve never liked nb_lines as a name</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine) {
+            <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.file_stack.length === <span class="hljs-number">0</span>) {
+                <span class="hljs-keyword">this</span>.machine.status.nb_lines = lines.length - <span class="hljs-number">1</span>;
+            }
+        }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Parse the program.  Bail with a useful error message if parsing fails.
+&quot;Useful&quot; is relative.  The PegJS errors are pretty arcane... TODO - we could probably do better.
+We catch parse errors separately from other errors because the parser reports line numbers differently than 
+they will be accessed once the program has been parsed (and we want to report the line number always when we have an error)</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">try</span> {
+            <span class="hljs-keyword">this</span>.program = parser.parse(s);
+        } <span class="hljs-keyword">catch</span>(e) {
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._end(e.message + <span class="hljs-string">" (Line "</span> + e.line + <span class="hljs-string">")"</span>);
+        } <span class="hljs-keyword">finally</span> {
+            log.tock(<span class="hljs-string">'Parse file'</span>)
+        }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO Bad bad bad - re-using lines above (the list of lines in the file) as the number of lines here.
+     It looks like we can just remove this.  It doesn&#39;t seem to be used.</p></div></div><div class="code"><div class="wrapper">        lines = <span class="hljs-keyword">this</span>.program.length;
+        </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Configure affine transformations on the file</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">this</span>._setupTransforms();
+        log.debug(<span class="hljs-string">"Transforms configured..."</span>)</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Initialize the runtime state</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">this</span>.init();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Copy the general config and driver settings into runtime memory</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">this</span>._loadConfig();
+        <span class="hljs-keyword">this</span>._loadDriverSettings();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Build a map of labels to line numbers
+This step unfortunately requires the whole file</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">this</span>._analyzeLabels();  
+        log.debug(<span class="hljs-string">"Labels analyzed..."</span>)</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check all the GOTO/GOSUBs against the label table</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">this</span>._analyzeGOTOs();   
+        log.debug(<span class="hljs-string">"GOTOs analyzed..."</span>)
+        </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get silly</p></div></div><div class="code"><div class="wrapper">        log.debug(<span class="hljs-string">"Rainbows organized..."</span>)
+        </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Start running the actual code, now that everything is prepped</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._run();
+    } <span class="hljs-keyword">catch</span>(e) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A failure at any stage (except parsing) will land us here </p></div></div><div class="code"><div class="wrapper">        log.error(e);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._end(e.message);
+    }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Run the provided stream of text in OpenSBP
+See documentation above for runString - this works the same way.
+  callback - Called when run is complete or with error if there was an error.</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.runStream = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">text_stream, callback</span>) </span>{
+    <span class="hljs-keyword">try</span> {
+        <span class="hljs-keyword">try</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Remember the callback so we can call it at the end</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">this</span>.end_callback = callback;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Initialize the program</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">this</span>.program = []</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Even though we&#39;re &quot;streaming&quot; in this function, we still have to parse
+the entire body of data before we can continue processing the file.
+That&#39;s why the business end of this function occurs in the &#39;end&#39; handler</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">var</span> st = parser.parseStream(text_stream)</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The stream produced by parser.parseStream produces fully parsed program lines,
+which can just be added to the program as they come in.</p></div></div><div class="code"><div class="wrapper">            st.on(<span class="hljs-string">'data'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data</span>) </span>{
+                <span class="hljs-keyword">this</span>.program.push(data);
+            }.bind(<span class="hljs-keyword">this</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Stream is fully processed</p></div></div><div class="code"><div class="wrapper">            st.on(<span class="hljs-string">'end'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+
+                log.tock(<span class="hljs-string">'Parse file'</span>)</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The machine status <code>nb_lines</code> indicates the total number of lines in the currently running file
+If this is a &quot;top level&quot; file (that is, the file being directly run and not a macro being called) set that value
+TODO I&#39;ve never liked nb_lines as a name</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">var</span> lines = <span class="hljs-keyword">this</span>.program.length;
+                <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine) {
+                    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.file_stack.length === <span class="hljs-number">0</span>) {
+                        <span class="hljs-keyword">this</span>.machine.status.nb_lines = lines - <span class="hljs-number">1</span>;
+                    }
+                }
+                </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Configure affine transformations on the file</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">this</span>._setupTransforms();
+                log.debug(<span class="hljs-string">"Transforms configured..."</span>)
+                </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Initialize the runtime state</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">this</span>.init();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Copy the general config and driver settings into runtime memory</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">this</span>._loadConfig();
+                <span class="hljs-keyword">this</span>._loadDriverSettings();
+                
+
+                log.tick();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Build a map of labels to line numbers
+This step unfortunately requires the whole file</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">this</span>._analyzeLabels(); 
+                log.tock(<span class="hljs-string">'Labels analyzed...'</span>)</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check all the GOTO/GOSUBs against the label table</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">this</span>._analyzeGOTOs();   
+                log.debug(<span class="hljs-string">"GOTOs analyzed..."</span>)
+                log.tock(<span class="hljs-string">'Analyzed GOTOs'</span>)</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get silly</p></div></div><div class="code"><div class="wrapper">                log.debug(<span class="hljs-string">"Rainbows organized..."</span>)</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Start running the actual code, now that everything is prepped</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._run();
+            }.bind(<span class="hljs-keyword">this</span>));
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">undefined</span>;
+        } <span class="hljs-keyword">catch</span>(e) {
+            log.error(e)
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._end(e.message + <span class="hljs-string">" (Line "</span> + e.line + <span class="hljs-string">")"</span>);
+        }
+        <span class="hljs-keyword">return</span> st;
+    } <span class="hljs-keyword">catch</span>(e) {
+        log.error(e);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._end(e.message + <span class="hljs-string">" (Line "</span> + e.line + <span class="hljs-string">")"</span>);
+    }
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Internal function to copy config settings to local fields of this runtime
+We consult/update local fields rather than manipulating the configuration directly
+This prevents changes made to critical settings in files from being permanent (unless we want them to be)</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._loadConfig = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">var</span> settings = config.opensbp.getMany([
+        <span class="hljs-string">'units'</span>,
+        <span class="hljs-string">'movexy_speed'</span>,
+        <span class="hljs-string">'movez_speed'</span>,
+        <span class="hljs-string">'movea_speed'</span>,
+        <span class="hljs-string">'moveb_speed'</span>,
+        <span class="hljs-string">'movec_speed'</span>
+    ]);
+    <span class="hljs-keyword">this</span>.units = settings.units
+    <span class="hljs-keyword">this</span>.movespeed_xy = settings.movexy_speed;
+    <span class="hljs-keyword">this</span>.movespeed_z = settings.movez_speed;
+    <span class="hljs-keyword">this</span>.movespeed_a = settings.movea_speed;
+    <span class="hljs-keyword">this</span>.movespeed_b = settings.moveb_speed;
+    <span class="hljs-keyword">this</span>.movespeed_c = settings.movec_speed;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Internal function to copy driver settings to local fields of this runtime
+We consult/update local fields rather than manipulating the configuration directly
+This prevents changes made to critical settings in files from being permanent (unless we want them to be)</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._loadDriverSettings = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">var</span> settings = config.driver.getMany([
+        <span class="hljs-string">'xvm'</span>,<span class="hljs-string">'yvm'</span>,<span class="hljs-string">'zvm'</span>,<span class="hljs-string">'avm'</span>,<span class="hljs-string">'bvm'</span>,<span class="hljs-string">'cvm'</span>,
+        <span class="hljs-string">'xjm'</span>,<span class="hljs-string">'yjm'</span>,<span class="hljs-string">'zjm'</span>,<span class="hljs-string">'ajm'</span>,<span class="hljs-string">'bjm'</span>,<span class="hljs-string">'cjm'</span> ]);
+    <span class="hljs-keyword">this</span>.jogspeed_xy = settings.xvm/<span class="hljs-number">60</span>;
+    <span class="hljs-keyword">this</span>.jogspeed_z = settings.zvm/<span class="hljs-number">60</span>;
+    <span class="hljs-keyword">this</span>.jogspeed_a = settings.avm/<span class="hljs-number">60</span>;
+    <span class="hljs-keyword">this</span>.jogspeed_b = settings.bvm/<span class="hljs-number">60</span>;
+    <span class="hljs-keyword">this</span>.jogspeed_c = settings.cvm/<span class="hljs-number">60</span>;
+    <span class="hljs-keyword">this</span>.maxjerk_xy = settings.xjm;
+    <span class="hljs-keyword">this</span>.maxjerk_z = settings.zjm;
+    <span class="hljs-keyword">this</span>.maxjerk_a = settings.ajm;
+    <span class="hljs-keyword">this</span>.maxjerk_b = settings.bjm;
+    <span class="hljs-keyword">this</span>.maxjerk_c = settings.cjm;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Save runtime configuration settings to the opensbp settings file
+  callback - Called when config has been written</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._saveConfig = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+    <span class="hljs-keyword">var</span> sbp_values = {};
+    sbp_values.movexy_speed = <span class="hljs-keyword">this</span>.movespeed_xy;
+    sbp_values.movez_speed = <span class="hljs-keyword">this</span>.movespeed_z;
+    sbp_values.movea_speed = <span class="hljs-keyword">this</span>.movespeed_a;
+    sbp_values.moveb_speed = <span class="hljs-keyword">this</span>.movespeed_b;
+    sbp_values.movec_speed = <span class="hljs-keyword">this</span>.movespeed_c;
+    sbp_values.jogxy_speed = <span class="hljs-keyword">this</span>.jogspeed_xy;
+    sbp_values.jogz_speed = <span class="hljs-keyword">this</span>.jogspeed_z;
+    sbp_values.joga_speed = <span class="hljs-keyword">this</span>.jogspeed_a;
+    sbp_values.jogb_speed = <span class="hljs-keyword">this</span>.jogspeed_b;
+    sbp_values.jogc_speed = <span class="hljs-keyword">this</span>.jogspeed_c;
+    sbp_values.units = <span class="hljs-keyword">this</span>.units;
+    config.opensbp.setMany(sbp_values, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+        callback();
+    });
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Save runtime driver settings to the opensbp settings file
+  callback - Called when config has been written</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._saveDriverSettings = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+    <span class="hljs-keyword">var</span> g2_values = {};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Permanently set jog speeds</p></div></div><div class="code"><div class="wrapper">    g2_values.xvm = (<span class="hljs-number">60</span> * <span class="hljs-keyword">this</span>.jogspeed_xy);
+    g2_values.yvm = (<span class="hljs-number">60</span> * <span class="hljs-keyword">this</span>.jogspeed_xy);
+    g2_values.zvm = (<span class="hljs-number">60</span> * <span class="hljs-keyword">this</span>.jogspeed_z);
+    g2_values.avm = (<span class="hljs-number">60</span> * <span class="hljs-keyword">this</span>.jogspeed_a);
+    g2_values.bvm = (<span class="hljs-number">60</span> * <span class="hljs-keyword">this</span>.jogspeed_b);
+    g2_values.cvm = (<span class="hljs-number">60</span> * <span class="hljs-keyword">this</span>.jogspeed_c);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Permanently set ramp max (jerk)</p></div></div><div class="code"><div class="wrapper">    g2_values.xjm = <span class="hljs-keyword">this</span>.maxjerk_xy;
+    g2_values.yjm = <span class="hljs-keyword">this</span>.maxjerk_xy;
+    g2_values.zjm = <span class="hljs-keyword">this</span>.maxjerk_z;
+    g2_values.ajm = <span class="hljs-keyword">this</span>.maxjerk_a;
+    g2_values.bjm = <span class="hljs-keyword">this</span>.maxjerk_b;
+    g2_values.cjm = <span class="hljs-keyword">this</span>.maxjerk_c;
+    config.driver.setMany(g2_values, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, values</span>) </span>{
+                callback();
+    }.bind(<span class="hljs-keyword">this</span>));
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Run a file on disk.
+  filename - Full path to file on disk
+  callback - Called when file is done running or with error if error</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.runFile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">filename, callback</span>) </span>{
+    <span class="hljs-keyword">var</span> st = fs.createReadStream(filename)
+    <span class="hljs-keyword">this</span>.runStream(st, callback);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Simulate the provided file, returning the result as g-code string
+TODO - this function could return a stream, and you could stream this back to the client to speed up simulation
+         s - OpenSBP string to run
+  callback - Called with the g-code output or with error if error </p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.simulateString = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">s, callback</span>) </span>{
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.ok_to_disconnect) {
+        <span class="hljs-keyword">var</span> saved_machine = <span class="hljs-keyword">this</span>.machine;
+        <span class="hljs-keyword">this</span>.disconnect();
+        <span class="hljs-keyword">var</span> st = <span class="hljs-keyword">this</span>.runString(s);
+        <span class="hljs-keyword">var</span> chunks = []
+        st.on(<span class="hljs-string">'data'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">chunk</span>) </span>{
+            chunks.push(chunk);
+        });
+        st.on(<span class="hljs-string">'end'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+            callback(<span class="hljs-literal">null</span>, chunks.join(<span class="hljs-string">''</span>));
+        });
+    } <span class="hljs-keyword">else</span> {
+        callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Cannot simulate while OpenSBP runtime is busy."</span>));
+    }
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Doofy limit call
+TODO - work on this</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._limit = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">var</span> er = <span class="hljs-keyword">this</span>.driver.getLastException();
+    <span class="hljs-keyword">if</span>(er &amp;&amp; er.st == <span class="hljs-number">203</span>) {
+        <span class="hljs-keyword">var</span> msg = er.msg.replace(<span class="hljs-regexp">/\[[^\[\]]*\]/</span>,<span class="hljs-string">''</span>);
+        <span class="hljs-keyword">this</span>.driver.clearLastException();
+        <span class="hljs-keyword">this</span>._abort(msg);
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+    }
+    <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handler for G2 status reports
+  status - The status report as sent by G2 to the host</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._onG2Status = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">status</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This was happening at some point, so this was mostly for debug - keep an eye out.</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.connected) {
+        log.warn(<span class="hljs-string">"OpenSBP runtime got a status report while disconnected."</span>);
+        <span class="hljs-keyword">return</span>;
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If we die then we are dead.
+The first rule of tautology club is the first rule of tautology club.</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">switch</span>(status.stat) {
+        <span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_INTERLOCK:
+        <span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_SHUTDOWN:
+        <span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_PANIC:
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.machine.die(<span class="hljs-string">'A G2 exception has occurred. You must reboot your tool.'</span>);
+            <span class="hljs-keyword">break</span>;
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update the machine of the driver status</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> key <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.machine.status) {
+        <span class="hljs-keyword">if</span>(key <span class="hljs-keyword">in</span> status) {
+            <span class="hljs-keyword">this</span>.machine.status[key] = status[key];
+        }
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - this seems not to be used.
+       It was probably an attempt to smooth over the fact that probing operations are <em>always</em> in metric, regardless of machine units
+       That would actually be easy to clean up, and is probably worth pursuing - customers have been confused by the behavior.
+       (The better solution is to fix it in the firmware, though)</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.driver.status.stat == <span class="hljs-keyword">this</span>.driver.STAT_PROBE) {
+        <span class="hljs-keyword">var</span> keys = [<span class="hljs-string">'posx'</span>,<span class="hljs-string">'posy'</span>,<span class="hljs-string">'posz'</span>,<span class="hljs-string">'posa'</span>,<span class="hljs-string">'posb'</span>,<span class="hljs-string">'posc'</span>];
+    }
+
+    <span class="hljs-keyword">this</span>.machine.emit(<span class="hljs-string">'status'</span>,<span class="hljs-keyword">this</span>.machine.status);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update the internal state of the runtime with data from the tool</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._update = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine) {
+        status = <span class="hljs-keyword">this</span>.machine.status || {};
+    } <span class="hljs-keyword">else</span> {
+        status = {};
+    }
+    <span class="hljs-keyword">this</span>.posx = status.posx || <span class="hljs-number">0.0</span>;
+    <span class="hljs-keyword">this</span>.posy = status.posy || <span class="hljs-number">0.0</span>;
+    <span class="hljs-keyword">this</span>.posz = status.posz || <span class="hljs-number">0.0</span>;
+    <span class="hljs-keyword">this</span>.posa = status.posa || <span class="hljs-number">0.0</span>;
+    <span class="hljs-keyword">this</span>.posb = status.posb || <span class="hljs-number">0.0</span>;
+    <span class="hljs-keyword">this</span>.posc = status.posc || <span class="hljs-number">0.0</span>;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Evaluate a list of arguments provided (for commands)
+Returns a scrubbed list of evaluated arguments to be passed to command handlers
+  command - The two-character mnemonic for the command, as a string (eg MX,J3,etc)
+     args - A list of the arguments that were provided with the command by the user (as strings)</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._evaluateArguments = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">command, args</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Scrub the argument list:  extend to the correct length, mark undefined values as undefined
+Previously, the &quot;prm&quot; file (sb3_commands.json) was used to substitute default values for commands, but now, that is mostly done by
+the command handlers themselves.  Still, this is a good place to throw an exception if an argument doesn&#39;t pass a sanity check.</p></div></div><div class="code"><div class="wrapper">    scrubbed_args = [];
+    <span class="hljs-keyword">if</span>(command <span class="hljs-keyword">in</span> sb3_commands) {
+        params = sb3_commands[command].params || [];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This is a possibly helpful warning, but is spuriously issued in some cases where commands take no arguments (depending on whitespace, etc.)
+TODO - fix that</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">if</span>(args.length &gt; params.length) {
+            log.warn(<span class="hljs-string">'More parameters passed into '</span> + command + <span class="hljs-string">' ('</span> + args.length + <span class="hljs-string">') than are supported by the command. ('</span> + params.length + <span class="hljs-string">')'</span>);
+        }
+        <span class="hljs-keyword">for</span>(i=<span class="hljs-number">0</span>; i&lt;params.length; i++) {
+            prm_param = params[i]; <span class="hljs-comment">// prm_param is the parameter description object from the "prm" file (sb3_commands.json) (unused, currently)</span>
+            user_param = args[i];  <span class="hljs-comment">// user_param is the actual parameter from args</span>
+
+            <span class="hljs-keyword">if</span>((args[i] !== <span class="hljs-literal">undefined</span>) &amp;&amp; (args[i] !== <span class="hljs-string">""</span>)) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Arguments that have meat to them are added into the scrubbed list</p></div></div><div class="code"><div class="wrapper">                scrubbed_args.push(args[i]);
+            } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Arguments that aren&#39;t are added as &#39;undefined&#39;</p></div></div><div class="code"><div class="wrapper">                scrubbed_args.push(<span class="hljs-literal">undefined</span>);
+            }
+        }
+    } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - is this really the right behavior here?</p></div></div><div class="code"><div class="wrapper">        scrubbed_args = [];
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Actually evaluate the arguments and return the list</p></div></div><div class="code"><div class="wrapper">    retval = [];
+    <span class="hljs-keyword">for</span>(i=<span class="hljs-number">0</span>; i&lt;scrubbed_args.length; i++) {
+        retval.push(<span class="hljs-keyword">this</span>._eval(scrubbed_args[i]));
+    }
+    <span class="hljs-keyword">return</span> retval;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Returns true if the provided command breaks the stack
+A stack-breaking command is the shopbot term for a command that must wait for any running commands to complete execution before
+they are able to execute.  It is similar to the difference in g-code between M100 and M101.  Any command, expression evaluation, or 
+comparison that needs to read the position of the tool breaks the stack.  Certain control flow statements break the stack.
+Macro calls break the stack.  Currently conditional evaluations break the stack (IF statements) even though they should really only
+break the stack if the expression being evaluated breaks the stack.  (TODO - fix that.)
+TODO - System variable evaluations should break the stack
+TODO - we should probably distinguish between the two meanings of &quot;command&quot; here - the cmd argument to this function is the object
+       that represents a single line of the program but isn&#39;t necessarily one of the two-character OpenSBP commands. (Could be an IF
+       statement or GOTO or whatever)  The command type &quot;cmd&quot; refers specifically to the two-character OpenSBP commands.
+Returns true if the command breaks the stack, false otherwise
+  cmd - Command object to evaluate</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._breaksStack = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">cmd</span>) </span>{
+    <span class="hljs-keyword">var</span> result;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Any command that has an expression in one of its arguments that breaks the stack, breaks the stack.</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span>(cmd.args) {
+        <span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;cmd.args.length; i++) {
+            <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._exprBreaksStack(cmd.args[i])) {
+                log.warn(<span class="hljs-string">"STACK BREAK for an expression: "</span> + <span class="hljs-built_in">JSON</span>.stringify(cmd.args[i]))
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            }
+        }
+    }
+
+    <span class="hljs-keyword">switch</span>(cmd.type) {
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"cmd"</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Commands have a means of automatically specifying whether or not they break the stack.  If their command handler
+accepts a second argument (presumed to be a callback) in addition to their argument list, they are stack breaking.</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">var</span> name = cmd.cmd;
+            <span class="hljs-keyword">if</span>((name <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>) &amp;&amp; (<span class="hljs-keyword">typeof</span> <span class="hljs-keyword">this</span>[name] == <span class="hljs-string">'function'</span>)) {
+                f = <span class="hljs-keyword">this</span>[name];
+                <span class="hljs-keyword">if</span>(f &amp;&amp; f.length &gt; <span class="hljs-number">1</span>) {
+                    <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+                }
+            }
+            result = <span class="hljs-literal">false</span>;
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"pause"</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - pauses that just create a delay really shouldn&#39;t be stack breakers.  Pauses that bring up the message box should.
+       (you don&#39;t want to bring up the message box until the machine has executed everything up to that point)</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"cond"</span>:
+            <span class="hljs-comment">//TODO , we should check the expression for a stack break, as well as the .stmt</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            <span class="hljs-keyword">break</span>;
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"weak_assign"</span>:
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"assign"</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO: These should only break the stack if they assign to or read from expressions that break the stack</p></div></div><div class="code"><div class="wrapper">            result = <span class="hljs-literal">true</span>;
+            <span class="hljs-keyword">break</span>;
+            <span class="hljs-comment">//return this._exprBreaksStack(cmd.var) || this._exprBreaksStack(cmd.expr)</span>
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"custom"</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Macro calls should break the stack</p></div></div><div class="code"><div class="wrapper">            result = <span class="hljs-literal">true</span>;
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"return"</span>:
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"goto"</span>:
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"gosub"</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - Control flow needn&#39;t necessarily break the stack</p></div></div><div class="code"><div class="wrapper">            result = <span class="hljs-literal">true</span>;
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"open"</span>:
+            result = <span class="hljs-literal">true</span>;
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"event"</span>:
+            result = <span class="hljs-literal">true</span>; <span class="hljs-comment">// TODO DEPRECATE</span>
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"fail"</span>:
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"end"</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>These statements update the system state and need to wait for the machine to stop to execute</p></div></div><div class="code"><div class="wrapper">            result = <span class="hljs-literal">true</span>;
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">default</span>:
+            result = <span class="hljs-literal">false</span>;
+            <span class="hljs-keyword">break</span>;
+    }
+    <span class="hljs-keyword">return</span> result;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Returns true if this expression breaks the stack.
+System variable evaluation breaks the stack.  No other expressions do.</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._exprBreaksStack = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">expr</span>) </span>{
+    <span class="hljs-keyword">if</span>(!expr) { <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>; }
+    <span class="hljs-keyword">if</span>(expr.op === <span class="hljs-literal">undefined</span>) {
+        <span class="hljs-keyword">return</span> expr[<span class="hljs-number">0</span>] == <span class="hljs-string">'%'</span>; <span class="hljs-comment">// For now, all system variable evaluations are stack-breaking</span>
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._exprBreaksStack(expr.left) || <span class="hljs-keyword">this</span>._exprBreaksStack(expr.right);
+    }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Start the stored program running
+Return the stream of g-codes that are being run, which will be fed by the asynchronous running process.
+This function is called ONCE at the beginning of a program, and is not called again until the program
+completes, except if a macro (subprogram) is encountered, in which case it is called for that program as well. </p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._run = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    log.info(<span class="hljs-string">"Starting OpenSBP program"</span>)
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine) {
+        <span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">"running"</span>);
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set state variables to kick things off</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">this</span>.started = <span class="hljs-literal">true</span>;
+    <span class="hljs-keyword">this</span>.waitingForStackBreak = <span class="hljs-literal">false</span>;
+    <span class="hljs-keyword">this</span>.gcodesPending = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create a stat handler that does a few things:</p>
+<ol>
+<li>Call _executeNext when the motion system is out of moves to feed it more program</li>
+<li>Set the machine state to paused or running based on the state of the motion system</li>
+<li>Handle a feedhold edge case (feedhold issued while system was not executing motion)</li>
+</ol></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">var</span> onStat = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stat</span>) </span>{
+        <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.inManualMode) {
+            <span class="hljs-keyword">return</span>;
+        }
+        <span class="hljs-keyword">switch</span>(stat) {
+            <span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_STOP:
+                <span class="hljs-keyword">this</span>.gcodesPending = <span class="hljs-literal">false</span>;
+                <span class="hljs-keyword">this</span>._executeNext();
+            <span class="hljs-keyword">break</span>;
+            <span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_HOLDING:
+                <span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'paused'</span>);
+            <span class="hljs-keyword">break</span>;
+            <span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_PROBE:
+            <span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_RUNNING:
+                <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.inManualMode) {
+                    <span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'running'</span>);
+                    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.pendingFeedhold) {
+                        <span class="hljs-keyword">this</span>.pendingFeedhold = <span class="hljs-literal">false</span>;
+                        <span class="hljs-keyword">this</span>.driver.feedHold();
+                    }
+                }
+            <span class="hljs-keyword">break</span>;
+
+        }
+    }
+
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.isInSubProgram()) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If this function was called and we&#39;re in a subprogram, just execute the next instruction </p></div></div><div class="code"><div class="wrapper">        log.debug(<span class="hljs-string">"Running Subprogram"</span>)
+        <span class="hljs-keyword">this</span>._executeNext();
+    } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If this is a top level run, create a pass-through stream to receive the data
+and start executing with it.  As the program is processed the stream will be fed</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">this</span>.stream = <span class="hljs-keyword">new</span> stream.PassThrough();
+        <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.driver) {
+            <span class="hljs-keyword">this</span>.driver.runStream(<span class="hljs-keyword">this</span>.stream)
+            .on(<span class="hljs-string">'stat'</span>, onStat.bind(<span class="hljs-keyword">this</span>))
+            .on(<span class="hljs-string">'status'</span>, <span class="hljs-keyword">this</span>._onG2Status.bind(<span class="hljs-keyword">this</span>))
+            .then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+                <span class="hljs-keyword">this</span>.file_stack = []
+                <span class="hljs-keyword">this</span>._end(<span class="hljs-keyword">this</span>.pending_error);
+            }.bind(<span class="hljs-keyword">this</span>));
+        }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Actually begin program execution</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">this</span>._executeNext();
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This function returns the pass-through stream (but it&#39;s also saved as this.stream)</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.stream;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return true if this is not the &quot;top level&quot; program (ie: we&#39;re in a macro call.)</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.isInSubProgram = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.file_stack.length &gt; <span class="hljs-number">0</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Continue running the current program (until the end of the next chunk)
+_executeNext() will dispatch the next chunk if appropriate, once the current chunk is finished</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._executeNext = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    log.debug(<span class="hljs-string">'_executeNext called.'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Copy values from the machine to our local state variables</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">this</span>._update();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>_executeNext is only for resuming an already running program.  It&#39;s not a substitute for _run()</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.started) {
+        log.warn(<span class="hljs-string">'Got a _executeNext() but not started'</span>);
+        <span class="hljs-keyword">return</span>;
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO: pending_error is actually set by _abort, so this is possibly called twice</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.pending_error) {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._abort(<span class="hljs-keyword">this</span>.pending_error);
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If _executeNext is called but we&#39;re paused, stay paused. (We&#39;ll call _executeNext again on resume)</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.paused) {
+        log.info(<span class="hljs-string">'Program is paused.'</span>);
+        <span class="hljs-keyword">return</span>;
+    }
+
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.pc &gt;= <span class="hljs-keyword">this</span>.program.length) {
+        log.info(<span class="hljs-string">"End of program reached. (pc = "</span> + <span class="hljs-keyword">this</span>.pc + <span class="hljs-string">")"</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Here we&#39;ve reached the end of the program, but there&#39;s possibly not enough
+g-codes queued up for the driver to want to send them out, so go ahead and prime it
+to send out those last few.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">this</span>.prime();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>this.gcodesPending gets set when we emit_gcode, and cleared when the tool reaches the STAT_STOP
+state (because it&#39;s run everything that it&#39;s recieved) - If pending is true, that means there&#39;s
+more work to do before finishing out the program.  We prime()d above, so those instructions will
+get executed (and the stat handler will call _executeNext again once the machine stops moving)</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.gcodesPending &amp;&amp; <span class="hljs-keyword">this</span>.driver) {
+            log.debug(<span class="hljs-string">'GCodes are still pending...'</span>)
+            <span class="hljs-keyword">return</span>;
+        }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle the end of program differently if we&#39;re a subprogram</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.isInSubProgram()) {
+            log.debug(<span class="hljs-string">"This is a nested end.  Popping the file stack."</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Pop the stack (which will restore the program state, including pc to the calling program)</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">this</span>._popFileStack();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Increment the pc and execute, as normal</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">this</span>.pc += <span class="hljs-number">1</span>;
+            setImmediate(<span class="hljs-keyword">this</span>._executeNext.bind(<span class="hljs-keyword">this</span>));
+            <span class="hljs-keyword">return</span>;
+        } <span class="hljs-keyword">else</span> {
+            log.debug(<span class="hljs-string">"This is not a nested end.  No stack."</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This ends the machining cycle</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">'M30'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If no driver, we just go straight to the _end() (as in simulation)</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.driver) {
+                <span class="hljs-keyword">this</span>._end();
+            } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>prime so that M30 actually gets sent</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">this</span>.prime();
+            }
+            <span class="hljs-keyword">return</span>;
+        }
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Below here we&#39;re NOT at the end of the program, 
+so it&#39;s time to actually execute the next instruction</p></div></div><div class="code"><div class="wrapper">    </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Pull the current line of the program from the list</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">var</span> line = <span class="hljs-keyword">this</span>.program[<span class="hljs-keyword">this</span>.pc];
+    <span class="hljs-keyword">var</span> breaksTheStack = <span class="hljs-keyword">this</span>._breaksStack(line);
+
+    <span class="hljs-keyword">if</span>(breaksTheStack) {
+        log.debug(<span class="hljs-string">"Stack break: "</span> + <span class="hljs-built_in">JSON</span>.stringify(line));
+        <span class="hljs-keyword">this</span>.prime();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Broadly, if the next instruction is a stack breaking command, we&#39;re only
+allowed to execute it if everything up till now has finished executing
+(there are no instructions pending in the motion system)
+We request a status report, just to catch the case where there are non-motion
+g-codes executing, and we might not have got a report that indicates that the machine
+has stopped executing stuff.  Of course we only do that if there&#39;s a driver (we&#39;re not simulating) </p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.gcodesPending &amp;&amp; <span class="hljs-keyword">this</span>.driver) {
+            log.debug(<span class="hljs-string">"Deferring because g-codes pending."</span>);
+            <span class="hljs-keyword">this</span>.driver.requestStatusReport();
+            <span class="hljs-keyword">return</span>; <span class="hljs-comment">// We can return knowing that we'll be called again when the system enters STAT_STOP</span>
+        } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>G2 is stopped, execute stack breaking command now</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">try</span> {
+                log.debug(<span class="hljs-string">"executing: "</span> + <span class="hljs-built_in">JSON</span>.stringify(line))
+                <span class="hljs-keyword">this</span>._execute(line, <span class="hljs-keyword">this</span>._executeNext.bind(<span class="hljs-keyword">this</span>));
+                <span class="hljs-keyword">return</span>;
+            } <span class="hljs-keyword">catch</span>(e) {
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._abort(e);
+            }
+        }
+        <span class="hljs-keyword">return</span>;
+    } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If this is a non-stack-breaking command, go ahead and execute it.
+Mostly, these commands will call emit_gcode, which will push instructions into the stream
+that drives the motion controller.</p></div></div><div class="code"><div class="wrapper">        log.debug(<span class="hljs-string">"Non-Stack break: "</span> + <span class="hljs-built_in">JSON</span>.stringify(line));
+        <span class="hljs-keyword">try</span> {
+            log.debug(<span class="hljs-string">"executing: "</span> + <span class="hljs-built_in">JSON</span>.stringify(line))
+            <span class="hljs-keyword">this</span>._execute(line);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Keep on executing!  No reason not to.</p></div></div><div class="code"><div class="wrapper">            setImmediate(<span class="hljs-keyword">this</span>._executeNext.bind(<span class="hljs-keyword">this</span>));
+        } <span class="hljs-keyword">catch</span>(e) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A stack breaker that caused an error will trigger an abort of the program</p></div></div><div class="code"><div class="wrapper">            log.error(e)
+            <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.driver.status.stat != <span class="hljs-keyword">this</span>.driver.STAT_STOP) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>There&#39;s been an error, but there&#39;s still stuff executing
+pend a program ending, which will execute when the motion controller stops</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._abort(e);
+            } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>We&#39;re stopped and there&#39;s been an error, just end the program.</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._end(e);
+            }
+        }
+    }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Prime the driver associated with this runtime, if it exists.</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.prime = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.driver) {
+        <span class="hljs-keyword">this</span>.driver.prime();
+    }
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set a pending error and end the stream feeding the motion system
+The pending error is picked up by _executeNext and the program is ended as a result.
+  error - The error message</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._abort = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">error</span>) </span>{
+    <span class="hljs-keyword">this</span>.pending_error = error;
+    <span class="hljs-keyword">this</span>.stream.end();
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>End the program
+This restores the state of both the runtime and the driver, and sets the machine state appropriately
+  error - (optional) If the program is ending due to an error, this is it.  Can be string or error object.</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._end = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">error</span>) </span>{
+    </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>debug info</p></div></div><div class="code"><div class="wrapper">    log.stack();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Normalize the error and ending state</p></div></div><div class="code"><div class="wrapper">    error = error ? error.message || error : <span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">if</span>(!error) {
+        error = <span class="hljs-keyword">this</span>.end_message || <span class="hljs-literal">null</span>;
+    }
+    log.debug(<span class="hljs-string">"Calling the non-nested (toplevel) end"</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Delete the user variables that don&#39;t stick around across runs</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> key <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.user_vars) {
+        <span class="hljs-keyword">if</span>(key[<span class="hljs-number">1</span>] === <span class="hljs-string">'_'</span>) {
+            <span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.user_vars[key]
+        }
+    }  </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Log the error for posterity</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span>(error) {log.error(error)}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Cleanup deals the &quot;final blow&quot; - cleans up streams, sets the machine state and calls the end callback</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">var</span> cleanup = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">error</span>) </span>{
+        log.stack()
+        <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine &amp;&amp; error) {
+            <span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'stopped'</span>, {<span class="hljs-string">'error'</span> : error });
+        }
+        <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.machine){
+            <span class="hljs-keyword">this</span>.stream.end();
+        }
+        <span class="hljs-keyword">this</span>.ok_to_disconnect = <span class="hljs-literal">true</span>;
+        <span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'end'</span>, <span class="hljs-keyword">this</span>);
+        <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.end_callback) {
+            <span class="hljs-keyword">this</span>.end_callback();
+        }
+    }.bind(<span class="hljs-keyword">this</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Clear the internal state of the runtime (restore it to its initial state)</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">this</span>.init();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - this big complicated if-else can probably be collapsed to something simpler with some
+     rearranging and changing of the cleanup() function above (or maybe it can be eliminated??)</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span>(error) {
+        <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine) {
+            <span class="hljs-keyword">this</span>.resumeAllowed = <span class="hljs-literal">false</span>;
+            <span class="hljs-keyword">this</span>.machine.restoreDriverState(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+                <span class="hljs-keyword">this</span>.resumeAllowed = <span class="hljs-literal">true</span>;
+                cleanup(error);
+            }.bind(<span class="hljs-keyword">this</span>));
+        } <span class="hljs-keyword">else</span> {
+            cleanup(error);
+        }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - Shouldn&#39;t this deal with the currently running job (if it exists)
+       as is done below?? this.machine.status.job.fail maybe?</p></div></div><div class="code"><div class="wrapper">    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine) {
+            <span class="hljs-keyword">this</span>.resumeAllowed=<span class="hljs-literal">false</span>
+            <span class="hljs-keyword">this</span>.machine.restoreDriverState(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+                <span class="hljs-keyword">this</span>.resumeAllowed = <span class="hljs-literal">true</span>;
+                <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine.status.job) {
+                    <span class="hljs-keyword">this</span>.machine.status.job.finish(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, job</span>) </span>{
+                        <span class="hljs-keyword">this</span>.machine.status.job=<span class="hljs-literal">null</span>;
+                        <span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'idle'</span>);
+                    }.bind(<span class="hljs-keyword">this</span>));
+                } <span class="hljs-keyword">else</span> {
+                    <span class="hljs-keyword">this</span>.driver.setUnits(config.machine.get(<span class="hljs-string">'units'</span>), <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+                        <span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'idle'</span>);
+                    }.bind(<span class="hljs-keyword">this</span>));
+                }
+                cleanup();
+            }.bind(<span class="hljs-keyword">this</span>));
+        } <span class="hljs-keyword">else</span> {
+            cleanup();
+        }
+    }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Execute the specified command
+   command - The command object to execute
+  callback - Called when execution is complete or with error if error</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._executeCommand = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">command, callback</span>) </span>{
+    <span class="hljs-keyword">if</span>((command.cmd <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>) &amp;&amp; (<span class="hljs-keyword">typeof</span> <span class="hljs-keyword">this</span>[command.cmd] == <span class="hljs-string">'function'</span>)) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Command is valid and has a registered handler</p></div></div><div class="code"><div class="wrapper">        </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Evaluate the command arguments and extract the handler</p></div></div><div class="code"><div class="wrapper">        args = <span class="hljs-keyword">this</span>._evaluateArguments(command.cmd, command.args);
+        f = <span class="hljs-keyword">this</span>[command.cmd].bind(<span class="hljs-keyword">this</span>);
+
+        log.debug(<span class="hljs-string">"Calling handler for "</span> + command.cmd + <span class="hljs-string">" With arguments: ["</span> + args + <span class="hljs-string">"]"</span>);
+
+        <span class="hljs-keyword">if</span>(f.length &gt; <span class="hljs-number">1</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Stack breakers have the callback passed in, to be called when done.</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">try</span> {
+                f(args, <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">commandComplete</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>advance the pc and do the callback to mvoe on to next instruction
+TODO - We should allow commands to use an errback?  This would allow 
+       for asynchronous errors in addition to the throw</p></div></div><div class="code"><div class="wrapper">                    <span class="hljs-keyword">this</span>.pc+=<span class="hljs-number">1</span>; 
+                    callback();
+                }.bind(<span class="hljs-keyword">this</span>));
+            } <span class="hljs-keyword">catch</span>(e) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - Should we throw the error here?!  This feels like an issue.</p></div></div><div class="code"><div class="wrapper">                log.error(<span class="hljs-string">"There was a problem executing a stack-breaking command: "</span>);
+                log.error(e);
+                <span class="hljs-keyword">this</span>.pc+=<span class="hljs-number">1</span>;
+                callback();
+            }
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+        } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This is NOT a stack breaker, run immediately, increment PC, call the callback.</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"Non stack breaker: "</span>, command);
+            <span class="hljs-keyword">try</span> {
+                f(args);
+            } <span class="hljs-keyword">catch</span>(e) {
+                log.error(<span class="hljs-string">"Error in a non-stack-breaking command"</span>);
+                log.error(e);
+                <span class="hljs-keyword">throw</span> e;
+            }
+            <span class="hljs-keyword">this</span>.pc +=<span class="hljs-number">1</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>We use the callback, stack breaker or not</p></div></div><div class="code"><div class="wrapper">            setImmediate(callback) 
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+        }
+    } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>We don&#39;t know what this is.  Whatever it is, it doesn&#39;t break the stack.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">this</span>._unhandledCommand(command);
+        <span class="hljs-keyword">this</span>.pc += <span class="hljs-number">1</span>;
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+    }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Run a custom cut (macro).  This function can be called from within another program or to start one.
+    number - The macro number to run
+  callback - Hmm.  Callback is called in simulation (and the macro is simply skipped) but not in for real times</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.runCustomCut = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">number, callback</span>) </span>{
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine) {
+        <span class="hljs-keyword">var</span> macro = macros.get(number);
+        <span class="hljs-keyword">if</span>(macro) {
+            log.debug(<span class="hljs-string">"Running macro: "</span> + <span class="hljs-built_in">JSON</span>.stringify(macro))
+            <span class="hljs-keyword">this</span>._pushFileStack();
+            <span class="hljs-keyword">this</span>.runFile(macro.filename);
+        } <span class="hljs-keyword">else</span> {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Can't run custom cut (macro) C"</span> + number + <span class="hljs-string">": Macro not found."</span>)
+        }
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-keyword">this</span>.pc +=<span class="hljs-number">1</span>;
+        callback();
+    }
+    <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Execute the provided command
+Returns true if execution breaks the stack (and calls the callback upon command completion)
+Returns false if execution does not break the stack (and callback is never called)
+  command - A single parsed line of OpenSBP code</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._execute = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">command, callback</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Just skip over blank lines, undefined, etc.</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span>(!command) {
+        <span class="hljs-keyword">this</span>.pc += <span class="hljs-number">1</span>;
+        <span class="hljs-keyword">return</span>;
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>All correctly parsed commands have a type</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">switch</span>(command.type) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A ShopBot Comand (M2, ZZ, etc...)</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">case</span> <span class="hljs-string">"cmd"</span>:
+            <span class="hljs-keyword">var</span> broke = <span class="hljs-keyword">this</span>._executeCommand(command, callback);
+            <span class="hljs-keyword">if</span>(!broke) {
+                setImmediate(callback);
+            }
+            <span class="hljs-keyword">return</span> broke;
+            <span class="hljs-keyword">break</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A C# command (custom cut)</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">case</span> <span class="hljs-string">"custom"</span>:
+            <span class="hljs-keyword">this</span>.runCustomCut(command.index, callback);
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            <span class="hljs-keyword">break</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A line of raw g-code</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">case</span> <span class="hljs-string">"gcode"</span>:
+            log.debug(<span class="hljs-string">'Running raw gcode in opensbp context.'</span>);
+            log.debug(command.gcode);   
+            <span class="hljs-keyword">this</span>.emit_gcode(command.gcode);
+            <span class="hljs-keyword">this</span>.pc += <span class="hljs-number">1</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"return"</span>:
+            <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.stack.length) {
+                <span class="hljs-keyword">this</span>.pc = <span class="hljs-keyword">this</span>.stack.pop();
+                setImmediate(callback);
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Runtime Error: Return with no GOSUB at "</span> + (<span class="hljs-keyword">this</span>.pc+<span class="hljs-number">1</span>));
+            }
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"end"</span>:
+            <span class="hljs-keyword">this</span>.pc = <span class="hljs-keyword">this</span>.program.length;
+            setImmediate(callback);
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"fail"</span>:
+            <span class="hljs-keyword">this</span>.pc = <span class="hljs-keyword">this</span>.program.length;
+            <span class="hljs-keyword">if</span>(command.message) {
+                <span class="hljs-keyword">this</span>.end_message = command.message;
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(command.message)
+            }
+            setImmediate(callback);
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"goto"</span>:
+            <span class="hljs-keyword">if</span>(command.label <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.label_index) {
+                <span class="hljs-keyword">var</span> pc = <span class="hljs-keyword">this</span>.label_index[command.label];
+                log.debug(<span class="hljs-string">"Hit a GOTO: Going to line "</span> + pc + <span class="hljs-string">"(Label: "</span> + command.label + <span class="hljs-string">")"</span>);
+                <span class="hljs-keyword">this</span>.pc = pc;
+                setImmediate(callback);
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Runtime Error: Unknown Label '"</span> + command.label + <span class="hljs-string">"' at line "</span> + (<span class="hljs-keyword">this</span>.pc+<span class="hljs-number">1</span>));
+            }
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"gosub"</span>:
+            <span class="hljs-keyword">if</span>(command.label <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.label_index) {
+                <span class="hljs-keyword">this</span>.stack.push(<span class="hljs-keyword">this</span>.pc + <span class="hljs-number">1</span>);
+                log.debug(<span class="hljs-string">"Pushing the current PC onto the stack ("</span> +(<span class="hljs-keyword">this</span>.pc+<span class="hljs-number">1</span>) + <span class="hljs-string">")"</span>)
+                <span class="hljs-keyword">this</span>.pc = <span class="hljs-keyword">this</span>.label_index[command.label];
+                setImmediate(callback);
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Runtime Error: Unknown Label '"</span> + command.label + <span class="hljs-string">"' at line "</span> + (<span class="hljs-keyword">this</span>.pc+<span class="hljs-number">1</span>));
+            }
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"assign"</span>:
+            <span class="hljs-keyword">this</span>.pc += <span class="hljs-number">1</span>;
+            <span class="hljs-keyword">var</span> value = <span class="hljs-keyword">this</span>._eval(command.expr);
+            <span class="hljs-keyword">this</span>._assign(command.var, value, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+                callback();
+            })
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"weak_assign"</span>:
+            <span class="hljs-keyword">this</span>.pc += <span class="hljs-number">1</span>;
+            <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>._varExists(command.var)) {
+                <span class="hljs-keyword">var</span> value = <span class="hljs-keyword">this</span>._eval(command.expr);
+                <span class="hljs-keyword">this</span>._assign(command.var, value, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+                    callback();
+                });
+            } <span class="hljs-keyword">else</span> {
+                setImmediate(callback);
+            }
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"cond"</span>:
+            <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._eval(command.cmp)) {
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._execute(command.stmt, callback);  <span class="hljs-comment">// Warning RECURSION!</span>
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-keyword">this</span>.pc += <span class="hljs-number">1</span>;
+                setImmediate(callback)
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            }
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"comment"</span>:
+            <span class="hljs-keyword">var</span> comment = command.comment.join(<span class="hljs-string">''</span>).trim();
+            <span class="hljs-keyword">if</span>(comment != <span class="hljs-string">''</span>) {
+                <span class="hljs-comment">//this.emit_gcode('( ' + comment + ' )') // TODO allow for comments</span>
+            }
+            <span class="hljs-keyword">this</span>.pc += <span class="hljs-number">1</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"label"</span>:
+        <span class="hljs-keyword">case</span> <span class="hljs-literal">undefined</span>:
+            <span class="hljs-keyword">this</span>.pc += <span class="hljs-number">1</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"pause"</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>PAUSE is kooky</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">this</span>.pc += <span class="hljs-number">1</span>;
+            <span class="hljs-keyword">var</span> arg = <span class="hljs-keyword">this</span>._eval(command.expr);
+            <span class="hljs-keyword">if</span>(util.isANumber(arg)) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If the argument to pause is a number, we issue a g-code telling the system to pause</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">'G4 P'</span> + <span class="hljs-keyword">this</span>._eval(command.expr));
+                setImmediate(callback);
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>; <span class="hljs-comment">// TODO - this doesn't *need* to be a stack break</span>
+            } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>In simulation, just don&#39;t do anything</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.machine) {
+                    setImmediate(callback);
+                    <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+                }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If a message is provided, pause with a dialog</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">var</span> message = arg;
+                <span class="hljs-keyword">if</span>(!message) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If a message is not provided, use the comment from the previous line</p></div></div><div class="code"><div class="wrapper">                    <span class="hljs-keyword">var</span> last_command = <span class="hljs-keyword">this</span>.program[<span class="hljs-keyword">this</span>.pc-<span class="hljs-number">2</span>];
+                    <span class="hljs-keyword">if</span>(last_command &amp;&amp; last_command.type === <span class="hljs-string">'comment'</span>) {
+                        message = last_command.comment.join(<span class="hljs-string">''</span>).trim();
+                    }
+                }
+                <span class="hljs-keyword">this</span>.paused = <span class="hljs-literal">true</span>;
+                <span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'paused'</span>, {<span class="hljs-string">'message'</span> : message || <span class="hljs-string">"Paused."</span> });
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            }
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"event"</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Throw a useful exception for the no-longer-supported ON INPUT command</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">this</span>.pc += <span class="hljs-number">1</span>;
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"ON INPUT is no longer a supported command.  Make sure the program you are using is up to date."</span>);
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">default</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Just skip over commands we don&#39;t recognize
+TODO - Maybe this isn&#39;t the best behavior?</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">try</span> {
+                log.error(<span class="hljs-string">"Unknown command: "</span> + <span class="hljs-built_in">JSON</span>.stringify(command));
+            } <span class="hljs-keyword">catch</span>(e) {
+                log.error(<span class="hljs-string">"Unknown command: "</span> + command);
+            }
+            <span class="hljs-keyword">this</span>.pc += <span class="hljs-number">1</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+            <span class="hljs-keyword">break</span>;
+    }
+    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"An error occurred in the command processor.  Please report this issue."</span>);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return true if the provided variable exists in the current program context
+&amp;Tool is a weird case.  (literally) - it will be accepted as defined no matter what it&#39;s case
+&amp;Tool == &amp;TOOL == &amp;TOoL
+  identifier - The identifier to check</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._varExists = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">identifier</span>) </span>{
+
+    <span class="hljs-keyword">if</span>(identifier.match(USERVAR_RE)) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>User variable</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle weird &amp;Tool Exception case
+(which exists because of old shopbot case insensitivity)</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">if</span>(identifier.toUpperCase() === <span class="hljs-string">'&amp;TOOL'</span>) {
+            identifier = <span class="hljs-string">'&amp;TOOL'</span>
+        }
+
+        <span class="hljs-keyword">if</span>(identifier <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.user_vars) { <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>; }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>So weird.  TODO - what?  what even.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">for</span>(key <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.user_vars) {
+            <span class="hljs-keyword">if</span>(key.toLowerCase() === identifier.toLowerCase()) { <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;}
+        }
+
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+    }
+
+    <span class="hljs-keyword">if</span>(identifier.match(PERSISTENTVAR_RE)) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Persistent variable</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">return</span> config.opensbp.hasVariable(identifier)
+    }
+    <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Assign a variable to a value
+  identifier - The variable to assign
+       value - The new value
+    callback - Called once the assignment has been made</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._assign = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">identifier, value, callback</span>) </span>{
+
+    <span class="hljs-keyword">if</span>(identifier.match(USERVAR_RE)) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>User Variable</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle TOOL exception case</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">if</span>(identifier.toUpperCase() === <span class="hljs-string">'&amp;TOOL'</span>) {
+            identifier = <span class="hljs-string">'&amp;TOOL'</span>
+        }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Make assignment and call back</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">this</span>.user_vars[identifier] = value;
+        setImmediate(callback);
+        <span class="hljs-keyword">return</span>
+    }
+    log.debug(identifier + <span class="hljs-string">' is not a user variable'</span>);
+
+    <span class="hljs-keyword">if</span>(identifier.match(PERSISTENTVAR_RE)) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Persistent variable</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Assign with persistence using the configuration module</p></div></div><div class="code"><div class="wrapper">        config.opensbp.setVariable(identifier, value, callback)
+        <span class="hljs-keyword">return</span>
+    }
+    log.debug(identifier + <span class="hljs-string">' is not a persistent variable'</span>);
+
+    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Cannot assign to "</span> + identifier);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return the actual value of an expression.
+This function is for evaluating the leaves of the expression trees, which are either
+variables or constant numeric/string values.
+  expr - String that represents the leaf of an expression tree</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._eval_value = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">expr</span>) </span>{
+    <span class="hljs-keyword">switch</span>(<span class="hljs-keyword">this</span>._variableType(expr)) {
+        <span class="hljs-keyword">case</span> <span class="hljs-string">'user'</span>:
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.evaluateUserVariable(expr);
+        <span class="hljs-keyword">break</span>;
+        <span class="hljs-keyword">case</span> <span class="hljs-string">'system'</span>:
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.evaluateSystemVariable(expr);
+        <span class="hljs-keyword">break</span>;
+        <span class="hljs-keyword">case</span> <span class="hljs-string">'persistent'</span>:
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.evaluatePersistentVariable(expr);
+        <span class="hljs-keyword">break</span>;
+        <span class="hljs-keyword">default</span>:
+            <span class="hljs-keyword">var</span> n = <span class="hljs-built_in">Number</span>(expr);
+            <span class="hljs-keyword">return</span> <span class="hljs-built_in">isNaN</span>(n) ? expr : n;
+        <span class="hljs-keyword">break</span>;
+    }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Evaluate an expression.  Return the result.
+TODO - Make this robust to undefined user variables
+  expr - The expression to evaluate.  This is a <em>parsed</em> expression object</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._eval = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">expr</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>log.debug(&quot;Evaluating expression: &quot; + JSON.stringify(expr));</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span>(expr === <span class="hljs-literal">undefined</span>) {<span class="hljs-keyword">return</span> <span class="hljs-literal">undefined</span>;}
+
+    <span class="hljs-keyword">if</span>(expr.op === <span class="hljs-literal">undefined</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Expression is unary - no operation.  Just evaluate the value.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._eval_value(<span class="hljs-built_in">String</span>(expr));
+    } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Do the operation specified in the expression object (recursively evaluating subexpressions)</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">switch</span>(expr.op) {
+            <span class="hljs-keyword">case</span> <span class="hljs-string">'+'</span>:
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._eval(expr.left) + <span class="hljs-keyword">this</span>._eval(expr.right);
+                <span class="hljs-keyword">break</span>;
+            <span class="hljs-keyword">case</span> <span class="hljs-string">'-'</span>:
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._eval(expr.left) - <span class="hljs-keyword">this</span>._eval(expr.right);
+                <span class="hljs-keyword">break</span>;
+            <span class="hljs-keyword">case</span> <span class="hljs-string">'*'</span>:
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._eval(expr.left) * <span class="hljs-keyword">this</span>._eval(expr.right);
+                <span class="hljs-keyword">break</span>;
+            <span class="hljs-keyword">case</span> <span class="hljs-string">'/'</span>:
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._eval(expr.left) / <span class="hljs-keyword">this</span>._eval(expr.right);
+                <span class="hljs-keyword">break</span>;
+            <span class="hljs-keyword">case</span> <span class="hljs-string">'&gt;'</span>:
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._eval(expr.left) &gt; <span class="hljs-keyword">this</span>._eval(expr.right);
+                <span class="hljs-keyword">break</span>;
+            <span class="hljs-keyword">case</span> <span class="hljs-string">'&lt;'</span>:
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._eval(expr.left) &lt; <span class="hljs-keyword">this</span>._eval(expr.right);
+                <span class="hljs-keyword">break</span>;
+            <span class="hljs-keyword">case</span> <span class="hljs-string">'&gt;='</span>:
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._eval(expr.left) &gt;= <span class="hljs-keyword">this</span>._eval(expr.right);
+                <span class="hljs-keyword">break</span>;
+            <span class="hljs-keyword">case</span> <span class="hljs-string">'&lt;='</span>:
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._eval(expr.left) &lt;= <span class="hljs-keyword">this</span>._eval(expr.right);
+            <span class="hljs-keyword">break</span>;
+            <span class="hljs-keyword">case</span> <span class="hljs-string">'=='</span>:
+            <span class="hljs-keyword">case</span> <span class="hljs-string">'='</span>:
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._eval(expr.left) == <span class="hljs-keyword">this</span>._eval(expr.right);
+                <span class="hljs-keyword">break</span>;
+            <span class="hljs-keyword">case</span> <span class="hljs-string">'&lt;&gt;'</span>:
+            <span class="hljs-keyword">case</span> <span class="hljs-string">'!='</span>:
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._eval(expr.left) != <span class="hljs-keyword">this</span>._eval(expr.right);
+                <span class="hljs-keyword">break</span>;
+
+            <span class="hljs-keyword">default</span>:
+                <span class="hljs-keyword">throw</span> <span class="hljs-string">"Unhandled operation: "</span> + expr.op;
+        }
+    }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Initialize the runtime (set its internal state variables to their startup states)</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.init = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">this</span>.pc = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.coordinateSystem = <span class="hljs-string">"G55"</span>
+    <span class="hljs-keyword">this</span>.start_of_the_chunk = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.stack = [];
+    <span class="hljs-keyword">this</span>.label_index = {};
+    <span class="hljs-keyword">this</span>.current_chunk = [];
+    <span class="hljs-keyword">this</span>.started = <span class="hljs-literal">false</span>;
+    <span class="hljs-keyword">this</span>.sysvar_evaluated = <span class="hljs-literal">false</span>;
+    <span class="hljs-keyword">this</span>.end_callback = <span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">this</span>.output = [];               <span class="hljs-comment">// Used in simulation mode only</span>
+    <span class="hljs-keyword">this</span>.end_callback = <span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">this</span>.quit_pending = <span class="hljs-literal">false</span>;
+    <span class="hljs-keyword">this</span>.end_message = <span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">this</span>.paused = <span class="hljs-literal">false</span>;
+    <span class="hljs-keyword">this</span>.units = config.machine.get(<span class="hljs-string">'units'</span>);
+    <span class="hljs-keyword">this</span>.pending_error = <span class="hljs-literal">null</span>;
+    <span class="hljs-keyword">this</span>.pendingFeedhold = <span class="hljs-literal">false</span>;
+
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.transforms != <span class="hljs-literal">null</span> &amp;&amp; <span class="hljs-keyword">this</span>.transforms.level.apply === <span class="hljs-literal">true</span>) {
+        leveler = <span class="hljs-keyword">new</span> Leveler(<span class="hljs-keyword">this</span>.transforms.level.ptDataFile);
+    }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the preferred units to the units provided.
+This function is called externally when the user changes the canonical system units.
+     units - The new unit system
+  callback - Called when the unit change has been made</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.setPreferredUnits = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">units, callback</span>) </span>{
+    log.info(<span class="hljs-string">"SBP runtime is setting the preferred units to "</span> + units)
+    <span class="hljs-keyword">this</span>._loadConfig();
+    <span class="hljs-keyword">this</span>._setUnits(units);
+    <span class="hljs-keyword">this</span>._saveConfig(callback);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the current units to the provided value
+(Converts internal state to the specified unit system)</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._setUnits = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">units</span>) </span>{
+    units = u.unitType(units);
+    <span class="hljs-keyword">if</span>(units === <span class="hljs-keyword">this</span>.units) { <span class="hljs-keyword">return</span>; }
+    <span class="hljs-keyword">var</span> convert = units === <span class="hljs-string">'in'</span> ? u.mm2in : u.in2mm;
+    <span class="hljs-keyword">this</span>.movespeed_xy = convert(<span class="hljs-keyword">this</span>.movespeed_xy);
+    <span class="hljs-keyword">this</span>.movespeed_z = convert(<span class="hljs-keyword">this</span>.movespeed_z);
+    <span class="hljs-keyword">this</span>.movespeed_a = convert(<span class="hljs-keyword">this</span>.movespeed_a);
+    <span class="hljs-keyword">this</span>.movespeed_b = convert(<span class="hljs-keyword">this</span>.movespeed_b);
+    <span class="hljs-keyword">this</span>.movespeed_c = convert(<span class="hljs-keyword">this</span>.movespeed_c);
+    <span class="hljs-keyword">this</span>.jogspeed_xy = convert(<span class="hljs-keyword">this</span>.jogspeed_xy);
+    <span class="hljs-keyword">this</span>.jogspeed_z = convert(<span class="hljs-keyword">this</span>.jogspeed_z);
+    <span class="hljs-keyword">this</span>.jogspeed_a = convert(<span class="hljs-keyword">this</span>.jogspeed_a);
+    <span class="hljs-keyword">this</span>.jogspeed_b = convert(<span class="hljs-keyword">this</span>.jogspeed_b);
+    <span class="hljs-keyword">this</span>.jogspeed_c = convert(<span class="hljs-keyword">this</span>.jogspeed_c);
+    <span class="hljs-keyword">this</span>.maxjerk_xy = convert(<span class="hljs-keyword">this</span>.jogspeed_xy);
+    <span class="hljs-keyword">this</span>.maxjerk_z = convert(<span class="hljs-keyword">this</span>.jogspeed_z);
+    <span class="hljs-keyword">this</span>.maxjerk_a = convert(<span class="hljs-keyword">this</span>.jogspeed_a);
+    <span class="hljs-keyword">this</span>.maxjerk_b = convert(<span class="hljs-keyword">this</span>.jogspeed_b);
+    <span class="hljs-keyword">this</span>.maxjerk_c = convert(<span class="hljs-keyword">this</span>.jogspeed_c);
+    <span class="hljs-keyword">this</span>.cmd_posx = convert(<span class="hljs-keyword">this</span>.cmd_posx);
+    <span class="hljs-keyword">this</span>.cmd_posy = convert(<span class="hljs-keyword">this</span>.cmd_posy);
+    <span class="hljs-keyword">this</span>.cmd_posz = convert(<span class="hljs-keyword">this</span>.cmd_posz);
+    <span class="hljs-keyword">this</span>.units = units
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Compile an index of all the labels in the program
+this.label_index will map labels to line numbers
+An error is thrown on duplicate labels</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._analyzeLabels = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">this</span>.label_index = {};
+    <span class="hljs-keyword">for</span>(i=<span class="hljs-number">0</span>; i&lt;<span class="hljs-keyword">this</span>.program.length; i++) {
+        line = <span class="hljs-keyword">this</span>.program[i];
+        <span class="hljs-keyword">if</span>(line &amp;&amp; line.type) {
+            <span class="hljs-keyword">switch</span>(line.type) {
+                <span class="hljs-keyword">case</span> <span class="hljs-string">"label"</span>:
+                    <span class="hljs-keyword">if</span> (line.value <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.label_index) {
+                        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Duplicate label."</span>);
+                    }
+                    <span class="hljs-keyword">this</span>.label_index[line.value] = i;
+                    <span class="hljs-keyword">break</span>;
+            }
+        }
+    }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check all the GOTOS/GOSUBS in the program and make sure their labels exist
+Throw an error for undefined labels.</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._analyzeGOTOs = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">for</span>(i=<span class="hljs-number">0</span>; i&lt;<span class="hljs-keyword">this</span>.program.length; i++) {
+            <span class="hljs-keyword">var</span> line = <span class="hljs-keyword">this</span>.program[i];
+            <span class="hljs-keyword">if</span>(line) {
+                <span class="hljs-keyword">switch</span>(line.type) {
+                    <span class="hljs-keyword">case</span> <span class="hljs-string">"cond"</span>:
+                        line = line.stmt;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>No break: fall through to next state(s)</p></div></div><div class="code"><div class="wrapper">                    <span class="hljs-keyword">case</span> <span class="hljs-string">"goto"</span>:
+                    <span class="hljs-keyword">case</span> <span class="hljs-string">"gosub"</span>:
+                        <span class="hljs-keyword">if</span> (line.label <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.label_index) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>pass</p></div></div><div class="code"><div class="wrapper">                        } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Add one to the line number so they start at 1</p></div></div><div class="code"><div class="wrapper">                            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Undefined label "</span> + line.label + <span class="hljs-string">" on line "</span> + (i+<span class="hljs-number">1</span>));
+                        }
+                        <span class="hljs-keyword">break</span>;
+                    <span class="hljs-keyword">default</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>pass</p></div></div><div class="code"><div class="wrapper">                        <span class="hljs-keyword">break</span>;
+                }
+            }
+        }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return the value of the provided system variable.
+  v - System variable as a string, eg: &quot;%(1)&quot;</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.evaluateSystemVariable = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">v</span>) </span>{
+    <span class="hljs-keyword">if</span>(v === <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">return</span> <span class="hljs-literal">undefined</span>;}
+    result = v.match(SYSVAR_RE);
+    <span class="hljs-keyword">if</span>(result === <span class="hljs-literal">null</span>) {<span class="hljs-keyword">return</span> <span class="hljs-literal">undefined</span>;}
+    <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.machine) {<span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;}
+    n = <span class="hljs-built_in">parseInt</span>(result[<span class="hljs-number">1</span>]);
+    <span class="hljs-keyword">switch</span>(n) {
+        <span class="hljs-keyword">case</span> <span class="hljs-number">1</span>: <span class="hljs-comment">// X Location</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.machine.status.posx;
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">2</span>: <span class="hljs-comment">// Y Location</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.machine.status.posy;
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">3</span>: <span class="hljs-comment">// Z Location</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.machine.status.posz;
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">4</span>: <span class="hljs-comment">// A Location</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.machine.status.posa;
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">5</span>: <span class="hljs-comment">// B Location</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.machine.status.posb;
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">6</span>: <span class="hljs-comment">// X Table Base</span>
+            <span class="hljs-keyword">return</span> config.driver.get(<span class="hljs-string">'g55x'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">7</span>: <span class="hljs-comment">// Y Table Base</span>
+            <span class="hljs-keyword">return</span> config.driver.get(<span class="hljs-string">'g55y'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">8</span>: <span class="hljs-comment">// Z Table Base</span>
+            <span class="hljs-keyword">return</span> config.driver.get(<span class="hljs-string">'g55z'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">9</span>: <span class="hljs-comment">// A Table Base</span>
+            <span class="hljs-keyword">return</span> config.driver.get(<span class="hljs-string">'g55a'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">10</span>: <span class="hljs-comment">// B Table Base</span>
+            <span class="hljs-keyword">return</span> config.driver.get(<span class="hljs-string">'g55b'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">25</span>:
+            units = config.machine.get(<span class="hljs-string">'units'</span>);
+            <span class="hljs-keyword">if</span>(units === <span class="hljs-string">'in'</span>) {
+                <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(units === <span class="hljs-string">'mm'</span>) {
+                <span class="hljs-keyword">return</span> <span class="hljs-number">1</span>;
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-keyword">return</span> -<span class="hljs-number">1</span>;
+            }
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">51</span>:
+        <span class="hljs-keyword">case</span> <span class="hljs-number">52</span>:
+        <span class="hljs-keyword">case</span> <span class="hljs-number">53</span>:
+        <span class="hljs-keyword">case</span> <span class="hljs-number">54</span>:
+        <span class="hljs-keyword">case</span> <span class="hljs-number">55</span>:
+        <span class="hljs-keyword">case</span> <span class="hljs-number">56</span>:
+        <span class="hljs-keyword">case</span> <span class="hljs-number">57</span>:
+        <span class="hljs-keyword">case</span> <span class="hljs-number">58</span>:
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.machine.status[<span class="hljs-string">'in'</span> + (n-<span class="hljs-number">50</span>)];
+            <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">71</span>: <span class="hljs-comment">// XY Move Speed</span>
+            <span class="hljs-keyword">return</span> config.opensbp.get(<span class="hljs-string">'movexy_speed'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">72</span>: <span class="hljs-comment">// XY Move Speed</span>
+            <span class="hljs-keyword">return</span> config.opensbp.get(<span class="hljs-string">'movexy_speed'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">73</span>:
+            <span class="hljs-keyword">return</span> config.opensbp.get(<span class="hljs-string">'movez_speed'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">74</span>:
+            <span class="hljs-keyword">return</span> config.opensbp.get(<span class="hljs-string">'movea_speed'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">75</span>:
+            <span class="hljs-keyword">return</span> config.opensbp.get(<span class="hljs-string">'moveb_speed'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">76</span>:
+            <span class="hljs-keyword">return</span> config.opensbp.get(<span class="hljs-string">'movec_speed'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">81</span>:
+            <span class="hljs-keyword">return</span> config.driver.get(<span class="hljs-string">'xjm'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">82</span>:
+            <span class="hljs-keyword">return</span> config.driver.get(<span class="hljs-string">'yjm'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">83</span>:
+            <span class="hljs-keyword">return</span> config.driver.get(<span class="hljs-string">'zjm'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">84</span>:
+            <span class="hljs-keyword">return</span> config.driver.get(<span class="hljs-string">'ajm'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">85</span>:
+            <span class="hljs-keyword">return</span> config.driver.get(<span class="hljs-string">'bjm'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">86</span>:
+            <span class="hljs-keyword">return</span> config.driver.get(<span class="hljs-string">'cjm'</span>);
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-number">144</span>:
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.machine.status.posc;
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">default</span>:
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Unknown System Variable: "</span> + v)
+        <span class="hljs-keyword">break</span>;
+    }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return true if the provided expression is a variable
+  v - Value to check, eg: &quot;&amp;Tool&quot; or &quot;%(1)&quot;</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._isVariable = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">v</span>) </span>{
+    <span class="hljs-keyword">return</span>  <span class="hljs-keyword">this</span>._isUserVariable(v) ||
+            <span class="hljs-keyword">this</span>._isPersistentVariable(v) ||
+            <span class="hljs-keyword">this</span>._isSystemVariable(v);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return true if the provided expression is a system variable
+  v - Value to check</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._isSystemVariable = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">v</span>) </span>{
+    <span class="hljs-keyword">return</span> v.match(SYSVAR_RE);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return true if the provided expression is a user variable
+  v - Value to check</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._isUserVariable = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">v</span>) </span>{
+    <span class="hljs-keyword">return</span> v.match(USERVAR_RE);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return true if the provided expression is a persistent variable
+  v - Value to check</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._isPersistentVariable = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">v</span>) </span>{
+    <span class="hljs-keyword">return</span> v.match(PERSISTENTVAR_RE);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return a string that indicates the type of the provided variable.  Either user,system, or persistent
+  v - Value to check</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._variableType = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">v</span>) </span>{
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._isUserVariable(v)) {<span class="hljs-keyword">return</span> <span class="hljs-string">'user'</span>;}
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._isSystemVariable(v)) {<span class="hljs-keyword">return</span> <span class="hljs-string">'system'</span>;}
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._isPersistentVariable(v)) {<span class="hljs-keyword">return</span> <span class="hljs-string">'persistent'</span>;}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return the value for the provided user variable
+  v - identifier to check, eg: &#39;&amp;Tool&#39;</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.evaluateUserVariable = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">v</span>) </span>{
+    <span class="hljs-keyword">if</span>(v === <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">return</span> <span class="hljs-literal">undefined</span>;}
+    result = v.match(USERVAR_RE);
+    <span class="hljs-keyword">if</span>(result === <span class="hljs-literal">null</span>) {<span class="hljs-keyword">return</span> <span class="hljs-literal">undefined</span>;}
+    <span class="hljs-keyword">if</span>(v.toUpperCase() === <span class="hljs-string">'&amp;TOOL'</span>) {
+        v = <span class="hljs-string">'&amp;TOOL'</span>;
+    }
+    <span class="hljs-keyword">if</span>(v <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.user_vars) {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.user_vars[v];
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-keyword">for</span>(key <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.user_vars) {
+            <span class="hljs-keyword">if</span>(key.toLowerCase() === v.toLowerCase()) {
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.user_vars[key];
+            }
+        }
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'Variable '</span> + v + <span class="hljs-string">' was used but not defined.'</span>);
+    }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return the value for the provided persistent variable
+  v - identifier to check, eg: &#39;$Tool&#39;</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.evaluatePersistentVariable = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">v</span>) </span>{
+    <span class="hljs-keyword">if</span>(v === <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">return</span> <span class="hljs-literal">undefined</span>;}
+    result = v.match(PERSISTENTVAR_RE);
+    <span class="hljs-keyword">if</span>(result === <span class="hljs-literal">null</span>) {<span class="hljs-keyword">return</span> <span class="hljs-literal">undefined</span>;}
+    <span class="hljs-keyword">return</span> config.opensbp.getVariable(v);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Called for any valid shopbot mnemonic that doesn&#39;t have a handler registered
+  command - The command mnemonic that is unidentified</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._unhandledCommand = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">command</span>) </span>{
+    log.warn(<span class="hljs-string">'Unhandled Command: '</span> + <span class="hljs-built_in">JSON</span>.stringify(command));
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create an execution frame for the current program context and push it onto this.file_stack
+The program context here means things like which coordinate system, speeds, the current PC, etc.</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._pushFileStack = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    frame =  {}
+    frame.coordinateSystem = <span class="hljs-keyword">this</span>.coordinateSystem
+    frame.movespeed_xy = <span class="hljs-keyword">this</span>.movespeed_xy
+    frame.movespeed_z = <span class="hljs-keyword">this</span>.movespeed_z
+    frame.pc = <span class="hljs-keyword">this</span>.pc
+    frame.movexy
+    frame.program = <span class="hljs-keyword">this</span>.program
+    frame.stack = <span class="hljs-keyword">this</span>.stack;
+    <span class="hljs-comment">//frame.user_vars = this.user_vars</span>
+    <span class="hljs-comment">//frame.current_chunk = this.current_chunk</span>
+    frame.end_callback = <span class="hljs-keyword">this</span>.end_callback
+    frame.end_message = <span class="hljs-keyword">this</span>.end_message
+    frame.label_index = <span class="hljs-keyword">this</span>.label_index
+    <span class="hljs-keyword">this</span>.file_stack.push(frame)
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Retrieve the execution frame on top of this.file_stack and restore the program context from it
+The program context here means things like which coordinate system, speeds, the current PC, etc.</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._popFileStack = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    frame = <span class="hljs-keyword">this</span>.file_stack.pop()
+    <span class="hljs-keyword">this</span>.movespeed_xy = frame.movespeed_xy
+    <span class="hljs-keyword">this</span>.movespeed_z = frame.movespeed_z
+    <span class="hljs-keyword">this</span>.pc = frame.pc
+    <span class="hljs-keyword">this</span>.coordinateSystem = frame.coordinateSystem
+    <span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-keyword">this</span>.coordinateSystem)  
+    <span class="hljs-keyword">this</span>.program = frame.program
+    <span class="hljs-keyword">this</span>.stack = frame.stack
+    <span class="hljs-comment">//this.user_vars = frame.user_vars</span>
+    <span class="hljs-keyword">this</span>.label_index = frame.label_index;
+    <span class="hljs-comment">//this.current_chunk = frame.current_chunk</span>
+    <span class="hljs-keyword">this</span>.end_callback = frame.end_callback
+    <span class="hljs-keyword">this</span>.end_message = frame.end_message
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Emit a g-code into the stream of running codes
+  s - Can be any g-code but should not contain the N-word</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.emit_gcode = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">s</span>) </span>{
+    log.debug(<span class="hljs-string">"emit_gcode: "</span> + s);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>An N-Word is added to this code to indicate the line number in the original OpenSBP file
+that generated these codes.  We only track line numbers for the top level program.  </p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.file_stack.length &gt; <span class="hljs-number">0</span>) {
+        <span class="hljs-keyword">var</span> n = <span class="hljs-keyword">this</span>.file_stack[<span class="hljs-number">0</span>].pc;
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-keyword">var</span> n = <span class="hljs-keyword">this</span>.pc;
+    }
+    <span class="hljs-keyword">var</span> gcode = <span class="hljs-string">'N'</span> + n + <span class="hljs-string">' '</span> + s + <span class="hljs-string">'\n'</span>
+
+    <span class="hljs-keyword">this</span>.gcodesPending = <span class="hljs-literal">true</span>;
+    log.debug(<span class="hljs-string">'Writing to stream: '</span> + gcode)
+    <span class="hljs-keyword">this</span>.stream.write(gcode);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Helper function used by M_ commands that generates a movement code (G1,G0) 
+on the specified position after having applied transformations to that position
+TODO - Gordon, provide some documentation here?</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.emit_move = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">code, pt</span>) </span>{
+    <span class="hljs-keyword">var</span> gcode = code;
+    <span class="hljs-keyword">var</span> i;
+    log.debug(<span class="hljs-string">"Emit_move: "</span> + code + <span class="hljs-string">" "</span> + <span class="hljs-built_in">JSON</span>.stringify(pt));
+
+    [<span class="hljs-string">'X'</span>,<span class="hljs-string">'Y'</span>,<span class="hljs-string">'Z'</span>,<span class="hljs-string">'A'</span>,<span class="hljs-string">'B'</span>,<span class="hljs-string">'C'</span>,<span class="hljs-string">'I'</span>,<span class="hljs-string">'J'</span>,<span class="hljs-string">'K'</span>,<span class="hljs-string">'F'</span>].forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key</span>)</span>{
+        <span class="hljs-keyword">var</span> c = pt[key];
+        <span class="hljs-keyword">if</span>(c !== <span class="hljs-literal">undefined</span>) {
+
+            <span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(c)) {
+                <span class="hljs-keyword">var</span> err = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Invalid "</span> + key + <span class="hljs-string">" argument: "</span> + c );
+                log.error(err);
+                <span class="hljs-keyword">throw</span> err;
+            }
+            <span class="hljs-keyword">if</span>(key === <span class="hljs-string">"X"</span>) { <span class="hljs-keyword">this</span>.cmd_posx = c; }
+            <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(key === <span class="hljs-string">"Y"</span>) { <span class="hljs-keyword">this</span>.cmd_posy = c; }
+            <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(key === <span class="hljs-string">"Z"</span>) { <span class="hljs-keyword">this</span>.cmd_posz = c; }
+            <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(key === <span class="hljs-string">"A"</span>) { <span class="hljs-keyword">this</span>.cmd_posa = c; }
+            <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(key === <span class="hljs-string">"B"</span>) { <span class="hljs-keyword">this</span>.cmd_posb = c; }
+            <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(key === <span class="hljs-string">"C"</span>) { <span class="hljs-keyword">this</span>.cmd_posc = c; }
+        }
+    }.bind(<span class="hljs-keyword">this</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>log.debug(&quot;   emit_move: this.cmd_posx = &quot; + this.cmd_posx );</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Where to save the start point of an arc that isn&#39;t transformed??????????</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">var</span> tPt = <span class="hljs-keyword">this</span>.transformation(pt);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>log.debug(&quot;Emit_move: Transformed point: &quot; + JSON.stringify(tPt));</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p> log.debug(&quot;interpolate = &quot; + this.transforms.interpolate.apply );
+ if(( this.transforms.level.apply === true || this.transforms.interpolate.apply === true ) &amp;&amp; code !== &quot;G0&quot; ){
+     if( code === &quot;G1&quot;){
+         log.debug( &quot;emit_move: lineInterpolate = &quot; + code + &quot;  pt = &quot; + JSON.stringify(pt));
+         interp.lineInterpolate(this, pt);
+     }
+     else if(code === &quot;G2&quot; || code === &quot;G3&quot;){
+         log.debug( &quot;emit_move: circleInterpolate = &quot; + code + &quot;  pt = &quot; + JSON.stringify(pt));
+         interp.circleInterpolate(this, code, pt);
+     }
+ }
+ else{</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.file_stack.length &gt; <span class="hljs-number">0</span>) {
+        <span class="hljs-keyword">var</span> n = <span class="hljs-keyword">this</span>.file_stack[<span class="hljs-number">0</span>].pc;
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-keyword">var</span> n = <span class="hljs-keyword">this</span>.pc;
+    }
+
+    <span class="hljs-keyword">var</span> opFunction = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">Pt</span>) </span>{  <span class="hljs-comment">//Find a better name</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>for(key in tPt) {</p></div></div><div class="code"><div class="wrapper">        [<span class="hljs-string">'X'</span>,<span class="hljs-string">'Y'</span>,<span class="hljs-string">'Z'</span>,<span class="hljs-string">'A'</span>,<span class="hljs-string">'B'</span>,<span class="hljs-string">'C'</span>,<span class="hljs-string">'I'</span>,<span class="hljs-string">'J'</span>,<span class="hljs-string">'K'</span>,<span class="hljs-string">'F'</span>].forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key</span>)</span>{
+            <span class="hljs-keyword">var</span> v = Pt[key];
+            <span class="hljs-keyword">if</span>(v !== <span class="hljs-literal">undefined</span>) {
+                <span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(v)) {
+                    <span class="hljs-keyword">var</span> err = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Invalid "</span> + key + <span class="hljs-string">" argument: "</span> + v);
+                    log.error(err);
+                    <span class="hljs-keyword">throw</span>(err);
+                }
+                gcode += (key + v.toFixed(<span class="hljs-number">5</span>));
+            }
+        }.bind(<span class="hljs-keyword">this</span>));
+        log.debug(<span class="hljs-string">"emit_move: N"</span> + n + <span class="hljs-built_in">JSON</span>.stringify(gcode));
+        <span class="hljs-keyword">this</span>.emit_gcode(gcode);
+    }.bind(<span class="hljs-keyword">this</span>);
+
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.transforms.level.apply === <span class="hljs-literal">true</span>) {
+        <span class="hljs-keyword">if</span>(leveler.triangulationFailed() === <span class="hljs-literal">true</span>) {
+            log.error(<span class="hljs-string">"Point cloud not triangulated, impossible to do levelling."</span>);
+            <span class="hljs-keyword">return</span>;
+        }
+        <span class="hljs-keyword">var</span> previousHeight = leveler.foundHeight;
+        <span class="hljs-keyword">var</span> X = (tPt.X === <span class="hljs-literal">undefined</span>) ? <span class="hljs-keyword">this</span>.cmd_posx : tPt.X;
+        <span class="hljs-keyword">var</span> Y = (tPt.Y === <span class="hljs-literal">undefined</span>) ? <span class="hljs-keyword">this</span>.cmd_posy : tPt.Y;
+        <span class="hljs-keyword">if</span>(X === <span class="hljs-literal">undefined</span>) {
+            X = <span class="hljs-number">0</span>;
+        }
+        <span class="hljs-keyword">if</span>(Y === <span class="hljs-literal">undefined</span>) {
+            Y = <span class="hljs-number">0</span>;
+        }
+        <span class="hljs-keyword">var</span> theoriticalZ = (tPt.Z === <span class="hljs-literal">undefined</span>) ? <span class="hljs-keyword">this</span>.cmd_posz : tPt.Z;
+        <span class="hljs-keyword">if</span>(theoriticalZ === <span class="hljs-literal">undefined</span>) {
+            theoriticalZ = <span class="hljs-number">0</span>;
+        }
+
+        <span class="hljs-keyword">var</span> relativeHeight = leveler.findHeight(X, Y);
+        <span class="hljs-keyword">if</span>(relativeHeight === <span class="hljs-literal">false</span>) {
+            log.info(<span class="hljs-string">"[Leveler] Point outside of point cloud boundaries."</span>);
+            relativeHeight = <span class="hljs-number">0</span>;
+        }
+        tPt.Z = theoriticalZ + relativeHeight;
+        opFunction(tPt);
+        log.debug(<span class="hljs-string">"emit_move:level"</span>);
+    }
+    <span class="hljs-keyword">else</span> {
+        opFunction(tPt);
+    }
+
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load transform settings from the OpenSBP configuration</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype._setupTransforms = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    log.debug(<span class="hljs-string">"_setupTransforms"</span>);
+    <span class="hljs-keyword">this</span>.transforms = <span class="hljs-built_in">JSON</span>.parse(<span class="hljs-built_in">JSON</span>.stringify(config.opensbp.get(<span class="hljs-string">'transforms'</span>)));
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Transform the specified point
+TODO - Gordon, docs?</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.transformation = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">TranPt</span>)</span>{
+    <span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.transforms.rotate.apply !== <span class="hljs-literal">false</span>){
+        log.debug(<span class="hljs-string">"transformation = "</span> + <span class="hljs-built_in">JSON</span>.stringify(TranPt));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>log.debug(&quot;rotation apply = &quot; + this.transforms.rotate.apply);
+     log.debug(&quot;Rotate: &quot; + JSON.stringify(this.transforms.rotate));</p></div></div><div class="code"><div class="wrapper">        log.debug(<span class="hljs-string">"  cmd_posx = "</span> + <span class="hljs-keyword">this</span>.cmd_posx + <span class="hljs-string">"  cmd_posy = "</span> + <span class="hljs-keyword">this</span>.cmd_posy);
+        <span class="hljs-keyword">if</span> ( <span class="hljs-string">"X"</span> <span class="hljs-keyword">in</span> TranPt || <span class="hljs-string">"Y"</span> <span class="hljs-keyword">in</span> TranPt ){
+            <span class="hljs-keyword">if</span> ( !(<span class="hljs-string">"X"</span> <span class="hljs-keyword">in</span> TranPt) ) { TranPt.X = <span class="hljs-keyword">this</span>.cmd_posx; }
+            <span class="hljs-keyword">if</span> ( !(<span class="hljs-string">"Y"</span> <span class="hljs-keyword">in</span> TranPt) ) { TranPt.Y = <span class="hljs-keyword">this</span>.cmd_posy; }
+            log.debug(<span class="hljs-string">"transformation TranPt: "</span> + <span class="hljs-built_in">JSON</span>.stringify(TranPt));
+            <span class="hljs-keyword">var</span> angle = <span class="hljs-keyword">this</span>.transforms.rotate.angle;
+            <span class="hljs-keyword">var</span> x = TranPt.X;
+            <span class="hljs-keyword">var</span> y = TranPt.Y;
+            <span class="hljs-keyword">var</span> PtRotX = <span class="hljs-keyword">this</span>.transforms.rotate.x;
+            <span class="hljs-keyword">var</span> PtRotY = <span class="hljs-keyword">this</span>.transforms.rotate.y;
+            log.debug(<span class="hljs-string">"transformation: cmd_posx = "</span> + <span class="hljs-keyword">this</span>.cmd_posx + <span class="hljs-string">"  cmd_posy = "</span> + <span class="hljs-keyword">this</span>.cmd_posy);
+            TranPt = tform.rotate(TranPt,angle,PtRotX,PtRotY,<span class="hljs-keyword">this</span>.cmd_StartX,<span class="hljs-keyword">this</span>.cmd_StartY);
+        }
+    }
+    <span class="hljs-comment">////No angle being passed to shear functions so they return null</span>
+    <span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.transforms.shearx.apply != <span class="hljs-literal">false</span>){
+        log.debug(<span class="hljs-string">"ShearX: "</span> + <span class="hljs-built_in">JSON</span>.stringify(<span class="hljs-keyword">this</span>.transforms.shearx));
+        TranPt = tform.shearX(TranPt);
+    }
+    <span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.transforms.sheary.apply != <span class="hljs-literal">false</span>){
+        log.debug(<span class="hljs-string">"ShearY: "</span> + <span class="hljs-built_in">JSON</span>.stringify(<span class="hljs-keyword">this</span>.transforms.sheary));
+        TranPt = tform.shearY(TranPt);
+    }
+    <span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.transforms.scale.apply != <span class="hljs-literal">false</span>){
+        log.debug(<span class="hljs-string">"Scale: "</span> + <span class="hljs-built_in">JSON</span>.stringify(<span class="hljs-keyword">this</span>.transforms.scale));
+        <span class="hljs-keyword">var</span> ScaleX = <span class="hljs-keyword">this</span>.transforms.scale.scalex;
+        <span class="hljs-keyword">var</span> ScaleY = <span class="hljs-keyword">this</span>.transforms.scale.scaley;
+        <span class="hljs-keyword">var</span> PtX = <span class="hljs-keyword">this</span>.transforms.scale.x;
+        <span class="hljs-keyword">var</span> PtY = <span class="hljs-keyword">this</span>.transforms.scale.y;
+
+        TranPt = tform.scale(TranPt,ScaleX,ScaleY,PtX,PtY);
+    }
+    <span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.transforms.move.apply != <span class="hljs-literal">false</span>){
+        log.debug(<span class="hljs-string">"Move: "</span> + <span class="hljs-built_in">JSON</span>.stringify(<span class="hljs-keyword">this</span>.transforms.move));
+        TranPt = tform.translate(TranPt,
+                                 <span class="hljs-keyword">this</span>.transforms.move.x,
+                                 <span class="hljs-keyword">this</span>.transforms.move.y,
+                                 <span class="hljs-keyword">this</span>.transforms.move.z );
+    }
+
+    <span class="hljs-keyword">return</span> TranPt;
+
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Pause the currently running program</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.pause = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine.driver.status.stat == <span class="hljs-keyword">this</span>.machine.driver.STAT_END ||
+       <span class="hljs-keyword">this</span>.machine.driver.status.stat == <span class="hljs-keyword">this</span>.machine.driver.STAT_STOP) {
+        <span class="hljs-keyword">this</span>.pendingFeedhold = <span class="hljs-literal">true</span>;
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-keyword">this</span>.machine.driver.feedHold();
+    }
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Quit the currently running program
+If the machine is currently moving it will be stopped immediately and the program abandoned</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.quit = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.ok_to_disconnect) {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._end();
+    }
+
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine.status.state == <span class="hljs-string">'stopped'</span> || <span class="hljs-keyword">this</span>.machine.status.state == <span class="hljs-string">'paused'</span>) {
+        <span class="hljs-keyword">this</span>.machine.driver.quit();
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-keyword">this</span>.quit_pending = <span class="hljs-literal">true</span>;
+        <span class="hljs-keyword">this</span>.driver.quit();
+    }
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Resume a program from the paused state
+  TODO - make some indication that this action was successfil (resume is not always allowed, and sometimes it fails)</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.resume = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.resumeAllowed) {
+            <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.paused) {
+                <span class="hljs-keyword">this</span>.paused = <span class="hljs-literal">false</span>;
+                <span class="hljs-keyword">this</span>._executeNext();
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-keyword">this</span>.driver.resume();
+            }
+        }
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Enter the manual state
+This function is called by the SK command in order to bring up the keypad
+   message - The message for the top of the keypad display
+  callback - Called once the manual state is exited</p></div></div><div class="code"><div class="wrapper">SBPRuntime.prototype.manualEnter = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">message, callback</span>) </span>{
+    <span class="hljs-keyword">this</span>.inManualMode = <span class="hljs-literal">true</span>;
+    <span class="hljs-keyword">this</span>._update();
+    
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine) {
+        <span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'manual'</span>, message ? {<span class="hljs-string">'message'</span> : message } : <span class="hljs-literal">undefined</span>);
+        <span class="hljs-keyword">this</span>.machine.authorize();
+    }
+
+    <span class="hljs-keyword">this</span>.helper = <span class="hljs-keyword">new</span> ManualDriver(<span class="hljs-keyword">this</span>.driver, <span class="hljs-keyword">this</span>.stream);
+    <span class="hljs-keyword">this</span>.helper.enter().then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        <span class="hljs-keyword">this</span>.inManualMode = <span class="hljs-literal">false</span>;
+        <span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">"running"</span>);
+        <span class="hljs-keyword">this</span>._update();
+        <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.absoluteMode) {
+            <span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">'G90'</span>);
+        }
+        <span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">'G4 P0.1'</span>);
+        callback();
+    }.bind(<span class="hljs-keyword">this</span>));
+}
+
+exports.SBPRuntime = SBPRuntime;</div></div></div></div></body></html>

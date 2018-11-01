@@ -1,0 +1,165 @@
+<!DOCTYPE html><html lang="en"><head><title>runtime/opensbp/commands/jog</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../"><meta name="groc-document-path" content="runtime/opensbp/commands/jog"><meta name="groc-project-path" content="runtime/opensbp/commands/jog.js"><link rel="stylesheet" type="text/css" media="all" href="../../../assets/style.css"><script type="text/javascript" src="../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">runtime/opensbp/commands/jog.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../log'</span>).logger(<span class="hljs-string">'sbp'</span>);
+<span class="hljs-keyword">var</span> g2 = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../g2'</span>);
+<span class="hljs-keyword">var</span> sb3_commands = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../sb3_commands'</span>);
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../config'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Note that jogs don&#39;t need to be stack breakers, they only are to be consistent with sb3 behavior
+and to improve performance by breaking up large files.  Down the road, if the sender is improved, these
+should be made back into inline commands.</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jog (rapid) the X axis</p></div></div><div class="code"><div class="wrapper">exports.JX = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	<span class="hljs-keyword">var</span> x = args[<span class="hljs-number">0</span>];
+	<span class="hljs-keyword">if</span> ( x !== <span class="hljs-keyword">this</span>.cmd_posx ){
+		<span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(x)) { <span class="hljs-keyword">throw</span>( <span class="hljs-string">"Invalid JX argument: "</span> + x ); }
+		<span class="hljs-keyword">this</span>.cmd_posx = x;
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">"X"</span>:x});
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jog (rapid) the Y axis</p></div></div><div class="code"><div class="wrapper">exports.JY = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	<span class="hljs-keyword">var</span> y = args[<span class="hljs-number">0</span>];
+	<span class="hljs-keyword">if</span> ( y !== <span class="hljs-keyword">this</span>.cmd_posy ){
+		<span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(y)) { <span class="hljs-keyword">throw</span>( <span class="hljs-string">"Invalid JY argument: "</span> + y ); }
+		<span class="hljs-keyword">this</span>.cmd_posy = y;
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">"Y"</span>:y});
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jog (rapid) the Z axis</p></div></div><div class="code"><div class="wrapper">exports.JZ = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	<span class="hljs-keyword">var</span> z = args[<span class="hljs-number">0</span>];
+	<span class="hljs-keyword">if</span> ( z !== <span class="hljs-keyword">this</span>.cmd_posz ){
+		<span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(z)) { <span class="hljs-keyword">throw</span>( <span class="hljs-string">"Invalid JZ argument: "</span> + z ); }
+		<span class="hljs-keyword">this</span>.cmd_posz = z;
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">"Z"</span>:z});
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jog (rapid) the A axis</p></div></div><div class="code"><div class="wrapper">exports.JA = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	<span class="hljs-keyword">var</span> a = args[<span class="hljs-number">0</span>];
+	<span class="hljs-keyword">if</span> ( a !== <span class="hljs-keyword">this</span>.cmd_posa ){
+		<span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(a)) { <span class="hljs-keyword">throw</span>( <span class="hljs-string">"Invalid JA argument: "</span> + a ); }
+		<span class="hljs-keyword">this</span>.cmd_posa = a;
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">"A"</span>:a});
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jog (rapid) the B axis</p></div></div><div class="code"><div class="wrapper">exports.JB = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	<span class="hljs-keyword">var</span> b = args[<span class="hljs-number">0</span>];
+	<span class="hljs-keyword">if</span> ( b !== <span class="hljs-keyword">this</span>.cmd_posb ){
+		<span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(b)) { <span class="hljs-keyword">throw</span>( <span class="hljs-string">"Invalid JB argument: "</span> + b ); }
+		<span class="hljs-keyword">this</span>.cmd_posb = b;
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">"B"</span>:b});
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jog (rapid) the C axis</p></div></div><div class="code"><div class="wrapper">exports.JC = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	<span class="hljs-keyword">var</span> c = args[<span class="hljs-number">0</span>];
+	<span class="hljs-keyword">if</span> ( c !== <span class="hljs-keyword">this</span>.cmd_posc ){
+		<span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(c)) { <span class="hljs-keyword">throw</span>( <span class="hljs-string">"Invalid JC argument: "</span> + c ); }
+		<span class="hljs-keyword">this</span>.cmd_posc = c;
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">"C"</span>:c});
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jog (rapid) 2 axes (XY).This is a modal command, any axis location that is left out
+  of the command will default to it&#39;s current position and not move</p></div></div><div class="code"><div class="wrapper">exports.J2 = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+    <span class="hljs-keyword">var</span> params = process_jog.bind(<span class="hljs-keyword">this</span>)(args);
+	<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.cmd_result &lt; <span class="hljs-number">2</span> ){
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,params);
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jog (rapid) 3 axes (XYZ). This is a modal command, any axis location that is left out
+  of the command will default to it&#39;s current position and not move</p></div></div><div class="code"><div class="wrapper">exports.J3 = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+    <span class="hljs-keyword">var</span> params = process_jog.bind(<span class="hljs-keyword">this</span>)(args);
+	<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.cmd_result &lt; <span class="hljs-number">3</span> ){
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,params);
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jog (rapid) 4 axes (XYZA). This is a modal command, any axis location that is left out
+  of the command will default to it&#39;s current position and not move</p></div></div><div class="code"><div class="wrapper">exports.J4 = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+    <span class="hljs-keyword">var</span> params = process_jog.bind(<span class="hljs-keyword">this</span>)(args);
+    <span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.cmd_result &lt; <span class="hljs-number">4</span> ){
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,params);
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jog (rapid) 5 axes (XYZAB). This is a modal command, any axis location that is left out
+  of the command will default to it&#39;s current position and not move</p></div></div><div class="code"><div class="wrapper">exports.J5 = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+    <span class="hljs-keyword">var</span> params = process_jog.bind(<span class="hljs-keyword">this</span>)(args);
+    <span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.cmd_result &lt; <span class="hljs-number">5</span> ){
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,params);
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jog (rapid) 6 axes (XYZABC). This is a modal command, any axis location that is left out
+  of the command will default to it&#39;s current position and not move</p></div></div><div class="code"><div class="wrapper">exports.J6 = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+    <span class="hljs-keyword">var</span> params = process_jog.bind(<span class="hljs-keyword">this</span>)(args);
+    <span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.cmd_result &lt; <span class="hljs-number">6</span> ){
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,params);
+	}
+};
+
+process_jog = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>   log.debug(&quot; process_jog: &quot; + JSON.stringify(args));</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> params = {};
+	<span class="hljs-keyword">this</span>.cmd_result = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">if</span>( args[<span class="hljs-number">0</span>] === <span class="hljs-number">0</span> || args[<span class="hljs-number">0</span>] &amp;&amp; <span class="hljs-keyword">typeof</span> args[<span class="hljs-number">0</span>] === <span class="hljs-string">"number"</span>){  <span class="hljs-comment">//args[0] === 0 ||</span>
+		params.X = args[<span class="hljs-number">0</span>];
+		<span class="hljs-keyword">if</span> ( params.X === <span class="hljs-keyword">this</span>.cmd_posx ) { <span class="hljs-keyword">this</span>.cmd_result += <span class="hljs-number">1</span>; }
+	}
+	<span class="hljs-keyword">if</span>( args[<span class="hljs-number">1</span>] === <span class="hljs-number">0</span> || args[<span class="hljs-number">1</span>] &amp;&amp; <span class="hljs-keyword">typeof</span> args[<span class="hljs-number">1</span>] === <span class="hljs-string">"number"</span>){  <span class="hljs-comment">//args[1] === 0 || </span>
+		params.Y = args[<span class="hljs-number">1</span>];
+		<span class="hljs-keyword">if</span> ( params.Y === <span class="hljs-keyword">this</span>.cmd_posy ) { <span class="hljs-keyword">this</span>.cmd_result += <span class="hljs-number">1</span>; }
+	}  
+	<span class="hljs-keyword">if</span>(args[<span class="hljs-number">2</span>] === <span class="hljs-number">0</span> || args[<span class="hljs-number">2</span>] &amp;&amp; <span class="hljs-keyword">typeof</span> args[<span class="hljs-number">2</span>] === <span class="hljs-string">"number"</span>){ 
+		params.Z = args[<span class="hljs-number">2</span>];
+		<span class="hljs-keyword">if</span> ( params.Z === <span class="hljs-keyword">this</span>.cmd_posz ) { <span class="hljs-keyword">this</span>.cmd_result += <span class="hljs-number">1</span>; }
+	}  
+	<span class="hljs-keyword">if</span>(args[<span class="hljs-number">3</span>] === <span class="hljs-number">0</span> || args[<span class="hljs-number">3</span>] &amp;&amp; <span class="hljs-keyword">typeof</span> args[<span class="hljs-number">3</span>] === <span class="hljs-string">"number"</span>){ 
+		params.A = args[<span class="hljs-number">3</span>];
+		<span class="hljs-keyword">if</span> ( params.A === <span class="hljs-keyword">this</span>.cmd_posa ) { <span class="hljs-keyword">this</span>.cmd_result += <span class="hljs-number">1</span>; }
+	}
+	<span class="hljs-keyword">if</span>(args[<span class="hljs-number">4</span>] === <span class="hljs-number">0</span> || args[<span class="hljs-number">4</span>] &amp;&amp; <span class="hljs-keyword">typeof</span> args[<span class="hljs-number">4</span>] === <span class="hljs-string">"number"</span>){ 
+		params.B = args[<span class="hljs-number">4</span>];
+		<span class="hljs-keyword">if</span> ( params.B === <span class="hljs-keyword">this</span>.cmd_posb ) { <span class="hljs-keyword">this</span>.cmd_result += <span class="hljs-number">1</span>; }
+	}  
+	<span class="hljs-keyword">if</span>(args[<span class="hljs-number">5</span>] === <span class="hljs-number">0</span> || args[<span class="hljs-number">5</span>] &amp;&amp; <span class="hljs-keyword">typeof</span> args[<span class="hljs-number">5</span>] === <span class="hljs-string">"number"</span>){ 
+		params.C = args[<span class="hljs-number">5</span>];
+		<span class="hljs-keyword">if</span> ( params.C === <span class="hljs-keyword">this</span>.cmd_posc ) { <span class="hljs-keyword">this</span>.cmd_result += <span class="hljs-number">1</span>; }
+	}  
+
+	<span class="hljs-keyword">return</span> params;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jog (rapid) XY to the Home position (0,0) </p></div></div><div class="code"><div class="wrapper">exports.JH = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	<span class="hljs-keyword">var</span> x = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">var</span> y = <span class="hljs-number">0</span>;
+ 	<span class="hljs-keyword">var</span> z = <span class="hljs-keyword">this</span>.cmd_posz;
+	<span class="hljs-keyword">var</span> safeZ = config.opensbp.get(<span class="hljs-string">'safeZpullUp'</span>);
+
+	log.debug( <span class="hljs-string">"JH"</span> );
+	log.debug( <span class="hljs-string">"  z = "</span> + z);
+ 	<span class="hljs-keyword">if</span> ( z &lt; safeZ ){
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">"Z"</span>:safeZ});
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">"X"</span>:x,<span class="hljs-string">"Y"</span>:y});
+	}
+	<span class="hljs-keyword">else</span>{
+		<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">"X"</span>:x,<span class="hljs-string">"Y"</span>:y});
+	}
+	<span class="hljs-keyword">this</span>.cmd_posx = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">this</span>.cmd_posy = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">this</span>.cmd_posz = safeZ;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the Jog (Rapid) speed for any of the 6 axes
+This is a stack break command that won&#39;t change the persistent
+  setting of jog speed. Once a file has stopped the jog speed
+  back to the persistent values in G2.json</p></div></div><div class="code"><div class="wrapper">exports.JS = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{
+	<span class="hljs-keyword">var</span> speed_change = <span class="hljs-number">0.0</span>;
+
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">0</span>] !== <span class="hljs-literal">undefined</span>) {
+		speed_change = args[<span class="hljs-number">0</span>];
+		<span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(speed_change)) { <span class="hljs-keyword">throw</span> <span class="hljs-string">"Invalid JS-XY argument: "</span> + speed_change; }
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'xvm'</span>:(<span class="hljs-number">60</span> * speed_change)});
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'yvm'</span>:(<span class="hljs-number">60</span> * speed_change)});
+		<span class="hljs-keyword">this</span>.jogspeed_xy = speed_change;
+	}
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">1</span>] !== <span class="hljs-literal">undefined</span>) {
+		speed_change = args[<span class="hljs-number">1</span>];
+		<span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(speed_change)) { <span class="hljs-keyword">throw</span> <span class="hljs-string">"Invalid JS-Z argument: "</span> + speed_change; }
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'zvm'</span>:(<span class="hljs-number">60</span> * speed_change)});
+		<span class="hljs-keyword">this</span>.jogspeed_z = speed_change;
+	}
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">2</span>] !== <span class="hljs-literal">undefined</span>) {
+		speed_change = args[<span class="hljs-number">2</span>];
+		<span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(speed_change)) { <span class="hljs-keyword">throw</span> <span class="hljs-string">"Invalid JS-A argument: "</span> + speed_change; }
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'avm'</span>:(<span class="hljs-number">60</span> * speed_change)});
+		<span class="hljs-keyword">this</span>.jogspeed_a = speed_change;
+	}
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">3</span>] !== <span class="hljs-literal">undefined</span>) {
+		speed_change = args[<span class="hljs-number">3</span>];
+		<span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(speed_change)) { <span class="hljs-keyword">throw</span> <span class="hljs-string">"Invalid JS-B argument: "</span> + speed_change; }
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'bvm'</span>:(<span class="hljs-number">60</span> * speed_change)});
+		<span class="hljs-keyword">this</span>.jogspeed_b = speed_change;
+	}
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">4</span>] !== <span class="hljs-literal">undefined</span>) {
+		speed_change = args[<span class="hljs-number">4</span>];
+		<span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(speed_change)) { <span class="hljs-keyword">throw</span> <span class="hljs-string">"Invalid JS-C argument: "</span> + speed_change; }
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'cvm'</span>:(<span class="hljs-number">60</span> * speed_change)});
+		<span class="hljs-keyword">this</span>.jogspeed_c = speed_change;
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>We have created the objects containing both the values to set on the G2 driver as well as for shopbot
+Now send them to their appropriate places (shopbot first, followed by G2)</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">this</span>.vs_change = <span class="hljs-number">1</span>;	
+	callback();
+};</div></div></div></div></body></html>

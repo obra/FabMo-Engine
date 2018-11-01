@@ -1,0 +1,40 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/css/curCSS</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/css/curCSS"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/css/curCSS.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/css/curCSS.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"../core"</span>,
+	<span class="hljs-string">"./var/rnumnonpx"</span>,
+	<span class="hljs-string">"./var/rmargin"</span>,
+	<span class="hljs-string">"./var/getStyles"</span>,
+	<span class="hljs-string">"../selector"</span> <span class="hljs-comment">// contains</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery, rnumnonpx, rmargin, getStyles </span>) </span>{
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">curCSS</span>(<span class="hljs-params"> elem, name, computed </span>) </span>{
+	<span class="hljs-keyword">var</span> width, minWidth, maxWidth, ret,
+		style = elem.style;
+
+	computed = computed || getStyles( elem );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: IE9
+getPropertyValue is only needed for .css(&#39;filter&#39;) (#12537)</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( computed ) {
+		ret = computed.getPropertyValue( name ) || computed[ name ];
+	}
+
+	<span class="hljs-keyword">if</span> ( computed ) {
+
+		<span class="hljs-keyword">if</span> ( ret === <span class="hljs-string">""</span> &amp;&amp; !jQuery.contains( elem.ownerDocument, elem ) ) {
+			ret = jQuery.style( elem, name );
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: iOS &lt; 6
+A tribute to the &quot;awesome hack by Dean Edwards&quot;
+iOS &lt; 6 (at least) returns percentage for a larger set of values, but width seems to be reliably pixels
+this is against the CSSOM draft spec: <a href="http://dev.w3.org/csswg/cssom/#resolved-values">http://dev.w3.org/csswg/cssom/#resolved-values</a></p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( rnumnonpx.test( ret ) &amp;&amp; rmargin.test( name ) ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Remember the original values</p></div></div><div class="code"><div class="wrapper">			width = style.width;
+			minWidth = style.minWidth;
+			maxWidth = style.maxWidth;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Put in the new values to get a computed value out</p></div></div><div class="code"><div class="wrapper">			style.minWidth = style.maxWidth = style.width = ret;
+			ret = computed.width;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Revert the changed values</p></div></div><div class="code"><div class="wrapper">			style.width = width;
+			style.minWidth = minWidth;
+			style.maxWidth = maxWidth;
+		}
+	}
+
+	<span class="hljs-keyword">return</span> ret !== <span class="hljs-literal">undefined</span> ?</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: IE
+IE returns zIndex value as an integer.</p></div></div><div class="code"><div class="wrapper">		ret + <span class="hljs-string">""</span> :
+		ret;
+}
+
+<span class="hljs-keyword">return</span> curCSS;
+});</div></div></div></div></body></html>

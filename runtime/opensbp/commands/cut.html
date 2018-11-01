@@ -1,0 +1,741 @@
+<!DOCTYPE html><html lang="en"><head><title>runtime/opensbp/commands/cut</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../"><meta name="groc-document-path" content="runtime/opensbp/commands/cut"><meta name="groc-project-path" content="runtime/opensbp/commands/cut.js"><link rel="stylesheet" type="text/css" media="all" href="../../../assets/style.css"><script type="text/javascript" src="../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">runtime/opensbp/commands/cut.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../log'</span>).logger(<span class="hljs-string">'sbp'</span>);
+<span class="hljs-keyword">var</span> g2 = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../g2'</span>);
+<span class="hljs-keyword">var</span> sb3_commands = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../sb3_commands'</span>);
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../config'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>CUTS 
+ The CA command will cut an arc as defined by its cord length, height and angle from start
+     to end.</p>
+<p> Usage: CA,Cord Length,Height off Cord,<I-O-T>,<Direction>,
+           <Alignment Angle>,<Plunge Depth>,<Repetitions>,
+           <X Proportion>,<Y Proportion>,<Skip>,<No Pull Up after cut>,
+           <Plunge from Z zero></p></div></div><div class="code"><div class="wrapper">exports.CA = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+  <span class="hljs-keyword">var</span> startX = <span class="hljs-keyword">this</span>.cmd_posx;
+  <span class="hljs-keyword">var</span> startY = <span class="hljs-keyword">this</span>.cmd_posy;
+  <span class="hljs-keyword">var</span> startZ = <span class="hljs-keyword">this</span>.cmd_posz;
+  <span class="hljs-keyword">var</span> len = args[<span class="hljs-number">0</span>] !== <span class="hljs-literal">undefined</span> ? <span class="hljs-built_in">Math</span>.abs(args[<span class="hljs-number">0</span>]) : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> ht  = args[<span class="hljs-number">1</span>] !== <span class="hljs-literal">undefined</span> ? <span class="hljs-built_in">Math</span>.abs(args[<span class="hljs-number">1</span>]) : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> inStr = args[<span class="hljs-number">2</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">2</span>].toUpperCase() : <span class="hljs-string">'T'</span>;
+  <span class="hljs-keyword">var</span> OIT = (inStr === <span class="hljs-string">'O'</span> || inStr === <span class="hljs-string">'I'</span> || inStr === <span class="hljs-string">'T'</span>) ? inStr : <span class="hljs-string">'T'</span>;
+  <span class="hljs-keyword">var</span> Dir = args[<span class="hljs-number">3</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">3</span>] : <span class="hljs-number">1</span>;
+  <span class="hljs-keyword">var</span> angle = args[<span class="hljs-number">4</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">4</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> Plg  = args[<span class="hljs-number">5</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">5</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> reps = args[<span class="hljs-number">6</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">6</span>] : <span class="hljs-number">1</span>; 
+  <span class="hljs-keyword">var</span> propX = args[<span class="hljs-number">7</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">7</span>] : <span class="hljs-number">1</span>;
+  <span class="hljs-keyword">var</span> propY = args[<span class="hljs-number">8</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">8</span>] : <span class="hljs-number">1</span>;
+  <span class="hljs-keyword">var</span> tabs = args[<span class="hljs-number">9</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">9</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> noPullUp = args[<span class="hljs-number">10</span>] !== <span class="hljs-literal">undefined</span> ? [<span class="hljs-number">10</span>] : <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> plgFromZero = args[<span class="hljs-number">11</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">11</span>] : <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> comp = <span class="hljs-number">0</span>;
+
+  <span class="hljs-keyword">if</span> (OIT === <span class="hljs-string">'O'</span>) {
+    comp = <span class="hljs-number">1</span>;
+  } 
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (OIT === <span class="hljs-string">'I'</span>) {
+    comp = -<span class="hljs-number">1</span>;
+  }
+
+  <span class="hljs-keyword">var</span> radius = (ht/<span class="hljs-number">2</span>) + ((len*len) / (<span class="hljs-number">8</span>*ht)) + (config.opensbp.get(<span class="hljs-string">'cutterDia'</span>)/<span class="hljs-number">2</span> * comp);
+
+  <span class="hljs-keyword">if</span> ( radius === <span class="hljs-literal">undefined</span> || radius &lt;= <span class="hljs-number">0</span> ){
+    <span class="hljs-keyword">throw</span>( <span class="hljs-string">"Invalid CA circle: Zero Radius"</span> );
+  }
+
+  <span class="hljs-keyword">var</span> xOffset = startX + (len/<span class="hljs-number">2</span>);
+  <span class="hljs-keyword">var</span> yOffset = startY + (ht - radius);
+
+  <span class="hljs-keyword">var</span> endX = startX + len;
+  <span class="hljs-keyword">var</span> endY = startY;
+
+  <span class="hljs-keyword">if</span> (Dir === -<span class="hljs-number">1</span>) {
+    xOffset *= (-<span class="hljs-number">1</span>);
+    endX = startX - len;
+  }
+
+  <span class="hljs-keyword">this</span>.CG([<span class="hljs-literal">undefined</span>,endX,endY,xOffset,yOffset,OIT,Dir,Plg,reps,propX,propY,<span class="hljs-literal">undefined</span>,noPullUp,plgFromZero]);
+
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p> The CC command will cut a circle/arc as defined by its diameter.</p>
+<p> Usage: CC,<Dia>,<I-O-T>,<Direction>,<Begin Angle>,<End Angle>,<Plunge Depth>,
+           <Repetitions>,<X Prop>,<Y Prop>,<Options-2=Pocket,3=Spiral Plunge,
+            4=Spiral Plunge with Bottom pass>,<No Pull Up after cut>,
+           <Plunge from Z zero></p></div></div><div class="code"><div class="wrapper">exports.CC = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+  <span class="hljs-keyword">var</span> CCstartX = <span class="hljs-keyword">this</span>.cmd_posx;
+  <span class="hljs-keyword">var</span> CCstartY = <span class="hljs-keyword">this</span>.cmd_posy;
+  <span class="hljs-keyword">var</span> CCstartZ = <span class="hljs-keyword">this</span>.cmd_posz;
+  <span class="hljs-keyword">var</span> Dia = args[<span class="hljs-number">0</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">0</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> inStr = args[<span class="hljs-number">1</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">1</span>].toUpperCase() : <span class="hljs-string">'T'</span>;
+  <span class="hljs-keyword">var</span> OIT = (inStr === <span class="hljs-string">'O'</span> || inStr === <span class="hljs-string">'I'</span> || inStr === <span class="hljs-string">'T'</span>) ? inStr : <span class="hljs-string">'T'</span>;
+  <span class="hljs-keyword">var</span> Dir = args[<span class="hljs-number">2</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">2</span>] : <span class="hljs-number">1</span>;
+  <span class="hljs-keyword">var</span> Bang = args[<span class="hljs-number">3</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">3</span>] : <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> Eang = args[<span class="hljs-number">4</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">4</span>] : <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> Plg = args[<span class="hljs-number">5</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">5</span>] : <span class="hljs-literal">undefined</span>; 
+  <span class="hljs-keyword">var</span> reps = args[<span class="hljs-number">6</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">6</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> propX = args[<span class="hljs-number">7</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">7</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> propY = args[<span class="hljs-number">8</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">8</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> optCC = args[<span class="hljs-number">9</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">9</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> noPullUp = args[<span class="hljs-number">10</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">10</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> plgFromZero = args[<span class="hljs-number">11</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">11</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> comp = <span class="hljs-number">0</span>;
+
+  log.debug(<span class="hljs-string">"CC:   startX = "</span> + CCstartX + <span class="hljs-string">"  startY = "</span> + CCstartY + <span class="hljs-string">"  startZ = "</span> + CCstartZ );
+
+  <span class="hljs-keyword">if</span> (OIT === <span class="hljs-string">'O'</span>) {
+    comp = <span class="hljs-number">1</span>;
+  } 
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (OIT === <span class="hljs-string">'I'</span>) {
+    comp = -<span class="hljs-number">1</span>;
+  }
+  <span class="hljs-keyword">if</span> ( Dia === <span class="hljs-literal">undefined</span> || Dia &lt;= <span class="hljs-number">0</span> ){</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Error: Zero diameter circle</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">throw</span>( <span class="hljs-string">"Invalid CC circle: Zero diameter"</span> ); 
+  }
+
+  <span class="hljs-keyword">var</span> WBang = <span class="hljs-number">450</span> - Bang;
+  <span class="hljs-keyword">if</span> ( WBang &gt; <span class="hljs-number">360</span> || WBang === <span class="hljs-number">360</span> ) { 
+    WBang -= <span class="hljs-number">360</span>;
+  } 
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( WBang &lt; -<span class="hljs-number">360</span> || WBang === -<span class="hljs-number">360</span> ) {
+    WBang += <span class="hljs-number">360</span>;
+  }
+  <span class="hljs-keyword">var</span> Bradians = WBang*<span class="hljs-number">0.01745329252</span>;
+
+  <span class="hljs-keyword">var</span> WEang = <span class="hljs-number">450</span> - Eang;
+  <span class="hljs-keyword">if</span> ( WEang &gt; <span class="hljs-number">360</span> || WEang === <span class="hljs-number">360</span> ) { 
+    WEang -= <span class="hljs-number">360</span>;
+  }
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( WEang &lt; -<span class="hljs-number">360</span> || WEang === -<span class="hljs-number">360</span> ) {
+    WEang += <span class="hljs-number">360</span>;
+  }
+  <span class="hljs-keyword">var</span> Eradians = WEang*<span class="hljs-number">0.01745329252</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Find Center offset</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">var</span> radius = Dia/<span class="hljs-number">2</span> + (config.opensbp.get(<span class="hljs-string">'cutterDia'</span>)/<span class="hljs-number">2</span> * comp);
+  <span class="hljs-keyword">var</span> centerX = CCstartX + (radius * <span class="hljs-built_in">Math</span>.cos(Bradians + <span class="hljs-built_in">Math</span>.PI));
+  <span class="hljs-keyword">var</span> centerY = CCstartY + (radius * <span class="hljs-built_in">Math</span>.sin(Bradians + <span class="hljs-built_in">Math</span>.PI));
+  <span class="hljs-keyword">var</span> xOffset = centerX - CCstartX;
+  <span class="hljs-keyword">var</span> yOffset = centerY - CCstartY;
+  <span class="hljs-keyword">var</span> endX;
+  <span class="hljs-keyword">var</span> endY;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Find End point</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">if</span> ( Bang === Eang ){
+    endX = CCstartX;
+    endY = CCstartY;
+  }
+  <span class="hljs-keyword">else</span> {
+    endX = centerX + radius * <span class="hljs-built_in">Math</span>.cos(Eradians);
+    endY = centerY + radius * <span class="hljs-built_in">Math</span>.sin(Eradians);
+  }
+
+  <span class="hljs-keyword">this</span>.CG([<span class="hljs-literal">undefined</span>,endX,endY,xOffset,yOffset,OIT,Dir,Plg,reps,propX,propY,optCC,noPullUp,plgFromZero]);
+
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p> The CP command will cut a circle as defined by its center point.</p>
+<p> Usage: CP,<Dia>,<X Center>,<Y Center>,<I-O-T>,<Direction>,
+           <Begin Angle>,<End Angle>,<Plunge Depth>,
+           <Repetitions>,<X-Proportion>,<Y-Proportion>,<Options-
+            2=Pocket,3=Spiral Plunge,4=Spiral Plunge with
+            Bottom pass>,<No Pull Up after cut>,
+           <Plunge from Z zero></p></div></div><div class="code"><div class="wrapper">exports.CP = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+  <span class="hljs-keyword">var</span> CPstartZ = <span class="hljs-keyword">this</span>.cmd_posz;
+  <span class="hljs-keyword">var</span> Dia = args[<span class="hljs-number">0</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">0</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> centerX = args[<span class="hljs-number">1</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">1</span>] : <span class="hljs-keyword">this</span>.cmd_posx;
+  <span class="hljs-keyword">var</span> centerY = args[<span class="hljs-number">2</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">2</span>] : <span class="hljs-keyword">this</span>.cmd_posy;
+  <span class="hljs-keyword">var</span> inStr = args[<span class="hljs-number">3</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">3</span>].toUpperCase() : <span class="hljs-string">'T'</span>;
+  <span class="hljs-keyword">var</span> OIT = (inStr === <span class="hljs-string">'O'</span> || inStr === <span class="hljs-string">'I'</span> || inStr === <span class="hljs-string">'T'</span>) ? inStr : <span class="hljs-string">'T'</span>;
+  <span class="hljs-keyword">var</span> Dir = args[<span class="hljs-number">4</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">4</span>] : <span class="hljs-number">1</span>;
+  <span class="hljs-keyword">var</span> Bang = args[<span class="hljs-number">5</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">5</span>] : <span class="hljs-number">0</span>; 
+  <span class="hljs-keyword">var</span> Eang = args[<span class="hljs-number">6</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">6</span>] : <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> Plg = args[<span class="hljs-number">7</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">7</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> reps = args[<span class="hljs-number">8</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">8</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> propX = args[<span class="hljs-number">9</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">9</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> propY = args[<span class="hljs-number">10</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">10</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> optCP = args[<span class="hljs-number">11</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">11</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> noPullUp = args[<span class="hljs-number">12</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">12</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> plgFromZero = args[<span class="hljs-number">13</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">13</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> res = <span class="hljs-number">5</span>;
+  <span class="hljs-keyword">var</span> comp = <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> feedrate = <span class="hljs-number">0</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>log.debug(&quot;CP: &quot; + JSON.stringify(args));</p></div></div><div class="code"><div class="wrapper">  
+  <span class="hljs-keyword">if</span> (OIT === <span class="hljs-string">'O'</span>) { comp = <span class="hljs-number">1</span>; } 
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (OIT === <span class="hljs-string">'I'</span>) { comp = -<span class="hljs-number">1</span>; }
+
+  <span class="hljs-keyword">if</span> ( Dia === <span class="hljs-literal">undefined</span> || Dia &lt;= <span class="hljs-number">0</span> ){
+    <span class="hljs-keyword">throw</span>( <span class="hljs-string">"Zero diameter circle: CC"</span> );
+  }
+
+  <span class="hljs-keyword">var</span> WBang = <span class="hljs-number">450</span> - Bang;
+  <span class="hljs-keyword">if</span> ( WBang &gt; <span class="hljs-number">360</span> || WBang === <span class="hljs-number">360</span> ) { WBang -= <span class="hljs-number">360</span>; } 
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( WBang &lt; -<span class="hljs-number">360</span> || WBang === -<span class="hljs-number">360</span> ) { WBang += <span class="hljs-number">360</span>; }
+  <span class="hljs-keyword">var</span> Bradians = WBang*<span class="hljs-number">0.01745329252</span>;
+
+  <span class="hljs-keyword">var</span> WEang = <span class="hljs-number">450</span> - Eang;
+  <span class="hljs-keyword">if</span> ( WEang &gt; <span class="hljs-number">360</span> || WEang === <span class="hljs-number">360</span> ) { WEang -= <span class="hljs-number">360</span>; }
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( WEang &lt; -<span class="hljs-number">360</span> || WEang === -<span class="hljs-number">360</span> ) { WEang += <span class="hljs-number">360</span>; }
+  <span class="hljs-keyword">var</span> Eradians = WEang*<span class="hljs-number">0.01745329252</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Find Center offset</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">var</span> radius = Dia/<span class="hljs-number">2</span> + (config.opensbp.get(<span class="hljs-string">'cutterDia'</span>)/<span class="hljs-number">2</span> * comp);
+  <span class="hljs-keyword">var</span> CPstartX = centerX + (radius * <span class="hljs-built_in">Math</span>.cos(Bradians));
+  <span class="hljs-keyword">var</span> CPstartY = centerY + (radius * <span class="hljs-built_in">Math</span>.sin(Bradians));
+  <span class="hljs-keyword">var</span> xOffset = <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">if</span> ( Bang !== <span class="hljs-number">0</span> &amp;&amp; Bang !== <span class="hljs-number">180</span> ) { xOffset = centerX - CPstartX; }
+  <span class="hljs-keyword">var</span> yOffset = <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">if</span> ( Eang !== <span class="hljs-number">90</span> &amp;&amp; Eang != <span class="hljs-number">270</span> ) { yOffset = centerY - CPstartY; }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Find End point</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">var</span> endX = centerX + (radius * <span class="hljs-built_in">Math</span>.cos(Eradians));
+  <span class="hljs-keyword">var</span> endY = centerY + (radius * <span class="hljs-built_in">Math</span>.sin(Eradians));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Move to Start position if not already there</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">if</span>( <span class="hljs-keyword">this</span>.cmd_posx !== CPstartX || <span class="hljs-keyword">this</span>.cmd_posy !== CPstartY ){
+    feedrate = <span class="hljs-keyword">this</span>.movespeed_xy * <span class="hljs-number">60</span>;
+    <span class="hljs-keyword">var</span> safeZ = config.opensbp.get(<span class="hljs-string">'safeZpullUp'</span>);
+    <span class="hljs-keyword">if</span>( CPstartZ &lt; safeZ &amp;&amp; <span class="hljs-keyword">this</span>.lastNoZPullup !== <span class="hljs-number">1</span> ){
+      <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">'Z'</span>:safeZ,<span class="hljs-string">'F'</span>:feedrate});
+      <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">'X'</span>:CPstartX,<span class="hljs-string">'Y'</span>:CPstartY});
+    }
+    <span class="hljs-keyword">else</span> {
+      <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">'X'</span>:CPstartX,<span class="hljs-string">'Y'</span>:CPstartY});
+    }
+    <span class="hljs-keyword">if</span>( <span class="hljs-keyword">this</span>.cmd_posz !== CPstartZ &amp;&amp; <span class="hljs-keyword">this</span>.lastNoZPullup !== <span class="hljs-number">1</span> ){
+      <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G1'</span>,{<span class="hljs-string">'Z'</span>:CPstartZ,<span class="hljs-string">'F'</span>:feedrate});
+    }
+  }
+  <span class="hljs-keyword">this</span>.CG([<span class="hljs-literal">undefined</span>,endX,endY,xOffset,yOffset,OIT,Dir,Plg,reps,propX,propY,optCP,noPullUp,plgFromZero]);
+
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The CG command will cut a circle. This command closely resembles a G-code circle (G02 or G03)
+ Though, this command has several added features that its G-code counterparts don&#39;t:</p>
+<ul>
+<li>Spiral plunge with multiple passes<ul>
+<li>Pocketing</li>
+<li>Pocketing with multiple passes
+Can also be used for Arcs and Arcs with multiple passes</li>
+</ul>
+</li>
+</ul>
+<p>Usage: CG,<Dia - not used>,X-End,Y-End,X-Center,Y-Center,<I-O-T>,
+           <Direction>,<Plunge Depth>,<Repetitions>,<Proportion X>,<Proportion Y>,
+           <Options-2=Pocket,3=Spiral Plunge,4=Spiral Plunge with 
+            Bottom pass>,<No Pull Up at end>,<Plunge depth from Z zero></p></div></div><div class="code"><div class="wrapper">exports.CG = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+  <span class="hljs-keyword">var</span> CGstartX = <span class="hljs-keyword">this</span>.cmd_StartX = <span class="hljs-keyword">this</span>.cmd_posx;
+  <span class="hljs-keyword">var</span> CGstartY = <span class="hljs-keyword">this</span>.cmd_StartY = <span class="hljs-keyword">this</span>.cmd_posy;
+  <span class="hljs-keyword">var</span> CGstartZ = <span class="hljs-keyword">this</span>.cmd_StartZ = <span class="hljs-keyword">this</span>.cmd_posz;
+  <span class="hljs-keyword">var</span> endX = args[<span class="hljs-number">1</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">1</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> endY = args[<span class="hljs-number">2</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">2</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> centerX = args[<span class="hljs-number">3</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">3</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> centerY = args[<span class="hljs-number">4</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">4</span>] : <span class="hljs-literal">undefined</span>;
+  <span class="hljs-keyword">var</span> inStr = args[<span class="hljs-number">5</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">5</span>].toUpperCase() : <span class="hljs-string">'T'</span>;
+  <span class="hljs-keyword">var</span> OIT = (inStr === <span class="hljs-string">'O'</span> || inStr === <span class="hljs-string">'I'</span> || inStr === <span class="hljs-string">'T'</span>) ? inStr : <span class="hljs-string">'T'</span>;
+  <span class="hljs-keyword">var</span> Dir = args[<span class="hljs-number">6</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">6</span>] : <span class="hljs-number">1</span>; 
+  <span class="hljs-keyword">var</span> Plg = args[<span class="hljs-number">7</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">7</span>] : <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> reps = args[<span class="hljs-number">8</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">8</span>] : <span class="hljs-number">1</span>;
+  <span class="hljs-keyword">var</span> propX = args[<span class="hljs-number">9</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">9</span>] : <span class="hljs-number">1</span>;
+  <span class="hljs-keyword">var</span> propY = args[<span class="hljs-number">10</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">10</span>] : <span class="hljs-number">1</span>;
+  <span class="hljs-keyword">var</span> optCG = args[<span class="hljs-number">11</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">11</span>] : <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> noPullUp = args[<span class="hljs-number">12</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">12</span>] : <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> plgFromZero = args[<span class="hljs-number">13</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">13</span>] : <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> feedrateXY = <span class="hljs-keyword">this</span>.movespeed_xy * <span class="hljs-number">60</span>;
+  <span class="hljs-keyword">var</span> feedrateZ = <span class="hljs-keyword">this</span>.movespeed_z * <span class="hljs-number">60</span>;
+	<span class="hljs-keyword">var</span> currentZ;
+	<span class="hljs-keyword">var</span> outStr;
+  <span class="hljs-keyword">var</span> tolerance = <span class="hljs-number">0.000001</span>;
+  <span class="hljs-keyword">var</span> Pocket_StepX = <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> Pocket_StepY = <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> PocketAngle = <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> j = <span class="hljs-number">0</span>;
+
+  <span class="hljs-keyword">this</span>.lastNoZPullup = plgFromZero;
+
+  <span class="hljs-keyword">if</span> ((centerX === <span class="hljs-number">0</span> || centerX === <span class="hljs-literal">undefined</span>) &amp;&amp; (centerY === <span class="hljs-number">0</span> || centerY === <span class="hljs-literal">undefined</span>)){
+    <span class="hljs-keyword">throw</span>( <span class="hljs-string">"Invalid CG circle: Zero diameter"</span> );
+  }
+
+  <span class="hljs-keyword">if</span> ((propX &lt; <span class="hljs-number">0</span> &amp;&amp; propY &gt; <span class="hljs-number">0</span>) || (propX &gt; <span class="hljs-number">0</span> &amp;&amp; propY &lt; <span class="hljs-number">0</span> )) { 
+    Dir *= (-<span class="hljs-number">1</span>);
+  }
+  <span class="hljs-keyword">if</span> (propX === propY){  <span class="hljs-comment">// If X &amp; Y are equal proportion, calc new points</span>
+    <span class="hljs-keyword">if</span> (propX !== <span class="hljs-number">1</span> || propY !== <span class="hljs-number">1</span>) {
+      endX = CGstartX + (centerX * <span class="hljs-built_in">Math</span>.abs(propX)) + ((endX - (CGstartX + centerX)) * <span class="hljs-built_in">Math</span>.abs(propX));
+      endY = CGstartY + (centerY * <span class="hljs-built_in">Math</span>.abs(propY)) + ((endY - (CGstartX + centerY)) * <span class="hljs-built_in">Math</span>.abs(propY));
+      centerX *= <span class="hljs-built_in">Math</span>.abs(propX);
+      centerY *= <span class="hljs-built_in">Math</span>.abs(propY);
+      <span class="hljs-keyword">if</span> (propX &lt; <span class="hljs-number">0</span>) { 
+        endX = CGstartX + (CGstartX-endX);
+        centerX *= (-<span class="hljs-number">1</span>); 
+      }
+      <span class="hljs-keyword">if</span> (propY &lt; <span class="hljs-number">0</span>) { 
+        endY = CGstartY + (CGstartY-endY);
+        centerY *= (-<span class="hljs-number">1</span>); 
+      }
+    }
+  }
+  
+  currentZ = CGstartZ;
+  <span class="hljs-keyword">var</span> safeZCG = config.opensbp.get(<span class="hljs-string">'safeZpullUp'</span>);
+  <span class="hljs-keyword">var</span> spiralPlunge = (optCG === <span class="hljs-number">2</span> || optCG === <span class="hljs-number">3</span> || optCG === <span class="hljs-number">4</span>) ? <span class="hljs-number">1</span> : <span class="hljs-number">0</span>;
+
+  <span class="hljs-keyword">if</span> ( optCG == <span class="hljs-number">2</span> ) {
+  	circRadius = <span class="hljs-built_in">Math</span>.sqrt((centerX * centerX) + (centerY * centerY));
+  	PocketAngle = <span class="hljs-built_in">Math</span>.atan2(centerY, centerX);				<span class="hljs-comment">// Find the angle of the step over between passes</span>
+  	stepOver = config.opensbp.get(<span class="hljs-string">'cutterDia'</span>) * ((<span class="hljs-number">100</span> - config.opensbp.get(<span class="hljs-string">'pocketOverlap'</span>)) / <span class="hljs-number">100</span>);	<span class="hljs-comment">// Calculate the overlap</span>
+  	Pocket_StepX = stepOver * <span class="hljs-built_in">Math</span>.cos(PocketAngle);	<span class="hljs-comment">// Calculate the stepover in X based on the radius of the cutter * overlap</span>
+  	Pocket_StepY = stepOver * <span class="hljs-built_in">Math</span>.sin(PocketAngle);	<span class="hljs-comment">// Calculate the stepover in Y based on the radius of the cutter * overlap</span>
+  }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If plunge depth is specified move to that depth</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">if</span> ( plgFromZero == <span class="hljs-number">1</span> &amp;&amp; currentZ !== <span class="hljs-number">0</span> ) {	 
+    currentZ = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{ <span class="hljs-string">'Z'</span>:currentZ });
+  }
+
+  <span class="hljs-keyword">var</span> nextX = <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">var</span> nextY = <span class="hljs-number">0</span>;
+
+  <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;reps;i++){
+  	<span class="hljs-keyword">if</span> (Plg !== <span class="hljs-number">0</span> &amp;&amp; optCG &lt; <span class="hljs-number">3</span> ) {  <span class="hljs-comment">// If plunge depth is specified move to that depth * number of reps</span>
+  		currentZ += Plg;
+      <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G1'</span>,{ <span class="hljs-string">'Z'</span>:currentZ, <span class="hljs-string">'F'</span>:feedrateZ });
+   	}  
+   	<span class="hljs-keyword">if</span> (optCG === <span class="hljs-number">2</span>) { 	<span class="hljs-comment">// Pocket circle from the outside inward to center</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Loop passes until overlapping the center</p></div></div><div class="code"><div class="wrapper">   		<span class="hljs-keyword">for</span> (j=<span class="hljs-number">0</span>; (<span class="hljs-built_in">Math</span>.abs(Pocket_StepX * j) &lt; circRadius) &amp;&amp; (<span class="hljs-built_in">Math</span>.abs(Pocket_StepY * j) &lt; circRadius) ; j++){
+        nextX = (CGstartX + (j*Pocket_StepX));
+        nextY = (CGstartY + (j*Pocket_StepY));
+        <span class="hljs-keyword">if</span> ( j &gt; <span class="hljs-number">0</span> ) {
+    	   	<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G1'</span>,{ <span class="hljs-string">'X'</span>:nextX, <span class="hljs-string">'Y'</span>:nextY, <span class="hljs-string">'F'</span>:feedrateXY });
+        }
+        <span class="hljs-keyword">if</span> ( <span class="hljs-built_in">Math</span>.abs(propX) !== <span class="hljs-built_in">Math</span>.abs(propY) ) {      <span class="hljs-comment">// calculate an interpolated ellipse</span>
+          <span class="hljs-keyword">this</span>.interpolate_circle(CGstartX,CGstartY,CGstartZ,
+                                  endX,endY,Plg,
+                                  centerX,centerY,
+                                  propX,propY,
+                                  optCG );
+        } 
+  	   	<span class="hljs-keyword">else</span> {
+          <span class="hljs-keyword">if</span> ( Dir === <span class="hljs-number">1</span> ) { outStr = <span class="hljs-string">'G2'</span>; }	  <span class="hljs-comment">// Clockwise circle/arc</span>
+   			  <span class="hljs-keyword">else</span> { outStr = <span class="hljs-string">'G3'</span>; }	              <span class="hljs-comment">// CounterClockwise circle/arc</span>
+            <span class="hljs-keyword">this</span>.emit_move(outStr,{ <span class="hljs-string">'X'</span>:nextX,
+                                    <span class="hljs-string">'I'</span>:(centerX - (j*Pocket_StepX)),
+                                    <span class="hljs-string">'J'</span>:(centerY - (j*Pocket_StepY)),
+                                    <span class="hljs-string">'F'</span>:feedrateXY });
+        }										
+    	}
+    	<span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">'Z'</span>:safeZCG});
+      <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{ <span class="hljs-string">'X'</span>:CGstartX, <span class="hljs-string">'Y'</span>:CGstartY });
+    } 
+    <span class="hljs-keyword">else</span> {
+      <span class="hljs-keyword">if</span> ( <span class="hljs-built_in">Math</span>.abs(propX) !== <span class="hljs-built_in">Math</span>.abs(propY) ) {      <span class="hljs-comment">// calculate out to an interpolated ellipse</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><pre><code>   this.interpolate_circle(CGstartX,CGstartY,currentZ,endX,endY,Plg,centerX,centerY,propX,propY);
+   circleInterpolate(runtime, code, CGParams);</code></pre></div></div><div class="code"><div class="wrapper">      }
+    	<span class="hljs-keyword">else</span> {
+        <span class="hljs-keyword">var</span> emitObj = {};
+        
+        <span class="hljs-keyword">if</span> (Dir === <span class="hljs-number">1</span> ) { 
+          outStr = <span class="hljs-string">'G2'</span>;
+        }	<span class="hljs-comment">// Clockwise circle/arc</span>
+        <span class="hljs-keyword">else</span> { 
+          outStr = <span class="hljs-string">'G3'</span>;
+        }			<span class="hljs-comment">// CounterClockwise circle/arc</span>
+        emitObj.X = endX;
+        emitObj.Y = endY;
+		    emitObj.I = centerX;
+        emitObj.J = centerY;
+        <span class="hljs-keyword">if</span> (Plg !== <span class="hljs-number">0</span> &amp;&amp; optCG &gt; <span class="hljs-number">2</span> ) { 
+          currentZ += Plg;
+          emitObj.Z = currentZ; 
+        } <span class="hljs-comment">// Add Z for spiral plunge</span>
+        emitObj.F = feedrateXY;
+        <span class="hljs-keyword">this</span>.emit_move(outStr,emitObj);
+	    	
+        <span class="hljs-keyword">if</span>( i+<span class="hljs-number">1</span> &lt; reps &amp;&amp; ( endX != CGstartX || endY != CGstartY ) ){					<span class="hljs-comment">//If an arc, pullup and jog back to the start position</span>
+          <span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.cmd_posz != safeZCG ) {
+            <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">'Z'</span>:safeZCG});
+          }
+          <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{ <span class="hljs-string">'X'</span>:CGstartX, <span class="hljs-string">'Y'</span>:CGstartY });
+        }
+		  }
+    }
+  }
+
+  <span class="hljs-keyword">if</span> (optCG === <span class="hljs-number">4</span> ) { <span class="hljs-comment">// Add bottom circle if spiral with bottom clr is specified</span>
+    <span class="hljs-keyword">if</span>( endX != CGstartX || endY != CGstartY ) {	<span class="hljs-comment">//If an arc, pullup and jog back to the start position</span>
+      <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">'Z'</span>:safeZCG});
+      <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{ <span class="hljs-string">'X'</span>:CGstartX, <span class="hljs-string">'Y'</span>:CGstartY });
+      <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G1'</span>,{ <span class="hljs-string">'Z'</span>:currentZ, <span class="hljs-string">'F'</span>:feedrateZ });
+    }
+    <span class="hljs-keyword">if</span> ( <span class="hljs-built_in">Math</span>.abs(propX) !== <span class="hljs-built_in">Math</span>.abs(propY) ) {      <span class="hljs-comment">// calculate out to an interpolated ellipse</span>
+
+    }
+    <span class="hljs-keyword">else</span> {
+      <span class="hljs-keyword">if</span> (Dir === <span class="hljs-number">1</span> ){ outStr = <span class="hljs-string">"G2"</span>; } 		<span class="hljs-comment">// Clockwise circle/arc</span>
+      <span class="hljs-keyword">else</span> { outStr = <span class="hljs-string">"G3"</span>; }					<span class="hljs-comment">// CounterClockwise circle/arc</span>
+        <span class="hljs-keyword">this</span>.emit_move(outStr,{ <span class="hljs-string">'X'</span>:(CGstartX + (j*Pocket_StepX)),
+                                <span class="hljs-string">'Y'</span>:(CGstartY + (j*Pocket_StepY)),
+                                <span class="hljs-string">'I'</span>:(centerX - (j*Pocket_StepX)),
+                                <span class="hljs-string">'J'</span>:(centerY - (j*Pocket_StepY)),
+                                <span class="hljs-string">'F'</span>:feedrateXY });
+    }
+  }
+
+  <span class="hljs-keyword">if</span>( noPullUp === <span class="hljs-number">0</span> &amp;&amp; currentZ !== CGstartZ){    	<span class="hljs-comment">//If No pull-up is set to YES, pull up to the starting Z location</span>
+    <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">'Z'</span>:CGstartZ});
+  }
+
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p> Interpolate_Circle - is used to interpolate a circle that has uneven proportions as an ellipse.</p>
+<p> Usage: interpolate_circle(<CGstartX>,<CGstartY>,<CGstartZ>,<endX>,<endY>,<plunge>,
+                           <centerX>,<centerY>,<propX>,<propY>);</p></div></div><div class="code"><div class="wrapper">exports.interpolate_circle = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">ICstartX,ICstartY,ICstartZ,endX,endY,plunge,centerX,centerY,propX,propY,opt</span>) </span>{
+
+  <span class="hljs-keyword">var</span> nextX = ICstartX;
+  <span class="hljs-keyword">var</span> nextY = ICstartY;
+  <span class="hljs-keyword">var</span> nextZ = ICstartZ;
+ 
+  <span class="hljs-keyword">var</span> SpiralPlunge = <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">if</span> ( plunge !== <span class="hljs-number">0</span> ) { SpiralPlunge = <span class="hljs-number">1</span>; }
+
+  centerX *= propX;
+  centerY *= propY;
+
+  <span class="hljs-keyword">var</span> radius = <span class="hljs-built_in">Math</span>.sqrt(<span class="hljs-built_in">Math</span>.pow((centerX),<span class="hljs-number">2</span>)+<span class="hljs-built_in">Math</span>.pow((centerY),<span class="hljs-number">2</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Find the beginning and ending angles in radians. We&#39;ll use only radians from here on.</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">var</span> Bang = <span class="hljs-built_in">Math</span>.atan2(centerX, centerY);
+  <span class="hljs-keyword">var</span> Eang = <span class="hljs-built_in">Math</span>.atan2((endX*propX)-(ICstartX-centerX), (endY*propY)-(ICstartY-centerY));
+  <span class="hljs-keyword">var</span> inclAng = <span class="hljs-number">0.0</span>;
+
+  <span class="hljs-keyword">if</span> (Dir === <span class="hljs-number">1</span>) {
+    <span class="hljs-keyword">if</span> (Bang &lt; Eang) { inclAng = Eang - Bang; }
+    <span class="hljs-keyword">if</span> (Bang &gt; Eang) { inclAng = <span class="hljs-number">6.28318530717959</span> - Bang + Eang; }
+  }
+  <span class="hljs-keyword">else</span> {
+    <span class="hljs-keyword">if</span> (Bang &lt; Eang) { inclAng = <span class="hljs-number">6.28318530717959</span> - Bang + Eang; }
+    <span class="hljs-keyword">if</span> (Bang &gt; Eang) { inclAng = Eang - Bang; }
+  }
+
+  <span class="hljs-keyword">if</span> ( inclAng &lt; <span class="hljs-number">0.00001</span> ) { </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>end here  </p></div></div><div class="code"><div class="wrapper">  }
+
+  <span class="hljs-keyword">var</span> incrAng = <span class="hljs-number">0.05</span>;
+  <span class="hljs-keyword">var</span> Xfactor1 = radius * propX;
+  <span class="hljs-keyword">var</span> Yfactor1 = radius * propY;
+
+  <span class="hljs-keyword">if</span> (incrAng &gt; inclAng) { incrAng = inclAng; }
+
+  nextX = Xfactor1 * (<span class="hljs-built_in">Math</span>.sin(Bang + (incrAng * Dir))) + Xfactor1;
+  nextY = Yfactor1 * (<span class="hljs-built_in">Math</span>.cos(Bang + (incrAng * Dir))) + Yfactor1;
+
+  <span class="hljs-keyword">var</span> incrDist = <span class="hljs-built_in">Math</span>.sqrt(<span class="hljs-built_in">Math</span>.pow((nextX-ICstartX),<span class="hljs-number">2</span>)+<span class="hljs-built_in">Math</span>.pow((nextY-ICstartY),<span class="hljs-number">2</span>));
+  <span class="hljs-keyword">var</span> circRes = config.opensbp.get(<span class="hljs-string">'cRes'</span>);
+  
+  <span class="hljs-keyword">if</span> (incrDist &gt; circRes) { 
+    incrDist = circRes; 
+  }
+
+  <span class="hljs-keyword">var</span> FirstCircleX = radius * <span class="hljs-built_in">Math</span>.sin(t) * propX;
+  <span class="hljs-keyword">var</span> FirstCricleY = radius * <span class="hljs-built_in">Math</span>.cos(t) * propY;
+
+  nextX = Xfactor1 * (<span class="hljs-built_in">Math</span>.sin(Bang + (increment * Dir))) + Xfactor2;
+  nextY = Yfactor1 * (<span class="hljs-built_in">Math</span>.cos(Bang + (increment * Dir))) + Yfactor2;
+
+  <span class="hljs-keyword">var</span> DistA = nextX - ICstartX;
+  <span class="hljs-keyword">var</span> DistB = nextY - ICstartY;
+  
+  FirstDist = <span class="hljs-built_in">Math</span>.sqrt(<span class="hljs-built_in">Math</span>.pow(DistA,<span class="hljs-number">2</span>) + <span class="hljs-built_in">Math</span>.pow(DistB,<span class="hljs-number">2</span>));
+
+  <span class="hljs-keyword">if</span> ( FirstDist === <span class="hljs-number">0</span> ) {
+    <span class="hljs-keyword">if</span> ( incrDist === <span class="hljs-number">0</span> ) { increment = <span class="hljs-number">0.01</span>;}
+    incrDist *= config.opensbp.get(<span class="hljs-string">'cRes'</span>) / FirstDist;
+
+    incrZ = Plg/steps;
+  }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Calculate the next Z position</p></div></div><div class="code"><div class="wrapper">    nextX = Xfactor1 * (<span class="hljs-built_in">Math</span>.sin(t + (increment * Dir))) + Xfactor1;
+    nextY = Yfactor1 * (<span class="hljs-built_in">Math</span>.cos(t + (increment * Dir))) + Yfactor1;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p> log.debug( &quot; Interpolate - Next Point: &quot; + JSON.stringify(args));</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">var</span> feedrate = <span class="hljs-keyword">this</span>.movespeed_xy * <span class="hljs-number">60</span>;
+  <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G1'</span>,{<span class="hljs-string">"X"</span>:x,<span class="hljs-string">"Y"</span>:y,<span class="hljs-string">"Z"</span>:z, <span class="hljs-string">'F'</span>:feedrate});
+
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The CR command will cut a rectangle. It will generate the necessary G-code to profile and
+    pocket a rectangle. The features include:</p>
+<pre><code>    - Spiral plunge with multiple passes
+    - Pocketing
+    - Pocketing with multiple passes
+    - Rotation around the starting point
+ - Define by center start point</code></pre>
+<p>Usage: CR,X Length,<Y Length>,<I-O-T>,<Direction>,<Start Corner>,
+           <Plunge Depth>,<Repetitions>,<Options-2=Pocket OUT-IN,
+            3=Pocket IN-OUT>,<Plunge from Z zero>,<Angle of Rotation>,
+           <Sprial Plunge>,<X Center>,<Y Center></p></div></div><div class="code"><div class="wrapper">exports.CR = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	<span class="hljs-comment">//calc and output commands to cut a rectangle</span>
+  <span class="hljs-keyword">var</span> n = <span class="hljs-number">0.0</span>;
+	<span class="hljs-keyword">var</span> CRstartX = <span class="hljs-keyword">this</span>.cmd_posx;
+  <span class="hljs-keyword">var</span> CRstartY = <span class="hljs-keyword">this</span>.cmd_posy;
+  <span class="hljs-keyword">var</span> CRstartZ = <span class="hljs-keyword">this</span>.cmd_posz;
+  <span class="hljs-keyword">var</span> pckt_startX = CRstartX;
+  <span class="hljs-keyword">var</span> pckt_startY = CRstartY; 
+  <span class="hljs-keyword">var</span> currentZ = CRstartZ;
+  <span class="hljs-keyword">var</span> xDir = <span class="hljs-number">1</span>;
+  <span class="hljs-keyword">var</span> yDir = <span class="hljs-number">1</span>;
+
+  <span class="hljs-keyword">var</span> lenX = args[<span class="hljs-number">0</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">0</span>] : <span class="hljs-literal">undefined</span>; 	<span class="hljs-comment">// X length</span>
+  <span class="hljs-keyword">var</span> lenY = args[<span class="hljs-number">1</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">1</span>] : <span class="hljs-literal">undefined</span>;		<span class="hljs-comment">// Y length</span>
+  <span class="hljs-keyword">var</span> inStr = args[<span class="hljs-number">2</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">2</span>].toUpperCase() : <span class="hljs-string">"T"</span>;
+  <span class="hljs-keyword">var</span> OIT = (inStr === <span class="hljs-string">"O"</span> || inStr === <span class="hljs-string">"I"</span> || inStr === <span class="hljs-string">"T"</span>) ? inStr : <span class="hljs-string">"T"</span>; <span class="hljs-comment">// Cutter compentsation (I=inside, T=no comp, O=outside)</span>
+  <span class="hljs-keyword">var</span> Dir = args[<span class="hljs-number">3</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">3</span>] : <span class="hljs-number">1</span>;  <span class="hljs-comment">// Direction of cut (-1=CCW, 1=CW)</span>
+  <span class="hljs-keyword">var</span> stCorner = args[<span class="hljs-number">4</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">4</span>] : <span class="hljs-number">4</span>;  <span class="hljs-comment">// Start Corner - default is 4, the bottom left corner. 0=Center</span>
+  <span class="hljs-keyword">var</span> Plg = args[<span class="hljs-number">5</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">5</span>] : <span class="hljs-number">0.0</span>;  <span class="hljs-comment">// Plunge depth per repetition</span>
+  <span class="hljs-keyword">var</span> reps = args[<span class="hljs-number">6</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">6</span>] : <span class="hljs-number">1</span>;  <span class="hljs-comment">// Repetions</span>
+  <span class="hljs-keyword">var</span> optCR = args[<span class="hljs-number">7</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">7</span>] : <span class="hljs-number">0</span>;  <span class="hljs-comment">// Options - 1-Tab, 2-Pocket Outside-In, 3-Pocket Inside-Out</span>
+  <span class="hljs-keyword">var</span> plgFromZero = args[<span class="hljs-number">8</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">8</span>] : <span class="hljs-number">0</span>;  <span class="hljs-comment">// Start Plunge from Zero &lt;0-NO, 1-YES&gt;</span>
+  <span class="hljs-keyword">var</span> RotationAngle = args[<span class="hljs-number">9</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">9</span>] : <span class="hljs-number">0.0</span>;  <span class="hljs-comment">// Angle to rotate rectangle around starting point</span>
+  <span class="hljs-keyword">var</span> PlgAxis = args[<span class="hljs-number">10</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">10</span>] : <span class="hljs-string">'Z'</span>;  <span class="hljs-comment">// Axis to plunge &lt;Z or A&gt;</span>
+	<span class="hljs-keyword">var</span> spiralPlg = args[<span class="hljs-number">11</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">11</span>] : <span class="hljs-number">0</span>;  <span class="hljs-comment">// Turn spiral plunge ON for first pass (0=OFF, 1=ON)</span>
+  <span class="hljs-keyword">var</span> xCenter =  args[<span class="hljs-number">12</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">12</span>] : <span class="hljs-literal">undefined</span>;  <span class="hljs-comment">// X center coordinate</span>
+  <span class="hljs-keyword">var</span> yCenter = args[<span class="hljs-number">13</span>] !== <span class="hljs-literal">undefined</span> ? args[<span class="hljs-number">13</span>] : <span class="hljs-literal">undefined</span>;  <span class="hljs-comment">// Y center coordinate</span>
+
+	<span class="hljs-keyword">var</span> PlgSp = <span class="hljs-number">0.0</span>;
+	<span class="hljs-keyword">var</span> noPullUp = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">var</span> cosRA = <span class="hljs-number">0.0</span>;
+	<span class="hljs-keyword">var</span> sinRA = <span class="hljs-number">0.0</span>;
+  <span class="hljs-keyword">var</span> stepOver = <span class="hljs-number">0.0</span>;
+  <span class="hljs-keyword">var</span> pckt_offsetX = <span class="hljs-number">0.0</span>;
+  <span class="hljs-keyword">var</span> pckt_offsetY = <span class="hljs-number">0.0</span>;    
+  <span class="hljs-keyword">var</span> order = [<span class="hljs-number">1</span>,<span class="hljs-number">2</span>,<span class="hljs-number">3</span>,<span class="hljs-number">4</span>];
+  <span class="hljs-keyword">var</span> pckt_stepX = <span class="hljs-number">0.0</span>;
+  <span class="hljs-keyword">var</span> pckt_stepY = <span class="hljs-number">0.0</span>;
+  <span class="hljs-keyword">var</span> steps = <span class="hljs-number">1.0</span>;
+  <span class="hljs-keyword">var</span> rotPtX = pckt_startX;  <span class="hljs-comment">// Rotation point X</span>
+  <span class="hljs-keyword">var</span> rotPtY = pckt_startY;  <span class="hljs-comment">// Rotation point Y</span>
+
+  <span class="hljs-keyword">var</span> feedrateXY = <span class="hljs-keyword">this</span>.movespeed_xy * <span class="hljs-number">60</span>;
+  <span class="hljs-keyword">var</span> feedrateZ = <span class="hljs-keyword">this</span>.movespeed_xy * <span class="hljs-number">60</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set Order and directions based on starting corner</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">if</span> ( stCorner == <span class="hljs-number">1</span> ) { 
+    yDir = -<span class="hljs-number">1</span>;
+    <span class="hljs-keyword">if</span> ( Dir == -<span class="hljs-number">1</span> ) { 
+      order = [<span class="hljs-number">3</span>,<span class="hljs-number">2</span>,<span class="hljs-number">1</span>,<span class="hljs-number">4</span>]; 
+    }
+  } 
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( stCorner == <span class="hljs-number">2</span> ) {
+    xDir = -<span class="hljs-number">1</span>;
+    yDir = -<span class="hljs-number">1</span>;
+    <span class="hljs-keyword">if</span> ( Dir == <span class="hljs-number">1</span> ) { 
+      order = [<span class="hljs-number">3</span>,<span class="hljs-number">2</span>,<span class="hljs-number">1</span>,<span class="hljs-number">4</span>]; 
+    }
+  }
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( stCorner == <span class="hljs-number">3</span> ) { 
+    xDir = -<span class="hljs-number">1</span>; 
+    <span class="hljs-keyword">if</span> ( Dir == -<span class="hljs-number">1</span> ) {
+      order = [<span class="hljs-number">3</span>,<span class="hljs-number">2</span>,<span class="hljs-number">1</span>,<span class="hljs-number">4</span>]; 
+    }
+  }
+  <span class="hljs-keyword">else</span> { 
+    <span class="hljs-keyword">if</span> ( Dir == <span class="hljs-number">1</span> ) {
+      order = [<span class="hljs-number">3</span>,<span class="hljs-number">2</span>,<span class="hljs-number">1</span>,<span class="hljs-number">4</span>]; 
+    }
+  }
+
+  <span class="hljs-keyword">if</span> ( OIT == <span class="hljs-string">"O"</span> ) { 
+    lenX += config.opensbp.get(<span class="hljs-string">'cutterDia'</span>) * xDir;
+    lenY += config.opensbp.get(<span class="hljs-string">'cutterDia'</span>) * yDir;
+  }
+  <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( OIT == <span class="hljs-string">"I"</span> ) {
+    lenX -= config.opensbp.get(<span class="hljs-string">'cutterDia'</span>) * xDir;
+    lenY -= config.opensbp.get(<span class="hljs-string">'cutterDia'</span>) * yDir;
+  }
+  <span class="hljs-keyword">else</span> {
+    lenX *= xDir;
+    lenY *= yDir;
+  }
+
+  <span class="hljs-keyword">if</span> ( stCorner === <span class="hljs-number">0</span> ) {
+    pckt_startX = xCenter - (lenX/<span class="hljs-number">2</span>);
+    pckt_startY = yCenter - (lenY/<span class="hljs-number">2</span>);        
+  }
+
+  <span class="hljs-keyword">if</span> (RotationAngle !== <span class="hljs-number">0</span> ) { 
+   	RotationAngle *= <span class="hljs-number">0.01745329252</span>;  <span class="hljs-comment">// Rotation angle in degrees to radians</span>
+   	cosRA = <span class="hljs-built_in">Math</span>.cos(RotationAngle); <span class="hljs-comment">// Cosine of the rotation angle</span>
+   	sinRA = <span class="hljs-built_in">Math</span>.sin(RotationAngle); <span class="hljs-comment">// Sine of the rotation angle</span>
+    <span class="hljs-keyword">if</span> ( stCorner !== <span class="hljs-number">0</span> ) {
+      rotPtX = xCenter;  <span class="hljs-comment">// Rotation point X</span>
+      rotPtY = yCenter;  <span class="hljs-comment">// Rotation point Y</span>
+
+    }
+  }
+    
+  <span class="hljs-keyword">if</span> (Plg !== <span class="hljs-number">0</span> &amp;&amp; plgFromZero === <span class="hljs-number">1</span>){ currentZ = <span class="hljs-number">0</span>; }
+  <span class="hljs-keyword">else</span>{ currentZ = CRstartZ; }
+  <span class="hljs-keyword">var</span> safeZCR = currentZ + config.opensbp.get(<span class="hljs-string">'safeZpullUp'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jog to the start position if not already there</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">if</span> ( stCorner === <span class="hljs-number">0</span> &amp;&amp; ( CRstartX !== pckt_startX || CRstartY !== pckt_startY )){
+    <span class="hljs-keyword">if</span>( currentZ &lt; safeZCR &amp;&amp; <span class="hljs-keyword">this</span>.lastNoZPullup !== <span class="hljs-number">1</span> ){
+      <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G0'</span>,{<span class="hljs-string">'Z'</span>:safeZCR});
+    }
+    <span class="hljs-keyword">if</span> ( RotationAngle === <span class="hljs-number">0.0</span> ) { 
+        outStr = <span class="hljs-string">"G0X"</span> + nextX + <span class="hljs-string">"Y"</span> + nextY;
+    }
+    <span class="hljs-keyword">else</span> {
+      outStr = <span class="hljs-string">"G0X"</span> + ((nextX*cosRA)-(nextY*sinRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))+(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>)+
+                 <span class="hljs-string">"Y"</span> + ((nextX*sinRA)+(nextY*cosRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))-(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>); 
+    }
+    <span class="hljs-keyword">if</span> ( RotationAngle !== <span class="hljs-number">0</span> ) {
+      pckt_startX = ((pckt_startX*cosRA)-(pckt_startY*sinRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))+(rotPtY*sinRA));
+      pckt_startY = ((pckt_startX*sinRA)+(pckt_startY*cosRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))-(rotPtY*sinRA));
+    }   
+    <span class="hljs-keyword">this</span>.emit_gcode( outStr);
+    <span class="hljs-keyword">if</span>( <span class="hljs-keyword">this</span>.cmd_posz !== currentZ &amp;&amp; <span class="hljs-keyword">this</span>.lastNoZPullup !== <span class="hljs-number">1</span> ){
+      <span class="hljs-keyword">this</span>.emit_move(<span class="hljs-string">'G1'</span>,{<span class="hljs-string">'Z'</span>:currentZ,<span class="hljs-string">'F'</span>:feedrateZ});
+    }
+  }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If a pocket, calculate the step over and number of steps to pocket out the complete rectangle.</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">if</span> (optCR &gt; <span class="hljs-number">1</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Calculate the overlap distacne</p></div></div><div class="code"><div class="wrapper">   	stepOver = config.opensbp.get(<span class="hljs-string">'cutterDia'</span>) * ((<span class="hljs-number">100</span> - config.opensbp.get(<span class="hljs-string">'pocketOverlap'</span>)) / <span class="hljs-number">100</span>);
+   	pckt_stepX = pckt_stepY = stepOver;
+  	pckt_stepX *= xDir;
+  	pckt_stepY *= yDir;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Base the number of steps on the short side of the rectangle.</p></div></div><div class="code"><div class="wrapper">	 	<span class="hljs-keyword">if</span> ( <span class="hljs-built_in">Math</span>.abs(lenX) &lt; <span class="hljs-built_in">Math</span>.abs(lenY) ) {
+	 		steps = <span class="hljs-built_in">Math</span>.floor((<span class="hljs-built_in">Math</span>.abs(lenX)/<span class="hljs-number">2</span>)/<span class="hljs-built_in">Math</span>.abs(stepOver)) + <span class="hljs-number">1</span>; 
+	 	}
+	 	<span class="hljs-keyword">else</span> {	<span class="hljs-comment">// If a square or the X is shorter, use the X length.</span>
+	 		steps = <span class="hljs-built_in">Math</span>.floor((<span class="hljs-built_in">Math</span>.abs(lenY)/<span class="hljs-number">2</span>)/<span class="hljs-built_in">Math</span>.abs(stepOver)) + <span class="hljs-number">1</span>; 
+	 	}   		</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If an inside-out pocket, reverse the step over direction and find the pocket start point near the center</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">if</span> ( optCR === <span class="hljs-number">3</span> ) {
+      pckt_stepX *= (-<span class="hljs-number">1</span>);
+      pckt_stepY *= (-<span class="hljs-number">1</span>);
+      pckt_offsetX = stepOver * (steps - <span class="hljs-number">1</span>) * xDir;
+      pckt_offsetY = stepOver * (steps - <span class="hljs-number">1</span>) * yDir;
+
+      nextX = pckt_startX + pckt_offsetX;
+      nextY = pckt_startY + pckt_offsetY;
+
+      <span class="hljs-keyword">if</span> ( RotationAngle === <span class="hljs-number">0.0</span> ) { 
+		    outStr = <span class="hljs-string">"G0X"</span> + nextX + <span class="hljs-string">"Y"</span> + nextY;
+      }
+      <span class="hljs-keyword">else</span> {
+		    outStr = <span class="hljs-string">"G0X"</span> + ((nextX*cosRA)-(nextY*sinRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))+(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>) +
+			    		     <span class="hljs-string">"Y"</span> + ((nextX*sinRA)+(nextY*cosRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))-(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>); 
+      }
+      <span class="hljs-keyword">this</span>.emit_gcode( outStr);
+    }
+  }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If an inside-out pocket, move to the start point of the pocket</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">if</span> ( optCR == <span class="hljs-number">3</span> || stCorner === <span class="hljs-number">0</span> ) {
+    <span class="hljs-keyword">this</span>.emit_gcode( <span class="hljs-string">"G0Z"</span> + safeZCR );
+
+    nextX = pckt_startX + pckt_offsetX;
+    nextY = pckt_startY + pckt_offsetY;
+
+		<span class="hljs-keyword">if</span> ( RotationAngle === <span class="hljs-number">0.0</span> ) { 
+			outStr = <span class="hljs-string">"G1X"</span> + nextX + <span class="hljs-string">"Y"</span> + nextY;
+		}
+		<span class="hljs-keyword">else</span> {
+			outStr = <span class="hljs-string">"G1X"</span> + ((nextX*cosRA)-(nextY*sinRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))+(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>) +
+						     <span class="hljs-string">"Y"</span> + ((nextX*sinRA)+(nextY*cosRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))-(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>); 
+		}
+    <span class="hljs-keyword">this</span>.emit_gcode( <span class="hljs-string">"G1Z"</span> + CRstartZ + <span class="hljs-string">"F"</span> + feedrateZ );
+    <span class="hljs-keyword">this</span>.emit_gcode( outStr );
+  }
+
+  <span class="hljs-keyword">for</span> (i = <span class="hljs-number">0</span>; i &lt; reps; i++) {  
+   	<span class="hljs-keyword">if</span> ( spiralPlg != <span class="hljs-number">1</span> ) {								<span class="hljs-comment">// If plunge depth is specified move to that depth * number of reps</span>
+    	currentZ += Plg;
+    	<span class="hljs-keyword">this</span>.emit_gcode( <span class="hljs-string">"G1Z"</span> + currentZ + <span class="hljs-string">"F"</span> + feedrateZ );    		
+    }
+    <span class="hljs-keyword">else</span> {
+    	<span class="hljs-keyword">this</span>.emit_gcode( <span class="hljs-string">"G1Z"</span> + currentZ + <span class="hljs-string">"F"</span> + feedrateZ );    		
+    }
+    	
+    pass = cnt = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">var</span> nextX = <span class="hljs-number">0.0</span>;
+    <span class="hljs-keyword">var</span> nextY = <span class="hljs-number">0.0</span>;
+
+    <span class="hljs-keyword">for</span> ( j = <span class="hljs-number">0</span>; j &lt; steps; j++ ){
+   		<span class="hljs-keyword">do</span> {
+	   		<span class="hljs-keyword">for</span> ( k=<span class="hljs-number">0</span>; k&lt;<span class="hljs-number">4</span>; k++ ){
+	   			n = order[k];
+	   			<span class="hljs-keyword">switch</span> (n){
+	   				<span class="hljs-keyword">case</span> <span class="hljs-number">1</span>:
+    				  nextX = (pckt_startX + lenX - pckt_offsetX) - (pckt_stepX * j);
+    					nextY = (pckt_startY + pckt_offsetY) + (pckt_stepY * j);
+    						
+    					<span class="hljs-keyword">if</span> ( RotationAngle === <span class="hljs-number">0.0</span> ) { 
+    						outStr = <span class="hljs-string">"G1X"</span> + nextX + <span class="hljs-string">"Y"</span> + nextY;
+    					}
+    					<span class="hljs-keyword">else</span> {
+    						outStr = <span class="hljs-string">"G1X"</span>+((nextX*cosRA)-(nextY*sinRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))+(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>) +
+    									     <span class="hljs-string">"Y"</span>+((nextX*sinRA)+(nextY*cosRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))-(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>); 
+    					}
+    						
+    					<span class="hljs-keyword">if</span> ( spiralPlg == <span class="hljs-number">1</span> &amp;&amp; pass === <span class="hljs-number">0</span> ) {
+    						PlgSp = currentZ + (Plg * <span class="hljs-number">0.25</span>); 
+    						outStr += <span class="hljs-string">"Z"</span> + (PlgSp).toFixed(<span class="hljs-number">4</span>);
+    					}
+    						
+    					outStr += <span class="hljs-string">"F"</span> + feedrateXY;
+    					<span class="hljs-keyword">this</span>.emit_gcode (outStr);
+    				<span class="hljs-keyword">break</span>;
+
+    				<span class="hljs-keyword">case</span> <span class="hljs-number">2</span>:
+   						nextX = (pckt_startX + lenX - pckt_offsetX) - (pckt_stepX * j);
+   						nextY = (pckt_startY + lenY - pckt_offsetY) - (pckt_stepY * j);
+
+    					<span class="hljs-keyword">if</span> ( RotationAngle === <span class="hljs-number">0.0</span> ) { 
+    						outStr = <span class="hljs-string">"G1X"</span> + nextX + <span class="hljs-string">"Y"</span> + nextY;
+    					}	
+   						<span class="hljs-keyword">else</span> {
+   							outStr = <span class="hljs-string">"G1X"</span> + ((nextX*cosRA)-(nextY*sinRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))+(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>) +
+   										     <span class="hljs-string">"Y"</span> + ((nextX*sinRA)+(nextY*cosRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))-(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>); 
+   						}
+
+   						<span class="hljs-keyword">if</span> ( spiralPlg === <span class="hljs-number">1</span> &amp;&amp; pass === <span class="hljs-number">0</span> ) { 
+   							PlgSp = currentZ + (Plg * <span class="hljs-number">0.5</span>);	
+   							outStr += <span class="hljs-string">"Z"</span> + (PlgSp).toFixed(<span class="hljs-number">4</span>);
+   						}
+
+   						outStr += <span class="hljs-string">"F"</span> + feedrateXY;
+    					<span class="hljs-keyword">this</span>.emit_gcode (outStr);
+   					<span class="hljs-keyword">break</span>;
+
+   					<span class="hljs-keyword">case</span> <span class="hljs-number">3</span>:
+   						nextX = (pckt_startX + pckt_offsetX) + (pckt_stepX * j);
+   						nextY = (pckt_startY + lenY - pckt_offsetY) - (pckt_stepY * j);
+
+    					<span class="hljs-keyword">if</span> ( RotationAngle === <span class="hljs-number">0.0</span> ) { 
+    						outStr = <span class="hljs-string">"G1X"</span> + nextX + <span class="hljs-string">"Y"</span> + nextY;
+    					}
+   						<span class="hljs-keyword">else</span> {
+   							outStr = <span class="hljs-string">"G1X"</span> + ((nextX*cosRA)-(nextY*sinRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))+(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>) +
+   										     <span class="hljs-string">"Y"</span> + ((nextX*sinRA)+(nextY*cosRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))-(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>); 
+   						}
+
+   						<span class="hljs-keyword">if</span> ( spiralPlg == <span class="hljs-number">1</span> &amp;&amp; pass === <span class="hljs-number">0</span> ) { 
+   							plgSp = currentZ + (Plg * <span class="hljs-number">0.75</span>);	
+   							outStr += <span class="hljs-string">"Z"</span> + (PlgSp).toFixed(<span class="hljs-number">4</span>); 
+   						}	
+
+   						outStr += <span class="hljs-string">"F"</span> + feedrateXY;
+    					<span class="hljs-keyword">this</span>.emit_gcode (outStr);
+    				<span class="hljs-keyword">break</span>;
+
+    				<span class="hljs-keyword">case</span> <span class="hljs-number">4</span>:
+   						nextX = (pckt_startX + pckt_offsetX) + (pckt_stepX * j);
+   						nextY = (pckt_startY + pckt_offsetY) + (pckt_stepY * j);
+
+    					<span class="hljs-keyword">if</span> ( RotationAngle === <span class="hljs-number">0.0</span> ) { 
+    						outStr = <span class="hljs-string">"G1X"</span> + nextX + <span class="hljs-string">"Y"</span> + nextY;
+    					}
+   						<span class="hljs-keyword">else</span> {
+   							outStr = <span class="hljs-string">"G1X"</span> + ((nextX*cosRA)-(nextY*sinRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))+(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>) +
+   										     <span class="hljs-string">"Y"</span> + ((nextX*sinRA)+(nextY*cosRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))-(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>); 
+   						}
+
+   						<span class="hljs-keyword">if</span> ( spiralPlg === <span class="hljs-number">1</span> &amp;&amp; pass === <span class="hljs-number">0</span> ) {
+   							currentZ += Plg; 
+   							outStr += <span class="hljs-string">"Z"</span> + (currentZ).toFixed(<span class="hljs-number">4</span>);
+                pass = <span class="hljs-number">1</span>;
+                <span class="hljs-keyword">if</span> ( i+<span class="hljs-number">1</span> &lt; reps ){
+								  cnt = <span class="hljs-number">1</span>;
+                } 
+   						}
+   						<span class="hljs-keyword">else</span> { 
+   							cnt = <span class="hljs-number">1</span>;
+   						}
+
+   						outStr += <span class="hljs-string">"F"</span> + feedrateXY;
+   						<span class="hljs-keyword">this</span>.emit_gcode (outStr);
+   					<span class="hljs-keyword">break</span>;
+
+   					<span class="hljs-keyword">default</span>:
+   						<span class="hljs-keyword">throw</span> <span class="hljs-string">"Unhandled operation: "</span> + expr.op;
+   				}
+   			}
+			} <span class="hljs-keyword">while</span> ( cnt &lt; <span class="hljs-number">1</span> );
+  
+			<span class="hljs-keyword">if</span> ( (j + <span class="hljs-number">1</span>) &lt; steps &amp;&amp; optCR &gt; <span class="hljs-number">1</span> ) {
+				nextX = (pckt_startX + pckt_offsetX) + (pckt_stepX * (j+<span class="hljs-number">1</span>));
+   			nextY = (pckt_startY + pckt_offsetY) + (pckt_stepY * (j+<span class="hljs-number">1</span>));
+				<span class="hljs-keyword">if</span> ( RotationAngle === <span class="hljs-number">0</span> ) { 
+			  	outStr = <span class="hljs-string">"G1X"</span> + nextX + 
+   							   <span class="hljs-string">"Y"</span> + nextY;
+   			}
+   			<span class="hljs-keyword">else</span> {
+   				outStr = <span class="hljs-string">"G1X"</span> + ((nextX*cosRA)-(nextY*sinRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))+(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>) +
+   							     <span class="hljs-string">"Y"</span> + ((nextX*sinRA)+(nextY*cosRA)+(rotPtX*(<span class="hljs-number">1</span>-cosRA))-(rotPtY*sinRA)).toFixed(<span class="hljs-number">4</span>); 
+   			}
+   			outStr += <span class="hljs-string">"F"</span> + feedrateXY;
+    		<span class="hljs-keyword">this</span>.emit_gcode (outStr);
+   		}
+   	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If a pocket, move to the start point of the pocket</p></div></div><div class="code"><div class="wrapper">	  <span class="hljs-keyword">if</span> ( optCR &gt; <span class="hljs-number">1</span> || stCorner === <span class="hljs-number">0</span> ) {
+    	<span class="hljs-keyword">this</span>.emit_gcode( <span class="hljs-string">"G0Z"</span> + safeZCR );
+    	outStr = <span class="hljs-string">"G1X"</span> + CRstartX + <span class="hljs-string">"Y"</span> + CRstartY;
+			outStr += <span class="hljs-string">"F"</span> + feedrateXY;
+     	<span class="hljs-keyword">this</span>.emit_gcode( outStr );
+     	<span class="hljs-keyword">if</span> ( ( i + <span class="hljs-number">1</span> ) &lt; reps ) { 
+     		<span class="hljs-keyword">this</span>.emit_gcode( <span class="hljs-string">"G1Z"</span> + currentZ ); 
+     	}
+   	}
+  }
+
+  <span class="hljs-keyword">if</span>( noPullUp === <span class="hljs-number">0</span> &amp;&amp; currentZ !== CRstartZ ){    <span class="hljs-comment">//If No pull-up is set to YES, pull up to the starting Z location</span>
+    <span class="hljs-keyword">this</span>.emit_gcode( <span class="hljs-string">"G0Z"</span> + CRstartZ);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>this.cmd_posz = CRstartZ;</p></div></div><div class="code"><div class="wrapper">  }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>else{                                        //If not, stay at the ending Z height
+    this.cmd_posz = currentZ;</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-comment">// </span>
+
+  <span class="hljs-keyword">if</span> ( optCR === <span class="hljs-number">3</span> ) {
+    <span class="hljs-keyword">this</span>.emit_gcode( <span class="hljs-string">"G0X"</span> + CRstartX + <span class="hljs-string">"Y"</span> + CRstartY );
+  }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p> this.cmd_posx = CRstartX;
+this.cmd_posy = CRstartY;</p></div></div><div class="code"><div class="wrapper">};</div></div></div></div></body></html>

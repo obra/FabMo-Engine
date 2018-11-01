@@ -1,0 +1,53 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/ajax/script</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/ajax/script"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/ajax/script.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/ajax/script.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"../core"</span>,
+	<span class="hljs-string">"../ajax"</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Install script dataType</p></div></div><div class="code"><div class="wrapper">jQuery.ajaxSetup({
+	accepts: {
+		script: <span class="hljs-string">"text/javascript, application/javascript, application/ecmascript, application/x-ecmascript"</span>
+	},
+	contents: {
+		script: <span class="hljs-regexp">/(?:java|ecma)script/</span>
+	},
+	converters: {
+		<span class="hljs-string">"text script"</span>: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> text </span>) </span>{
+			jQuery.globalEval( text );
+			<span class="hljs-keyword">return</span> text;
+		}
+	}
+});</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle cache&#39;s special case and crossDomain</p></div></div><div class="code"><div class="wrapper">jQuery.ajaxPrefilter( <span class="hljs-string">"script"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> s </span>) </span>{
+	<span class="hljs-keyword">if</span> ( s.cache === <span class="hljs-literal">undefined</span> ) {
+		s.cache = <span class="hljs-literal">false</span>;
+	}
+	<span class="hljs-keyword">if</span> ( s.crossDomain ) {
+		s.type = <span class="hljs-string">"GET"</span>;
+	}
+});</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Bind script tag hack transport</p></div></div><div class="code"><div class="wrapper">jQuery.ajaxTransport( <span class="hljs-string">"script"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> s </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This transport only deals with cross domain requests</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( s.crossDomain ) {
+		<span class="hljs-keyword">var</span> script, callback;
+		<span class="hljs-keyword">return</span> {
+			send: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> _, complete </span>) </span>{
+				script = jQuery(<span class="hljs-string">"&lt;script&gt;"</span>).prop({
+					<span class="hljs-keyword">async</span>: <span class="hljs-literal">true</span>,
+					charset: s.scriptCharset,
+					src: s.url
+				}).on(
+					<span class="hljs-string">"load error"</span>,
+					callback = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> evt </span>) </span>{
+						script.remove();
+						callback = <span class="hljs-literal">null</span>;
+						<span class="hljs-keyword">if</span> ( evt ) {
+							complete( evt.type === <span class="hljs-string">"error"</span> ? <span class="hljs-number">404</span> : <span class="hljs-number">200</span>, evt.type );
+						}
+					}
+				);
+				<span class="hljs-built_in">document</span>.head.appendChild( script[ <span class="hljs-number">0</span> ] );
+			},
+			abort: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+				<span class="hljs-keyword">if</span> ( callback ) {
+					callback();
+				}
+			}
+		};
+	}
+});
+
+});</div></div></div></div></body></html>

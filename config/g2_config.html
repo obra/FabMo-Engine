@@ -1,0 +1,162 @@
+<!DOCTYPE html><html lang="en"><head><title>config/g2_config</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../"><meta name="groc-document-path" content="config/g2_config"><meta name="groc-project-path" content="config/g2_config.js"><link rel="stylesheet" type="text/css" media="all" href="../assets/style.css"><script type="text/javascript" src="../assets/behavior.js"></script><body><div id="meta"><div class="file-path">config/g2_config.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>g2_config.js</p>
+<p>This module defines the configuration object that manages the settings in G2.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">async</span> = <span class="hljs-built_in">require</span>(<span class="hljs-string">'async'</span>);
+util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'util'</span>);
+Config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./config'</span>).Config;
+
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../log'</span>).logger(<span class="hljs-string">'g2config'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A G2Config is the configuration object that stores the configuration values for G2.
+G2 configuration data is <em>already</em> JSON formatted, so G2Config objects are easy to create from config files using <code>load()</code>
+A G2Config object is bound to a driver, which gets updated when configuration values are loaded/changed.</p></div></div><div class="code"><div class="wrapper">G2Config = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">driver</span>) </span>{
+	Config.call(<span class="hljs-keyword">this</span>, <span class="hljs-string">'g2'</span>);
+};
+util.inherits(G2Config, Config);
+
+G2Config.prototype.init = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">driver, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.driver = driver;
+	Config.prototype.init.call(<span class="hljs-keyword">this</span>, callback);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Change the current unit system to the provided value.
+ newUnits - The new unit system (0=mm, 1=in)
+Note that the units are set by setting the &#39;unit&#39; parameter, which is unique to the FabMo variant of G2</p></div></div><div class="code"><div class="wrapper">G2Config.prototype.changeUnits = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">newUnits, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.driver.get(<span class="hljs-string">'unit'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, currentUnits</span>)</span>{
+		<span class="hljs-keyword">if</span>(err){
+			callback(err);
+		} <span class="hljs-keyword">else</span> {
+			<span class="hljs-keyword">if</span>(<span class="hljs-built_in">parseInt</span>(newUnits) === <span class="hljs-built_in">parseInt</span>(currentUnits)){
+				callback(<span class="hljs-string">'no unit change needed'</span>);
+			} <span class="hljs-keyword">else</span> {
+				<span class="hljs-keyword">this</span>.driver.setUnits(newUnits, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+					<span class="hljs-keyword">if</span>(err) {
+						callback(err);
+					} <span class="hljs-keyword">else</span> {
+						<span class="hljs-keyword">this</span>.getFromDriver(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, g2_values</span>) </span>{
+							<span class="hljs-keyword">if</span>(err) {
+								callback(err);
+							} <span class="hljs-keyword">else</span>  {
+								<span class="hljs-keyword">this</span>.setMany(g2_values, callback);
+							}
+						}.bind(<span class="hljs-keyword">this</span>));
+					}
+				}.bind(<span class="hljs-keyword">this</span>));
+			}
+		}
+	});
+
+
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Retrieve all of the configuration parameters from G2.
+Keys to retrieve are taken from the cache
+  callback - Called with an object containing all values retrieved</p></div></div><div class="code"><div class="wrapper">G2Config.prototype.getFromDriver = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	<span class="hljs-keyword">var</span> keys = <span class="hljs-built_in">Object</span>.keys(<span class="hljs-keyword">this</span>._cache)
+	<span class="hljs-keyword">this</span>.driver.get(<span class="hljs-built_in">Object</span>.keys(<span class="hljs-keyword">this</span>._cache), <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, values</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) {
+			callback(err);
+		} <span class="hljs-keyword">else</span> {
+			<span class="hljs-keyword">if</span>(keys.length != values.length) {
+				callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Something went wrong when getting values from G2"</span>))
+			} <span class="hljs-keyword">else</span> {
+				<span class="hljs-keyword">var</span> obj = {}
+				<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;keys.length; i++) {
+					obj[keys[i]] = values[i];
+				}
+				callback(<span class="hljs-literal">null</span>, obj);
+			}
+		}
+
+	});
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get values from G2, set in the cache and on disk.
+      keys - List of keys to retrieve
+  callback - Called with updated data, or error</p></div></div><div class="code"><div class="wrapper">G2Config.prototype.reverseUpdate = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">keys, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.driver.get(keys, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+		<span class="hljs-keyword">if</span> (err) {
+			callback(err)
+		} <span class="hljs-keyword">else</span> {
+			keys.forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key,i</span>) </span>{
+				<span class="hljs-keyword">this</span>._cache[key] = data[i];
+			}.bind(<span class="hljs-keyword">this</span>))
+			<span class="hljs-keyword">this</span>.save(callback);
+		}
+	}.bind(<span class="hljs-keyword">this</span>));
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update the configuration with the data provided.  Values set are synced with G2
+      data - Object mapping keys to update to values
+  callback - Called with an object mapping keys to all values updated (after sync with G2)</p></div></div><div class="code"><div class="wrapper">G2Config.prototype.update = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data, callback</span>) </span>{
+	keys = <span class="hljs-built_in">Object</span>.keys(data);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO: We can probably replace this with a <code>setMany()</code></p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">async</span>.mapSeries(
+		keys,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Call driver.set() for each item in the collection of data that was passed in.</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">iterator</span>(<span class="hljs-params">key, cb</span>) </span>{
+			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.driver) {
+				<span class="hljs-keyword">this</span>.driver.set(key, data[key], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+					cb(<span class="hljs-literal">null</span>, data);
+				});
+			} <span class="hljs-keyword">else</span> {
+				cb(<span class="hljs-literal">null</span>);
+			}
+		}.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update the cache with all the values returned from the hardware</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">done</span>(<span class="hljs-params">err, results</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+			<span class="hljs-keyword">var</span> retval = {};
+			<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;keys.length; i++) {
+				key = keys[i];
+				value = results[i];
+				<span class="hljs-keyword">this</span>._cache[key] = value;
+				retval[key] = value;
+			}
+
+			<span class="hljs-keyword">this</span>.save(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+				<span class="hljs-keyword">if</span>(err) {
+					callback(err);
+				} <span class="hljs-keyword">else</span> {
+					callback(<span class="hljs-literal">null</span>, retval);
+				}
+			}.bind(<span class="hljs-keyword">this</span>));
+		}.bind(<span class="hljs-keyword">this</span>)
+	);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Write all cached values to G2
+  callback - Called with the updated cache, or error</p></div></div><div class="code"><div class="wrapper">G2Config.prototype.restore = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.update(<span class="hljs-keyword">this</span>._cache, callback);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Write only the list of provided values to G2
+      keys - list of keys to restore
+  callback - Called with an object containing the values updated</p></div></div><div class="code"><div class="wrapper">G2Config.prototype.restoreSome = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">keys, callback</span>) </span>{
+    cache = {};
+	keys.forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key</span>) </span>{
+		cache[key] = <span class="hljs-keyword">this</span>._cache[key];
+	}.bind(<span class="hljs-keyword">this</span>));
+	<span class="hljs-keyword">this</span>.update(cache, callback);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Status reports are special, and their format must be whats expected for the 
+machine/runtime environments to work properly.
+TODO: Move this data out into a configuration file, perhaps.
+Configure the status reports (indicating to G2 what is to be reported)
+  callback - Called as soon as the command is issued (Does not wait for a response)</p></div></div><div class="code"><div class="wrapper">G2Config.prototype.configureStatusReports = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.driver) {
+	<span class="hljs-keyword">this</span>.driver.command({<span class="hljs-string">"sr"</span>:{
+						<span class="hljs-string">"posx"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"posy"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"posz"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"posa"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"posb"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"vel"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"stat"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"hold"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"line"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"coor"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"unit"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"in1"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"in2"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"in3"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"in4"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"in5"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"in6"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"in7"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"in8"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"out1"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"out2"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"out3"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"out4"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"out5"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"out6"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"out7"</span>:<span class="hljs-literal">true</span>,
+						<span class="hljs-string">"out8"</span>:<span class="hljs-literal">true</span>
+					}});
+		<span class="hljs-keyword">this</span>.driver.command({<span class="hljs-string">"qv"</span>:<span class="hljs-number">0</span>});
+		<span class="hljs-keyword">this</span>.driver.command({<span class="hljs-string">"jv"</span>:<span class="hljs-number">4</span>});
+		<span class="hljs-keyword">this</span>.driver.requestStatusReport();
+		<span class="hljs-keyword">return</span> callback(<span class="hljs-literal">null</span>, <span class="hljs-keyword">this</span>);
+	} <span class="hljs-keyword">else</span> {
+		<span class="hljs-keyword">return</span> callback(<span class="hljs-literal">null</span>, <span class="hljs-keyword">this</span>);
+	}
+};
+exports.G2Config = G2Config;</div></div></div></div></body></html>

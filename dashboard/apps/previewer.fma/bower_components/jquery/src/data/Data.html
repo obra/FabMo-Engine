@@ -1,0 +1,133 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/data/Data</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/data/Data"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/data/Data.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/data/Data.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"../core"</span>,
+	<span class="hljs-string">"../var/rnotwhite"</span>,
+	<span class="hljs-string">"./accepts"</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery, rnotwhite </span>) </span>{
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">Data</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: Android&lt;4,
+Old WebKit does not have Object.preventExtensions/freeze method,
+return new empty object instead with no [[set]] accessor</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-built_in">Object</span>.defineProperty( <span class="hljs-keyword">this</span>.cache = {}, <span class="hljs-number">0</span>, {
+		get: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">return</span> {};
+		}
+	});
+
+	<span class="hljs-keyword">this</span>.expando = jQuery.expando + Data.uid++;
+}
+
+Data.uid = <span class="hljs-number">1</span>;
+Data.accepts = jQuery.acceptData;
+
+Data.prototype = {
+	key: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> owner </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>We can accept data for non-element nodes in modern browsers,
+but we should not, see #8335.
+Always return the key for a frozen object.</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( !Data.accepts( owner ) ) {
+			<span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+		}
+
+		<span class="hljs-keyword">var</span> descriptor = {},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check if the owner object already has a cache key</p></div></div><div class="code"><div class="wrapper">			unlock = owner[ <span class="hljs-keyword">this</span>.expando ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If not, create one</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( !unlock ) {
+			unlock = Data.uid++;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Secure it in a non-enumerable, non-writable property</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">try</span> {
+				descriptor[ <span class="hljs-keyword">this</span>.expando ] = { value: unlock };
+				<span class="hljs-built_in">Object</span>.defineProperties( owner, descriptor );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: Android&lt;4
+Fallback to a less secure definition</p></div></div><div class="code"><div class="wrapper">			} <span class="hljs-keyword">catch</span> ( e ) {
+				descriptor[ <span class="hljs-keyword">this</span>.expando ] = unlock;
+				jQuery.extend( owner, descriptor );
+			}
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Ensure the cache object</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( !<span class="hljs-keyword">this</span>.cache[ unlock ] ) {
+			<span class="hljs-keyword">this</span>.cache[ unlock ] = {};
+		}
+
+		<span class="hljs-keyword">return</span> unlock;
+	},
+	set: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> owner, data, value </span>) </span>{
+		<span class="hljs-keyword">var</span> prop,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>There may be an unlock assigned to this node,
+if there is no entry for this &quot;owner&quot;, create one inline
+and set the unlock as though an owner entry had always existed</p></div></div><div class="code"><div class="wrapper">			unlock = <span class="hljs-keyword">this</span>.key( owner ),
+			cache = <span class="hljs-keyword">this</span>.cache[ unlock ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle: [ owner, key, value ] args</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">typeof</span> data === <span class="hljs-string">"string"</span> ) {
+			cache[ data ] = value;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle: [ owner, { properties } ] args</p></div></div><div class="code"><div class="wrapper">		} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Fresh assignments by object are shallow copied</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( jQuery.isEmptyObject( cache ) ) {
+				jQuery.extend( <span class="hljs-keyword">this</span>.cache[ unlock ], data );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Otherwise, copy the properties one-by-one to the cache object</p></div></div><div class="code"><div class="wrapper">			} <span class="hljs-keyword">else</span> {
+				<span class="hljs-keyword">for</span> ( prop <span class="hljs-keyword">in</span> data ) {
+					cache[ prop ] = data[ prop ];
+				}
+			}
+		}
+		<span class="hljs-keyword">return</span> cache;
+	},
+	get: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> owner, key </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Either a valid cache is found, or will be created.
+New caches will be created and the unlock returned,
+allowing direct access to the newly created
+empty data object. A valid owner object must be provided.</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">var</span> cache = <span class="hljs-keyword">this</span>.cache[ <span class="hljs-keyword">this</span>.key( owner ) ];
+
+		<span class="hljs-keyword">return</span> key === <span class="hljs-literal">undefined</span> ?
+			cache : cache[ key ];
+	},
+	access: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> owner, key, value </span>) </span>{
+		<span class="hljs-keyword">var</span> stored;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>In cases where either:</p>
+<ol>
+<li>No key was specified</li>
+<li>A string key was specified, but no value provided</li>
+</ol>
+<p>Take the &quot;read&quot; path and allow the get method to determine
+which value to return, respectively either:</p>
+<ol>
+<li>The entire cache object</li>
+<li>The data stored at the key</li>
+</ol></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( key === <span class="hljs-literal">undefined</span> ||
+				((key &amp;&amp; <span class="hljs-keyword">typeof</span> key === <span class="hljs-string">"string"</span>) &amp;&amp; value === <span class="hljs-literal">undefined</span>) ) {
+
+			stored = <span class="hljs-keyword">this</span>.get( owner, key );
+
+			<span class="hljs-keyword">return</span> stored !== <span class="hljs-literal">undefined</span> ?
+				stored : <span class="hljs-keyword">this</span>.get( owner, jQuery.camelCase(key) );
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>[*]When the key is not a string, or both a key and value
+are specified, set or extend (existing objects) with either:</p>
+<ol>
+<li>An object of properties</li>
+<li>A key and value</li>
+</ol></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">this</span>.set( owner, key, value );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Since the &quot;set&quot; path can have two possible entry points
+return the expected data based on which path was taken[*]</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">return</span> value !== <span class="hljs-literal">undefined</span> ? value : key;
+	},
+	remove: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> owner, key </span>) </span>{
+		<span class="hljs-keyword">var</span> i, name, camel,
+			unlock = <span class="hljs-keyword">this</span>.key( owner ),
+			cache = <span class="hljs-keyword">this</span>.cache[ unlock ];
+
+		<span class="hljs-keyword">if</span> ( key === <span class="hljs-literal">undefined</span> ) {
+			<span class="hljs-keyword">this</span>.cache[ unlock ] = {};
+
+		} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support array or space separated string of keys</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( jQuery.isArray( key ) ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If &quot;name&quot; is an array of keys...
+When data is initially created, via (&quot;key&quot;, &quot;val&quot;) signature,
+keys will be converted to camelCase.
+Since there is no way to tell <em>how</em> a key was added, remove
+both plain key and camelCase key. #12786
+This will only penalize the array argument path.</p></div></div><div class="code"><div class="wrapper">				name = key.concat( key.map( jQuery.camelCase ) );
+			} <span class="hljs-keyword">else</span> {
+				camel = jQuery.camelCase( key );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Try the string as a key before any manipulation</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( key <span class="hljs-keyword">in</span> cache ) {
+					name = [ key, camel ];
+				} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If a key with the spaces exists, use it.
+Otherwise, create an array by matching non-whitespace</p></div></div><div class="code"><div class="wrapper">					name = camel;
+					name = name <span class="hljs-keyword">in</span> cache ?
+						[ name ] : ( name.match( rnotwhite ) || [] );
+				}
+			}
+
+			i = name.length;
+			<span class="hljs-keyword">while</span> ( i-- ) {
+				<span class="hljs-keyword">delete</span> cache[ name[ i ] ];
+			}
+		}
+	},
+	hasData: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> owner </span>) </span>{
+		<span class="hljs-keyword">return</span> !jQuery.isEmptyObject(
+			<span class="hljs-keyword">this</span>.cache[ owner[ <span class="hljs-keyword">this</span>.expando ] ] || {}
+		);
+	},
+	discard: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> owner </span>) </span>{
+		<span class="hljs-keyword">if</span> ( owner[ <span class="hljs-keyword">this</span>.expando ] ) {
+			<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.cache[ owner[ <span class="hljs-keyword">this</span>.expando ] ];
+		}
+	}
+};
+
+<span class="hljs-keyword">return</span> Data;
+});</div></div></div></div></body></html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html><html lang="en"><head><title>routes/video</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../"><meta name="groc-document-path" content="routes/video"><meta name="groc-project-path" content="routes/video.js"><link rel="stylesheet" type="text/css" media="all" href="../assets/style.css"><script type="text/javascript" src="../assets/behavior.js"></script><body><div id="meta"><div class="file-path">routes/video.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> ps = <span class="hljs-built_in">require</span>(<span class="hljs-string">'child_process'</span>);
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../config'</span>);
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../log'</span>).logger(<span class="hljs-string">'routes'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Try to import udev - if it doesn&#39;t work, we don&#39;t have video support</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> udev = <span class="hljs-literal">null</span>;
+<span class="hljs-keyword">try</span> {
+  <span class="hljs-keyword">var</span> udev = <span class="hljs-built_in">require</span>(<span class="hljs-string">'udev'</span>);
+} <span class="hljs-keyword">catch</span>(e) {
+  log.warn(<span class="hljs-string">"No video support.  (Could not load udev module)"</span>)
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>video frame limited to 640*360 for now, because of streaming issue (spawn chunk the stdout data buffer to 65536)</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> video_settings = config.engine.get(<span class="hljs-string">'video'</span>);
+
+<span class="hljs-keyword">this</span>.server;
+<span class="hljs-keyword">var</span> gstreamer=<span class="hljs-literal">null</span>;
+<span class="hljs-keyword">var</span> args=[
+  <span class="hljs-string">"v4l2src"</span>,
+  <span class="hljs-string">"device="</span>+video_settings.path,
+  <span class="hljs-string">"!"</span>,<span class="hljs-string">"video/x-raw-yuv,width="</span>+video_settings.width+<span class="hljs-string">",heigth="</span>+video_settings.height+<span class="hljs-string">",framerate="</span>+video_settings.framerate+<span class="hljs-string">"/1"</span>,
+  <span class="hljs-string">"!"</span>,<span class="hljs-string">"jpegenc"</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p> &quot;!&quot;,&quot;image/jpeg,width=&quot;+video_settings.width+&quot;,heigth=&quot;+video_settings.height+&quot;,framerate=&quot;+video_settings.framerate+&quot;/1&quot;,</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-string">"!"</span>,<span class="hljs-string">"queue"</span>,
+  <span class="hljs-string">"!"</span>,<span class="hljs-string">"fdsink"</span>
+];
+
+<span class="hljs-keyword">if</span>(udev) {
+  dev_list = udev.list();
+  <span class="hljs-keyword">for</span>(i <span class="hljs-keyword">in</span> dev_list){
+    <span class="hljs-keyword">if</span>(dev_list[i].DEVNAME===video_settings.path) {
+      log.info(<span class="hljs-string">"Video device connected."</span>);
+      gstreamer = ps.spawn(<span class="hljs-string">"gst-launch"</span>,args);
+      configure_listener(gstreamer);
+    }
+  }
+
+  <span class="hljs-keyword">var</span> monitor = udev.monitor();
+  monitor.on(<span class="hljs-string">'add'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">device</span>) </span>{
+    <span class="hljs-keyword">if</span>(device.DEVNAME===video_settings.path){
+      <span class="hljs-comment">//console.log("webcam plugged");</span>
+      gstreamer = ps.spawn(<span class="hljs-string">"gst-launch"</span>,args);
+      configure_listener(gstreamer);
+    }
+  });
+  monitor.on(<span class="hljs-string">'remove'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">device</span>) </span>{
+    <span class="hljs-keyword">if</span>(device.DEVNAME===video_settings.path){
+      <span class="hljs-comment">//console.log("webcam unplugged");</span>
+    }
+  });
+  monitor.on(<span class="hljs-string">'change'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">device</span>) </span>{
+    <span class="hljs-keyword">if</span>(device.DEVNAME===video_settings.path){
+      <span class="hljs-comment">//console.log("webcam changed");</span>
+    }
+  });
+}
+
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">configure_listener</span>(<span class="hljs-params">gstreamer</span>)</span>{
+  <span class="hljs-keyword">if</span>(gstreamer) {
+    gstreamer.stdout.on(<span class="hljs-string">'data'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">data</span>) </span>{
+      <span class="hljs-keyword">var</span> frame = <span class="hljs-keyword">new</span> Buffer(data).toString(<span class="hljs-string">'base64'</span>);
+      server.io.of(<span class="hljs-string">'/video'</span>).emit(<span class="hljs-string">'frame'</span>,frame);
+    });
+
+    gstreamer.stderr.on(<span class="hljs-string">'data'</span>,<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data</span>)</span>{
+      log.debug(data);
+    });
+    gstreamer.on(<span class="hljs-string">'close'</span>,<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">code</span>)</span>{
+      log.debug(<span class="hljs-string">"gstreamer returns with code "</span>+code);
+    })
+
+    gstreamer.stdout.on(<span class="hljs-string">'end'</span>,<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>)</span>{
+      log.debug(<span class="hljs-string">"end!"</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>do something with var data</p></div></div><div class="code"><div class="wrapper">    });
+  }
+}
+
+<span class="hljs-built_in">module</span>.exports = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">server</span>) </span>{
+  <span class="hljs-keyword">this</span>.server=server;
+  server.io.of(<span class="hljs-string">'/video'</span>).on(<span class="hljs-string">'connection'</span>,<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>)</span>{
+    log.debug(<span class="hljs-string">"client connected to video endpoint"</span>);
+  })
+};</div></div></div></div></body></html>

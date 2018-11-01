@@ -1,0 +1,384 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/app_manager</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../"><meta name="groc-document-path" content="dashboard/app_manager"><meta name="groc-project-path" content="dashboard/app_manager.js"><link rel="stylesheet" type="text/css" media="all" href="../assets/style.css"><script type="text/javascript" src="../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/app_manager.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>app_manager.js</p>
+<p>This module provides the functions for managing FabMo apps.</p>
+<p>FabMo apps are single-page web applications that have special authority to communicate back to 
+the server that hosts them.  They communicate through a websocket and REST API via a client
+side javascript library called fabmo.js.  The engine provides the means (by way of this module)
+for the user to upload and manage apps on the tool, and these apps are hosted and managed in such 
+a way that the FabMo client (dashboard) can display them, retrieve information about them, etc.</p>
+<h1 id="app-storage">App Storage</h1>
+<p>Apps are packaged as .zip archives, usually (but not necessarily) with the extension .fma (fabmo app)
+They are stored (typically) in /opt/fabmo/apps when uploaded, and kept in their archive format in this location.</p>
+<h1 id="app-hosting">App Hosting</h1>
+<p>Apps are expanded so that their files can be hosted by the engine.  The hosted location for the apps is
+(typically) in /opt/fabmo/approot/approot (See code below to explain the need for the double-approot hierarchy)
+When expanded, apps are placed in directories with names that are either supplied by their package.json, or
+generated automatically.  Using auto generated names both ensures name uniqueness, and is
+a cache-busting measure.  Apps are copied/expanded into the approot when they are installed, or on
+system startup, only in cases where the engine detects that an app exists as an archive, but not in the approot.</p>
+<h1 id="system-apps">System Apps</h1>
+<p>System apps are stored in the engine source tree (/dashboard/apps) in their expanded form, but follow the
+same rules as user supplied apps.  They are copied to the approot directory just the same as user supplied
+apps.</p>
+<h1 id="notes">Notes</h1>
+<p>Here are some additional notes about apps that might be useful:</p>
+<ul>
+<li>Because apps (particularly system apps) are subject to change (in an engine update for example)
+the approot directory is &quot;cleared&quot; strategically in order to provoke a most up-to-date version of
+all the apps to be expanded into the approot directory. The approot is cleared on engine updates,
+ and perhaps at other times.</li>
+<li>The only thing an app technically needs to be an app is a package.json, and an index file
+See the source below for readAppPackageInfo for information about what the package.json contains</li>
+<li><code>app_info</code> is a typical argument in this file - it is the object that represents information about
+an app.  All functions that take this argument are expecting the same type of argument.
+TODO: Arguments like this should be changed to camelCase to keep with coding convention</li>
+<li>Apps are all managed in an internal index that maps an &quot;App ID&quot; to the app object itself (see
+app_info above) - apps can specify their own ID in the package.json - if they don&#39;t, one will be
+automatically supplied by the engine.  The advantage of supplying your own id is that no two apps
+in the system may have the same ID, so if you upload a second copy of an app whose id already exists,
+the first app will be overwritten.  This is useful while developing apps, so that you don&#39;t end up with
+many copies of the same app cluttering up your dash, but carries the burden of having to create 
+globally-unique app names yourself.  Possible candidates might be something like they do for java 
+packages:  companyname.domainname.version.appname or similar.</li>
+</ul></div></div><div class="code"><div class="wrapper"> 
+<span class="hljs-keyword">var</span> zip = <span class="hljs-built_in">require</span>(<span class="hljs-string">'adm-zip'</span>);
+<span class="hljs-keyword">var</span> path = <span class="hljs-built_in">require</span>(<span class="hljs-string">'path'</span>);
+<span class="hljs-keyword">var</span> os = <span class="hljs-built_in">require</span>(<span class="hljs-string">'os'</span>);
+<span class="hljs-keyword">var</span> ncp = <span class="hljs-built_in">require</span>(<span class="hljs-string">'ncp'</span>).ncp;
+<span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs-extra'</span>);
+<span class="hljs-keyword">var</span> <span class="hljs-keyword">async</span> = <span class="hljs-built_in">require</span>(<span class="hljs-string">'async'</span>);
+<span class="hljs-keyword">var</span> uuid = <span class="hljs-built_in">require</span>(<span class="hljs-string">'node-uuid'</span>);
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../log'</span>).logger(<span class="hljs-string">'app_manager'</span>);
+<span class="hljs-keyword">var</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../util'</span>);
+<span class="hljs-keyword">var</span> glob = <span class="hljs-built_in">require</span>(<span class="hljs-string">'glob'</span>);
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../config'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Maximum depth of a deep copy operation
+The ncp module is used for copying app files around, and it has this safeguard to
+prevent huge ridiculous copy operations.<br>!! Don&#39;t have more than 16 deep nested directories in your apps.</p></div></div><div class="code"><div class="wrapper">ncp.limit = <span class="hljs-number">16</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The AppManager object is the singleton object that provides all the functions for managing
+apps in the FabMo engine.  Options:
+         app_directory - The directory where user submitted apps will be stored
+  system_app_directory - The location where system apps will be stored.
+TODO: These options should be camelCase to keep to the coding conventions</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> AppManager = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">options</span>) </span>{
+	<span class="hljs-keyword">this</span>.app_directory = options.app_directory;
+	<span class="hljs-keyword">this</span>.approot_directory = options.approot_directory;
+	<span class="hljs-keyword">this</span>.system_app_directory = path.join(__dirname, <span class="hljs-string">'apps'</span>);
+	<span class="hljs-keyword">this</span>.apps_index = {};
+	<span class="hljs-keyword">this</span>.app_configs = {};
+	<span class="hljs-keyword">this</span>.apps_list = [];
+	<span class="hljs-keyword">try</span> {
+		<span class="hljs-keyword">this</span>.machine = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../machine'</span>).machine;
+	} <span class="hljs-keyword">catch</span>(e) {
+		log.warn(<span class="hljs-string">'No machine bound to AppManager'</span>);
+		<span class="hljs-keyword">this</span>.machine = <span class="hljs-literal">null</span>;
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Notify any listeners that a change has been made to the app manager</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.notifyChange = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine) {
+		<span class="hljs-keyword">this</span>.machine.emit(<span class="hljs-string">'change'</span>, <span class="hljs-string">'apps'</span>);
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Given the app information object, read its package.json
+UPDATE the provided app_info object with the relevant information from the package.json
+  app_info - Info about the app.  Needs the following:</p>
+<pre><code>           * app_path - The path to the app (where it is hosted in the approot)
+           * app_archive_path - The path to the app archive (where it is stored)</code></pre>
+<p>  callback - Called back with the app info, thus modified, or an error if there was an error.</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.readAppPackageInfo = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">app_info, callback</span>) </span>{
+	<span class="hljs-keyword">var</span> pkg_info_path = path.join(app_info.app_path, <span class="hljs-string">'package.json'</span>);
+	
+	<span class="hljs-keyword">var</span> pathname = path.basename(app_info.app_archive_path);
+	<span class="hljs-keyword">var</span> id = pathname.match(<span class="hljs-regexp">/^([^.]*)/g</span>)[<span class="hljs-number">0</span>];
+	fs.readFile(pkg_info_path, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) {
+			<span class="hljs-keyword">return</span> callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Could not read package.json"</span>));
+		}
+
+		<span class="hljs-keyword">try</span> {
+			<span class="hljs-keyword">var</span> package_info = <span class="hljs-built_in">JSON</span>.parse(data);
+		} <span class="hljs-keyword">catch</span>(e) {
+			<span class="hljs-keyword">return</span> callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Could not parse package.json"</span>))
+		}
+
+		<span class="hljs-keyword">try</span> {
+			app_info.name = package_info.name;
+			app_info.config_path = path.join(app_info.app_path, <span class="hljs-string">'.config.json'</span>);
+			app_info.icon_path = app_info.app_path + package_info.icon;
+			app_info.icon_background_color = package_info.icon_color || <span class="hljs-string">'blue'</span>;
+			app_info.icon_display = package_info.icon_display;
+			app_info.app_url = path.join(<span class="hljs-string">'approot'</span>, pathname, package_info.main);
+			app_info.icon_url = path.join(<span class="hljs-string">'approot'</span>, pathname, package_info.icon);
+			app_info.id = package_info.id || id;
+			app_info.version = package_info.version || <span class="hljs-string">''</span>;
+			app_info.description = package_info.description || <span class="hljs-string">"No description"</span>;
+			callback(<span class="hljs-literal">null</span>, app_info);
+		} <span class="hljs-keyword">catch</span>(e) {
+			callback(e);
+		}
+	}.bind(<span class="hljs-keyword">this</span>));
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Read the configuration file for the app.
+All apps, in their hosted location, have a configuration file called &#39;.config.json&#39; which stores
+configuration submitted through the fabmo.js API.  (dashboard.setAppConfig/dashboard.getAppConfig)
+  app_info - The app info object for which to retrieve the configuration data
+  callback - Called with the configuration data, or error if there was an error</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.readAppConfiguration = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">app_info, callback</span>) </span>{
+	fs.readFile(app_info.config_path, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+		<span class="hljs-keyword">try</span> {
+			<span class="hljs-keyword">var</span> cfg_data = <span class="hljs-built_in">JSON</span>.parse(data);
+			callback(<span class="hljs-literal">null</span>, cfg_data);
+		} <span class="hljs-keyword">catch</span>(e) {
+			callback(e);
+		}
+	}.bind(<span class="hljs-keyword">this</span>))
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>For the provided app, read both its configuration and its package info.
+  app_info - Info object for the app to be queried
+  callback - Called with an object containing both the package info and configuration (or error)</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.readAppMetadata = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">app_info, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.readAppPackageInfo(app_info, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, info</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) {
+			callback(err);
+		} <span class="hljs-keyword">else</span> {
+			<span class="hljs-keyword">this</span>.readAppConfiguration(info, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, cfg</span>) </span>{
+				<span class="hljs-keyword">if</span>(err) {
+					<span class="hljs-comment">//log.warn('Could not read app configuration: ' + err);</span>
+				}
+				cfg = cfg || {};
+				callback(<span class="hljs-literal">null</span>, {<span class="hljs-string">'info'</span> : info, <span class="hljs-string">'config'</span> : cfg});
+			}.bind(<span class="hljs-keyword">this</span>))
+		}
+	}.bind(<span class="hljs-keyword">this</span>))
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return the root directory for an app
+  id - The id of the app to query</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.getAppRoot = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">id</span>) </span>{
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.apps_index[id].app_path;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return the index of all apps (maps app ids to app_info objects)</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.getAppIndex = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.apps_index;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get the list of all apps - this is just the app index, but with the values formatted as a list</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.getAppList = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.apps_list;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get the app configuration data for the specified app id
+  id - The app id to query</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.getAppConfig = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">id</span>) </span>{
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.app_configs[id];
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the app configuration data for the specified app id and write to disk.
+      id - The app id of the app to update
+  config - The new config data.  Old data is overwritten
+callback - Called once the new configuration has been written to disk (error if error)</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.setAppConfig = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">id, config, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.app_configs[id] = config || {};
+	fs.writeFile(<span class="hljs-keyword">this</span>.apps_index[id].config_path, <span class="hljs-built_in">JSON</span>.stringify(config), callback);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Reconstruct the list of apps from the app_index
+TODO : this is really only used internally, maybe should use the _function convention for private functions</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.rebuildAppList = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">this</span>.apps_list = [];
+	<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> key <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.apps_index) {
+		<span class="hljs-keyword">this</span>.apps_list.push(<span class="hljs-keyword">this</span>.apps_index[key]);
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Add the provided app object to the index
+  app - app_info object, as described above</p></div></div><div class="code"><div class="wrapper">AppManager.prototype._addApp = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">app</span>) </span>{
+	<span class="hljs-keyword">if</span>(app.info.id <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.apps_index) {
+		<span class="hljs-keyword">var</span> old_app = <span class="hljs-keyword">this</span>.apps_index[app.info.id]
+	    fs.unlink(old_app.app_archive_path, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+	        <span class="hljs-keyword">if</span> (err) {
+	            log.warn(<span class="hljs-string">"failed to remove an old app archive: "</span> + err);
+	        }
+	    }); <span class="hljs-comment">// unlink</span>
+	}
+	<span class="hljs-keyword">this</span>.apps_index[app.info.id] = app.info;
+	<span class="hljs-keyword">this</span>.app_configs[app.info.id] = app.config;
+	<span class="hljs-keyword">this</span>.rebuildAppList();
+	<span class="hljs-keyword">this</span>.notifyChange();
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Reload the app with the specified ID.  This provokes a re-expand/re-copy of the app from
+the archive location to the hosted location.
+        id - The id of the app to reload
+  callback - Called with the app_info object for the reloaded app</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.reloadApp = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">id, callback</span>) </span>{
+	app_info = <span class="hljs-keyword">this</span>.apps_index[id];
+	<span class="hljs-keyword">if</span>(app_info) {
+		<span class="hljs-keyword">this</span>.loadApp(app_info.app_archive_path, {force:<span class="hljs-literal">true</span>}, callback);
+	} <span class="hljs-keyword">else</span> {
+		callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Not a valid app id: "</span> + id));
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load an app and issue a callback when loaded.  This copies or decompresses the app into 
+the approot (hosted) directory and 
+In the case of a compressed app, this decompresses the app into the approot directory.
+In the case of a raw app (not-compressed), this copies the app to the approot directory.
+  pathname - Path to the app or app archive to load
+   options - <code>force</code> can be set to true to force the app to be copied/decompressed even if
+             the hosted app directory already exists.</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.loadApp = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">pathname, options, callback</span>)</span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check to see if the path exists</p></div></div><div class="code"><div class="wrapper">	fs.stat(pathname,<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err,stat</span>)</span>{
+		<span class="hljs-keyword">if</span>(err) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Error if we couldn&#39;t stat</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">return</span> callback(err);
+		}
+		<span class="hljs-keyword">if</span>(stat.isDirectory()) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Copy if it&#39;s a directory</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.copyApp(pathname, <span class="hljs-keyword">this</span>.approot_directory, options, callback);
+		}
+
+		<span class="hljs-keyword">var</span> ext = path.extname(pathname).toLowerCase();
+		<span class="hljs-keyword">if</span>(ext === <span class="hljs-string">'.fma'</span> || ext === <span class="hljs-string">'.zip'</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Decompress if it&#39;s a compressed app file</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.decompressApp(pathname, <span class="hljs-keyword">this</span>.approot_directory, options, callback);
+		} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Error if it&#39;s a file, but the wrong kind</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">return</span> callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(pathname + <span class="hljs-string">' is not an app.'</span>));
+		}
+	}.bind(<span class="hljs-keyword">this</span>));
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Delete the app with the provided id.
+This removes the app from both the archive location and the approot.
+      id - The id of the app to remove
+callback - Called with the app_info object for the app thus removed, or error if there was an error.</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.deleteApp = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">id, callback</span>) </span>{
+	app = <span class="hljs-keyword">this</span>.apps_index[id];
+	<span class="hljs-keyword">var</span> app_id = id;
+	<span class="hljs-keyword">if</span>(app) {
+		<span class="hljs-keyword">var</span> app_path = app.app_path;
+		<span class="hljs-keyword">var</span> archive_path = app.app_archive_path;
+		fs.remove(app_path, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) {
+				callback(err);
+			} <span class="hljs-keyword">else</span> {
+				fs.remove(archive_path, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+					<span class="hljs-keyword">if</span>(err) {
+						callback(err);
+					} <span class="hljs-keyword">else</span> {
+						app_info = <span class="hljs-keyword">this</span>.apps_index[app_id];
+						<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.apps_index[app_id];
+						<span class="hljs-keyword">var</span> index = <span class="hljs-keyword">this</span>.apps_list.indexOf(app_info);
+						<span class="hljs-keyword">if</span> (index &gt; -<span class="hljs-number">1</span>) {
+							<span class="hljs-keyword">this</span>.apps_list.splice(index, <span class="hljs-number">1</span>);
+						} <span class="hljs-keyword">else</span> {
+							log.warn(<span class="hljs-string">"Inconsistency in the app index observed when removing app "</span> + app_id);
+						}
+						callback(<span class="hljs-literal">null</span>, app_info);
+						<span class="hljs-keyword">this</span>.notifyChange();
+					}
+				}.bind(<span class="hljs-keyword">this</span>)); <span class="hljs-comment">// remove app archive</span>
+			}
+		}.bind(<span class="hljs-keyword">this</span>)); <span class="hljs-comment">// remove installed app folder</span>
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Copies an app from the src directory to the dest directory.
+     src - The source app directory (This must be a raw app, it can&#39;t point to an archive)
+    dest - The destination direcotry (usually the approot)
+ options - <code>force</code> can be set to true to force the app to be copied/decompressed even if
+           the hosted app directory already exists.
+callback - Called with the app_info object for the app thus copied, or error if there was an error</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.copyApp = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">src, dest, options, callback</span>) </span>{
+	<span class="hljs-keyword">try</span> {
+		<span class="hljs-keyword">var</span> name = path.basename(src);
+		<span class="hljs-keyword">var</span> app_info = {
+			app_path : dest + <span class="hljs-string">"/"</span> + name + <span class="hljs-string">"/"</span>,
+			app_archive_path : src
+		};
+		<span class="hljs-keyword">var</span> exists = fs.existsSync(app_info.app_path);
+
+		<span class="hljs-keyword">if</span>(exists &amp;&amp; !options.force) {
+			log.debug(<span class="hljs-string">'Not copying app "'</span> + src + <span class="hljs-string">'" because it already exists.'</span>);
+			<span class="hljs-keyword">this</span>.readAppMetadata(app_info, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, app_metadata</span>) </span>{
+				<span class="hljs-keyword">if</span>(err) {
+					<span class="hljs-keyword">return</span> callback(err);
+				} <span class="hljs-keyword">else</span> {
+					<span class="hljs-keyword">this</span>._addApp(app_metadata);
+					callback(<span class="hljs-literal">null</span>, app_metadata);
+				}
+			}.bind(<span class="hljs-keyword">this</span>));
+			<span class="hljs-keyword">return</span>;
+		}
+
+		log.debug(<span class="hljs-string">'Copying app "'</span> + src + <span class="hljs-string">'"'</span>);
+		ncp(app_info.app_archive_path, app_info.app_path, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">err</span>) </span>{
+			<span class="hljs-keyword">if</span> (err) {
+				<span class="hljs-keyword">return</span> callback(err);
+			} <span class="hljs-keyword">else</span> {
+				<span class="hljs-keyword">this</span>.readAppMetadata(app_info, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, app_metadata</span>) </span>{
+					<span class="hljs-keyword">if</span>(err) {
+						<span class="hljs-keyword">return</span> callback(err);
+					}
+					<span class="hljs-keyword">this</span>._addApp(app_metadata);
+					util.diskSync(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+						callback(<span class="hljs-literal">null</span>, app_metadata);
+					});
+				}.bind(<span class="hljs-keyword">this</span>));
+			}
+		}.bind(<span class="hljs-keyword">this</span>));
+	} <span class="hljs-keyword">catch</span>(e) {
+		<span class="hljs-keyword">return</span> callback(e);
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Decompress an app from the src archive to the dest directory.
+     src - The source app archive (This must be an app archive, it can&#39;t point to a directory)
+    dest - The destination direcotry (usually the approot)
+ options - <code>force</code> can be set to true to force the app to be copied/decompressed even if
+           the hosted app directory already exists.
+callback - Called with the app_info object for the app thus copied, or error if there was an error</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.decompressApp = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">src, dest, options, callback</span>) </span>{
+	<span class="hljs-keyword">try</span> {
+		<span class="hljs-keyword">var</span> name = path.basename(src);
+		<span class="hljs-keyword">var</span> app_info = {
+			app_path : dest + <span class="hljs-string">"/"</span> + name,
+			app_archive_path : src
+		};
+		<span class="hljs-keyword">var</span> exists = fs.existsSync(app_info.app_path);
+		<span class="hljs-keyword">if</span>(exists &amp;&amp; !options.force) {
+			log.debug(<span class="hljs-string">'Not decompressing app "'</span> + src + <span class="hljs-string">'" because it already exists.'</span>);
+			<span class="hljs-keyword">this</span>.readAppMetadata(app_info, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, app_metadata</span>) </span>{
+				<span class="hljs-keyword">if</span>(err) {
+					<span class="hljs-keyword">return</span> callback(err);
+				} <span class="hljs-keyword">else</span> {
+					<span class="hljs-keyword">this</span>._addApp(app_metadata);
+					util.diskSync(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+						callback(<span class="hljs-literal">null</span>, app_metadata);
+					});
+				}
+			}.bind(<span class="hljs-keyword">this</span>));
+			<span class="hljs-keyword">return</span>;
+		}
+
+		log.debug(<span class="hljs-string">'Decompressing app "'</span> + app_info.app_path + <span class="hljs-string">'"'</span>);
+
+		<span class="hljs-keyword">try</span> {
+			<span class="hljs-keyword">var</span> app = <span class="hljs-keyword">new</span> zip(src);
+			app.extractAllTo(app_info.app_path, <span class="hljs-literal">true</span>);
+		} <span class="hljs-keyword">catch</span>(e) {
+			<span class="hljs-keyword">return</span> callback(e);
+		}
+
+		<span class="hljs-keyword">this</span>.readAppMetadata(app_info, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, app_metadata</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) {
+				<span class="hljs-keyword">return</span> callback(err);
+			}
+			<span class="hljs-keyword">this</span>._addApp(app_metadata);
+			callback(<span class="hljs-literal">null</span>, app_metadata);
+		}.bind(<span class="hljs-keyword">this</span>));
+	}
+	<span class="hljs-keyword">catch</span>(e){
+		callback(e);
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Install the app archive at the provided path by copying it from that path
+to the app archive directory, and load the app.
+  pathname - Path to the app archive to install
+      name - The filename to use for the installed app
+  callback - Called with the app_info object for the installed app, or error if error </p></div></div><div class="code"><div class="wrapper">AppManager.prototype.installAppArchive = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">pathname, name, callback</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Keep the name of the file uploaded for a &quot;friendly name&quot;</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">var</span> friendly_filename = name || <span class="hljs-string">'app.fma'</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>But create a unique name for actual storage</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">var</span> filename = util.createUniqueFilename(friendly_filename);
+    <span class="hljs-keyword">var</span> full_path = path.join(config.getDataDir(<span class="hljs-string">'apps'</span>), filename);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Move the file to the apps directory</p></div></div><div class="code"><div class="wrapper">	util.move(pathname, full_path, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+	    log.debug(<span class="hljs-string">"Done with a move"</span>);
+	    <span class="hljs-keyword">if</span> (err) {
+	        callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'Failed to move the app from the temporary folder to the installation folder.'</span>));
+	    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>delete the temporary file (no longer needed)</p></div></div><div class="code"><div class="wrapper">	    fs.unlink(pathname, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+	        <span class="hljs-keyword">if</span> (err) {
+	            log.warn(<span class="hljs-string">"failed to remove the app from temporary folder: "</span> + err);
+	        }
+	    }); <span class="hljs-comment">// unlink</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>And create the app metadata in memory</p></div></div><div class="code"><div class="wrapper">	    <span class="hljs-keyword">this</span>.loadApp(full_path, {}, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+	    	<span class="hljs-keyword">if</span>(err) {
+	    		<span class="hljs-keyword">return</span> callback(err);
+	    	}
+	        callback(err, data);
+	    }); <span class="hljs-comment">// loadApp</span>
+	}.bind(<span class="hljs-keyword">this</span>)); <span class="hljs-comment">// move</span>
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get a list of all app archives found in app archive locations
+TODO - Is this function still used?  It has profile cruft that I think is no longer in play
+  callback - Called with the list of paths, or error if error.</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.getAppPaths = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	<span class="hljs-keyword">var</span> app_pattern = <span class="hljs-keyword">this</span>.app_directory + <span class="hljs-string">'/@(*.zip|*.fma)'</span>
+	<span class="hljs-keyword">var</span> sys_pattern = <span class="hljs-keyword">this</span>.system_app_directory + <span class="hljs-string">'/@(*.zip|*.fma)'</span>
+	</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - this is no longer needed</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> profile_pattern = config.getProfileDir(<span class="hljs-string">'apps'</span>) + <span class="hljs-string">'/@(*.zip|*.fma)'</span>
+
+	glob(app_pattern, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, user_files</span>) </span>{
+		glob(sys_pattern, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, system_files</span>) </span>{
+			glob(profile_pattern, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, profile_files</span>) </span>{
+				callback(<span class="hljs-literal">null</span>, system_files.concat(user_files).concat(profile_files));
+			}.bind(<span class="hljs-keyword">this</span>));
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load all of the apps from all of the app archive locations
+  callback - Called with a list containing all app_info objects, or error if error.</p></div></div><div class="code"><div class="wrapper">AppManager.prototype.loadApps =  <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.getAppPaths(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err,files</span>)</span>{
+		<span class="hljs-keyword">async</span>.mapSeries(files,
+			<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">file, callback</span>) </span>{
+				<span class="hljs-keyword">this</span>.loadApp(file, {}, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+					<span class="hljs-keyword">if</span>(err) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Rather than allowing errors to halt the async.map operation that is loading the apps
+we swallow them and simply stick a &#39;null&#39; in the output array (that we cull out at the end)</p></div></div><div class="code"><div class="wrapper">						<span class="hljs-keyword">return</span> callback(<span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>);
+					} <span class="hljs-keyword">else</span> {
+						<span class="hljs-keyword">return</span> callback(<span class="hljs-literal">null</span>, result);
+					}
+				}.bind(<span class="hljs-keyword">this</span>));
+			}.bind(<span class="hljs-keyword">this</span>),
+			<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, results</span>) </span>{
+				callback(err, results);
+			}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+};
+
+<span class="hljs-built_in">module</span>.exports.AppManager = AppManager;</div></div></div></div></body></html>

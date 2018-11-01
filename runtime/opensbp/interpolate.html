@@ -1,0 +1,221 @@
+<!DOCTYPE html><html lang="en"><head><title>runtime/opensbp/interpolate</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../"><meta name="groc-document-path" content="runtime/opensbp/interpolate"><meta name="groc-project-path" content="runtime/opensbp/interpolate.js"><link rel="stylesheet" type="text/css" media="all" href="../../assets/style.css"><script type="text/javascript" src="../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">runtime/opensbp/interpolate.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - Gordon provide documentation here?</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs'</span>);
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../log'</span>).logger(<span class="hljs-string">'sbp'</span>);
+<span class="hljs-keyword">var</span> g2 = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../g2'</span>);
+<span class="hljs-keyword">var</span> sb3_commands = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./sb3_commands'</span>);
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../config'</span>);
+<span class="hljs-keyword">var</span> opensbp = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./opensbp'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p> Interpolate_Line - is used to interpolate a line into smaller segments.</p>
+<p> Usage: lineInterpolate(<EndPt>)</p></div></div><div class="code"><div class="wrapper">exports.lineInterpolate = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">runtime, EndPt</span>) </span>{
+log.debug(<span class="hljs-string">"lineInterpolate: EndPt = "</span> + <span class="hljs-built_in">JSON</span>.stringify(EndPt));
+  <span class="hljs-keyword">var</span> startX = runtime.cmd_posx;
+  <span class="hljs-keyword">var</span> startY = runtime.cmd_posy; 
+  <span class="hljs-keyword">var</span> startZ = runtime.cmd_posz;
+  <span class="hljs-keyword">var</span> nextX = startX;
+  <span class="hljs-keyword">var</span> nextY = startY;
+  <span class="hljs-keyword">var</span> nextZ = startZ;
+  <span class="hljs-keyword">var</span> endX = startX;
+  <span class="hljs-keyword">if</span> (<span class="hljs-string">"X"</span> <span class="hljs-keyword">in</span> EndPt &amp;&amp; EndPt.X !== <span class="hljs-literal">undefined</span>) { endX = EndPt.X;}
+  <span class="hljs-keyword">var</span> endY = startY;
+  <span class="hljs-keyword">if</span> (<span class="hljs-string">"Y"</span> <span class="hljs-keyword">in</span> EndPt &amp;&amp; EndPt.Y !== <span class="hljs-literal">undefined</span>) { endY = EndPt.Y;}
+  <span class="hljs-keyword">var</span> endZ = startZ;
+  <span class="hljs-keyword">if</span> (<span class="hljs-string">"Z"</span> <span class="hljs-keyword">in</span> EndPt &amp;&amp; EndPt.Z !== <span class="hljs-literal">undefined</span>) {
+    endZ = EndPt.Z;
+    log.debug(<span class="hljs-string">"Z = "</span> + endZ);
+  }    
+  <span class="hljs-keyword">var</span> speed = EndPt.F;
+  <span class="hljs-keyword">var</span> segLen = config.opensbp.get(<span class="hljs-string">'cRes'</span>);
+log.debug(<span class="hljs-string">"segLen = "</span> + segLen);
+  <span class="hljs-comment">//distance = sqrt[width^2 + length^2 + height^2]</span>
+log.debug(<span class="hljs-string">"startX = "</span> + startX + <span class="hljs-string">" startY = "</span> + startY + <span class="hljs-string">" startZ = "</span> + startZ );  
+log.debug(<span class="hljs-string">"endX = "</span> + endX + <span class="hljs-string">" endY = "</span> + endY + <span class="hljs-string">" endZ = "</span> + endZ );  
+  <span class="hljs-keyword">var</span> lineLen = <span class="hljs-built_in">Math</span>.sqrt(<span class="hljs-built_in">Math</span>.pow((endX-startX),<span class="hljs-number">2</span>)+<span class="hljs-built_in">Math</span>.pow((endY-startY),<span class="hljs-number">2</span>)+<span class="hljs-built_in">Math</span>.pow((endZ-startZ),<span class="hljs-number">2</span>));
+log.debug(<span class="hljs-string">"lineLen = "</span> + lineLen);
+  <span class="hljs-keyword">if</span> ( lineLen === <span class="hljs-number">0</span> ) { <span class="hljs-keyword">throw</span>( <span class="hljs-string">"lineInterpolate: line length zero"</span> ); }
+  <span class="hljs-keyword">var</span> steps = <span class="hljs-built_in">Math</span>.floor(lineLen/segLen);
+  <span class="hljs-keyword">var</span> stepX = (endX-startX)/steps;
+  <span class="hljs-keyword">var</span> stepY = (endY-startY)/steps;
+  <span class="hljs-keyword">var</span> stepZ = (endZ-startZ)/steps;
+  <span class="hljs-keyword">var</span> gcode = <span class="hljs-string">""</span>;
+  <span class="hljs-keyword">var</span> level = runtime.transforms.level.apply;
+  <span class="hljs-keyword">var</span> PtFilename = runtime.transforms.level.ptDataFile;
+  <span class="hljs-keyword">var</span> PtData = <span class="hljs-string">""</span>;
+  <span class="hljs-keyword">if</span>(level === <span class="hljs-literal">true</span>){</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>   log.debug(&quot;lineInterpolation: readPtData&quot;);</p></div></div><div class="code"><div class="wrapper">    PtData = fs.readFileSync(PtFilename);
+    PtData = <span class="hljs-built_in">JSON</span>.parse(PtData);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>   log.debug(&quot;lineInterpolate: PtData = &quot; + JSON.stringify(PtData));</p></div></div><div class="code"><div class="wrapper">  }
+  <span class="hljs-keyword">for</span> ( i=<span class="hljs-number">1</span>; i&lt;steps+<span class="hljs-number">1</span>; i++){
+      nextPt = {};
+      gcode = <span class="hljs-string">"G1"</span>;
+
+      <span class="hljs-keyword">if</span> ((stepX !== <span class="hljs-number">0</span>)){ nextPt.X = startX + (stepX * i); }
+      <span class="hljs-keyword">else</span>{ nextPt.X = runtime.cmd_posx; }
+
+      <span class="hljs-keyword">if</span> (stepY !== <span class="hljs-number">0</span>){ nextPt.Y = startY + (stepY * i); }
+      <span class="hljs-keyword">else</span>{ nextPt.Y = runtime.cmd_posy; }
+
+      <span class="hljs-keyword">if</span> (stepZ !== <span class="hljs-number">0</span>){ nextPt.Z = startZ + (stepZ * i); }
+      <span class="hljs-keyword">else</span>{ 
+        <span class="hljs-keyword">if</span> (level === <span class="hljs-literal">true</span>) { nextPt.Z = runtime.cmd_posz; }
+      }
+
+      <span class="hljs-keyword">if</span> (level === <span class="hljs-literal">true</span>){ nextPt.Z = leveler(nextPt,PtData); }
+
+      <span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> key <span class="hljs-keyword">in</span> nextPt) {
+        <span class="hljs-keyword">var</span> v = nextPt[key];
+        log.debug(<span class="hljs-string">" lineInterpolate v = "</span> + v);
+        <span class="hljs-keyword">if</span>(v !== <span class="hljs-literal">undefined</span>) {
+          <span class="hljs-keyword">if</span>(<span class="hljs-built_in">isNaN</span>(v)) { 
+            <span class="hljs-keyword">var</span> err = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Invalid "</span> + key + <span class="hljs-string">" argument: "</span> + v );
+				    log.error(err);
+            <span class="hljs-keyword">throw</span>(err); 
+          } 
+          gcode += (key + v.toFixed(<span class="hljs-number">5</span>));
+          <span class="hljs-keyword">if</span>(key === <span class="hljs-string">"X"</span>) { runtime.cmd_posx = v; }
+          <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(key === <span class="hljs-string">"Y"</span>) { runtime.cmd_posy = v; }
+          <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(key === <span class="hljs-string">"Z"</span>) { runtime.cmd_posz = v; }
+          <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(key === <span class="hljs-string">"A"</span>) { runtime.cmd_posa = v; }
+          <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(key === <span class="hljs-string">"B"</span>) { runtime.cmd_posb = v; }
+          <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(key === <span class="hljs-string">"C"</span>) { runtime.cmd_posc = v; }
+        }
+      }
+
+      gcode += <span class="hljs-string">"F"</span> + speed;
+      runtime.emit_gcode(gcode);
+  }
+
+  <span class="hljs-keyword">return</span>;
+
+};
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">leveler</span>(<span class="hljs-params">PtNew, data</span>)</span>{
+    log.debug(<span class="hljs-string">"leveler data = "</span> + <span class="hljs-built_in">JSON</span>.stringify(data));
+    <span class="hljs-keyword">var</span> zA = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">var</span> zB = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">var</span> zP = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">var</span> count = <span class="hljs-built_in">Object</span>.keys(data).length;
+    <span class="hljs-keyword">if</span> (count === <span class="hljs-number">4</span>){
+      log.debug(<span class="hljs-string">"leveler_4-point: num keys = "</span> + count);
+      zA = data.P1.z + ((data.P2.z-data.P1.z)*((PtNew.X-data.P1.x)/(data.P2.x-data.P1.x)));
+      log.debug(<span class="hljs-string">"leveler: zA = "</span> + zA);
+      zB = data.P4.z + ((data.P3.z-data.P4.z)*((PtNew.X-data.P4.x)/(data.P3.x-data.P4.x)));
+      log.debug(<span class="hljs-string">"leveler: zB = "</span> + zB);
+      zP = zA - ((zB-zA)*((PtNew.Y-data.P1.y)/(data.P4.y-data.P1.y)));
+      log.debug(<span class="hljs-string">"leveler: zP = "</span> + zP);
+      zP += PtNew.Z;
+      log.debug(<span class="hljs-string">"zP = "</span> + zP + <span class="hljs-string">"   PtZ = "</span> + PtNew.Z);
+      <span class="hljs-keyword">return</span> zP;
+    }
+    <span class="hljs-keyword">else</span>{
+      log.debug(<span class="hljs-string">"leveler_multi-point: num keys = "</span> + count);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p><strong><strong><strong>**</strong></strong></strong>Move to higher level so that the objcet only has to be 
+created once for the file run.
+Read point data</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Organize points</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create triangles</p>
+<hr></div></div><div class="code"><div class="wrapper">      <span class="hljs-keyword">var</span> triangles = {};
+      <span class="hljs-keyword">var</span> pX = PtNew.X;
+      <span class="hljs-keyword">var</span> pY = PtNew.Y;
+      <span class="hljs-comment">//Search for the triangle that the point intersects</span>
+      <span class="hljs-keyword">for</span> (key <span class="hljs-keyword">in</span> triangles) {
+        <span class="hljs-keyword">if</span> ((triangles[key].Y1 &gt; pY || triangles[key].Y2 &gt; pY || triangles[key].Y3 &gt; pY) &amp;&amp; 
+            (triangles[key].Y1 &lt; pY || triangles[key].Y2 &lt; pY || triangles[key].Y3 &lt; pY)){
+          <span class="hljs-keyword">if</span> ((triangles[key].X1 &gt; pX || triangles[key].X2 &gt; pX || triangles[key].Y3 &gt; pX) &amp;&amp; 
+              (triangles[key].X1 &lt; pX || triangles[key].X2 &lt; pX || triangles[key].Y3 &lt; pX)){
+          <span class="hljs-comment">//Calculate the Z Height</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Find X line that intersects triangle</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Find Z at Y intersection of X line</p></div></div><div class="code"><div class="wrapper">            zP += PtNew.Z;
+            log.debug(<span class="hljs-string">"zP = "</span> + zP + <span class="hljs-string">"   PtZ = "</span> + PtNew.Z);
+            <span class="hljs-keyword">return</span> zP;
+      
+          }
+        }
+      }
+    }
+    <span class="hljs-keyword">return</span> PtNew.Z;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p> Interpolate_Circle - is used to interpolate a circle that has uneven proportions as an ellipse.</p>
+<p> Usage: circleInterpolate(pt);</p></div></div><div class="code"><div class="wrapper">exports.circleInterpolate = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">runtime, code, CGParams</span>) </span>{
+log.debug(<span class="hljs-string">"circleInterpolate: CGParams = "</span> + <span class="hljs-built_in">JSON</span>.stringify(CGParams));
+  <span class="hljs-keyword">var</span> startX = runtime.cmd_posx;
+  <span class="hljs-keyword">var</span> startY = runtime.cmd_posy;
+  <span class="hljs-keyword">var</span> startZ = runtime.cmd_posz;
+  log.debug(<span class="hljs-string">"startX = "</span> + startX + <span class="hljs-string">" startY = "</span> + startY);
+  <span class="hljs-keyword">var</span> endX = startX;
+  <span class="hljs-keyword">if</span> (<span class="hljs-string">"X"</span> <span class="hljs-keyword">in</span> CGParams &amp;&amp; CGParams.X !== <span class="hljs-literal">undefined</span>) { endX = CGParams.X; }
+  <span class="hljs-keyword">var</span> endY = startY;
+  <span class="hljs-keyword">if</span> (<span class="hljs-string">"Y"</span> <span class="hljs-keyword">in</span> CGParams &amp;&amp; CGParams.Y !== <span class="hljs-literal">undefined</span>) { endY = CGParams.Y; }
+  <span class="hljs-keyword">var</span> plunge = startZ;
+  <span class="hljs-keyword">if</span> (<span class="hljs-string">"Z"</span> <span class="hljs-keyword">in</span> CGParams &amp;&amp; CGParams.Z !== <span class="hljs-literal">undefined</span>) { plunge = CGParams.Z; }
+  <span class="hljs-keyword">var</span> centerX = CGParams.I;
+  <span class="hljs-keyword">var</span> centerY = CGParams.J;
+  <span class="hljs-keyword">var</span> centerPtX = startX+centerX;
+  <span class="hljs-keyword">var</span> centerPtY = startY+centerY;
+  <span class="hljs-keyword">var</span> speed = CGParams.F;
+  <span class="hljs-keyword">var</span> nextX = <span class="hljs-number">0.0</span>;
+  <span class="hljs-keyword">var</span> nextY = <span class="hljs-number">0.0</span>;
+  <span class="hljs-keyword">var</span> nextZ = <span class="hljs-number">0.0</span>;
+
+  <span class="hljs-keyword">var</span> SpiralPlunge = <span class="hljs-number">0</span>;
+  <span class="hljs-keyword">if</span> ( plunge !== <span class="hljs-number">0</span> ) { SpiralPlunge = <span class="hljs-number">1</span>; }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Find the beginning and ending angles in radians. We&#39;ll use only radians from here on.</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">var</span> Bang = <span class="hljs-built_in">Math</span>.abs(<span class="hljs-built_in">Math</span>.atan2(centerY, centerX));
+  <span class="hljs-keyword">var</span> Eang = <span class="hljs-built_in">Math</span>.abs(<span class="hljs-built_in">Math</span>.atan2((endY-centerPtY),(endX-centerPtX)));
+
+<span class="hljs-comment">//log.debug("1Bang = " + Bang + "  Eang = " + Eang);</span>
+
+  <span class="hljs-keyword">var</span> inclAng;
+
+  <span class="hljs-keyword">if</span> (code === <span class="hljs-string">"G2"</span>) {
+      <span class="hljs-keyword">if</span> (Eang &gt; Bang) { inclAng  = <span class="hljs-number">6.28318530717959</span> - (Bang - Eang); }
+      <span class="hljs-keyword">if</span> (Bang &gt; Eang) { inclAng = Eang - Bang; }
+  }
+  <span class="hljs-keyword">else</span> {
+      <span class="hljs-keyword">if</span> (Bang &lt; Eang) { inclAng = Eang + Bang; }
+      <span class="hljs-keyword">if</span> (Bang &gt; Eang) { inclAng = <span class="hljs-number">6.28318530717959</span> - (Bang - Eang); }
+  }
+
+<span class="hljs-comment">//log.debug("inclAng = " + inclAng);</span>
+<span class="hljs-comment">//log.debug("2Bang = " + Bang + "  Eang = " + Eang);</span>
+
+  <span class="hljs-keyword">if</span> ( <span class="hljs-built_in">Math</span>.abs(inclAng) &lt; <span class="hljs-number">0.005</span> ) { </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><pre><code> log.debug(&quot;Returning from interpolation - arc too small to cut!&quot;);</code></pre></div></div><div class="code"><div class="wrapper">      <span class="hljs-keyword">return</span>;
+  }
+
+  <span class="hljs-keyword">var</span> circleTol = <span class="hljs-number">0.001</span>;
+  <span class="hljs-keyword">var</span> radius = <span class="hljs-built_in">Math</span>.sqrt(<span class="hljs-built_in">Math</span>.pow(centerX,<span class="hljs-number">2</span>)+<span class="hljs-built_in">Math</span>.pow(centerY,<span class="hljs-number">2</span>));
+  <span class="hljs-keyword">var</span> chordLen = config.opensbp.get(<span class="hljs-string">'cRes'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Sagitta is the height of an arc from the chord</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">var</span> sagitta = radius - <span class="hljs-built_in">Math</span>.sqrt(<span class="hljs-built_in">Math</span>.pow(radius,<span class="hljs-number">2</span>) - <span class="hljs-built_in">Math</span>.pow((chordLen/<span class="hljs-number">2</span>),<span class="hljs-number">2</span>));
+
+  <span class="hljs-keyword">if</span> (sagitta !== circleTol) {
+      sagitta *= (sagitta/circleTol);
+      chordLen = <span class="hljs-built_in">Math</span>.sqrt(<span class="hljs-number">2</span>*sagitta*radius-<span class="hljs-built_in">Math</span>.pow(sagitta,<span class="hljs-number">2</span>));
+      log.debug(<span class="hljs-string">"chordLen = "</span> + chordLen );
+      <span class="hljs-keyword">if</span> (chordLen &lt; <span class="hljs-number">0.001</span>) { chordLen = <span class="hljs-number">0.001</span>; }
+  }    
+
+  <span class="hljs-keyword">var</span> theta = <span class="hljs-built_in">Math</span>.asin((<span class="hljs-number">0.5</span>*chordLen)/radius) * <span class="hljs-number">2</span>;
+  <span class="hljs-keyword">var</span> remain = <span class="hljs-built_in">Math</span>.abs(inclAng) % <span class="hljs-built_in">Math</span>.abs(theta);
+  <span class="hljs-keyword">var</span> steps = <span class="hljs-built_in">Math</span>.floor(<span class="hljs-built_in">Math</span>.abs(inclAng)/<span class="hljs-built_in">Math</span>.abs(theta));
+
+  <span class="hljs-keyword">if</span> ((remain) !== <span class="hljs-number">0</span>){
+      theta = inclAng/steps;
+  }
+
+  <span class="hljs-keyword">var</span> zStep = plunge/steps;
+  <span class="hljs-keyword">var</span> nextAng = Bang;
+  <span class="hljs-keyword">var</span> gcode = <span class="hljs-string">""</span>;
+
+  <span class="hljs-keyword">for</span> ( i=<span class="hljs-number">1</span>; i&lt;steps; i++) {
+    gcode = <span class="hljs-string">"G1"</span>;
+    nextAng = Bang + (i*theta);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>   log.debug(&quot;nextAng = &quot; + nextAng);<br>   log.debug(&quot;radius = &quot; + radius);</p></div></div><div class="code"><div class="wrapper">    runtime.cmd_posx = nextX = centerPtX + (radius * <span class="hljs-built_in">Math</span>.cos(nextAng)); <span class="hljs-comment">//* propX;</span>
+    runtime.cmd_posy = nextY = centerPtY + (radius * <span class="hljs-built_in">Math</span>.sin(nextAng)); <span class="hljs-comment">//* propY;</span>
+    gcode += <span class="hljs-string">"X"</span> + nextX.toFixed(<span class="hljs-number">5</span>) + <span class="hljs-string">"Y"</span> + nextY.toFixed(<span class="hljs-number">5</span>);
+    <span class="hljs-keyword">if</span> ( SpiralPlunge === <span class="hljs-number">1</span> ) { 
+      runtime.cmd_posz = params.Z = zStep * i;
+      gcode += <span class="hljs-string">"Z"</span> + nextZ.toFixed(<span class="hljs-number">5</span>); 
+    }
+    gcode += <span class="hljs-string">"F"</span> + speed;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>   log.debug(&quot;circleInterpolation: gcode = &quot; + gcode);</p></div></div><div class="code"><div class="wrapper">    runtime.emit_gcode(gcode);
+  }
+  
+  gcode = <span class="hljs-string">"G1"</span>;
+  runtime.cmd_posx = nextX = endX;
+  runtime.cmd_posy = nextY = endY;
+  gcode += <span class="hljs-string">"X"</span> + nextX.toFixed(<span class="hljs-number">5</span>) + <span class="hljs-string">"Y"</span> + nextY.toFixed(<span class="hljs-number">5</span>);
+  <span class="hljs-keyword">if</span> ( SpiralPlunge === <span class="hljs-number">1</span> ) { 
+    runtime.cmd_posz = nextZ = plunge;
+    gcode += <span class="hljs-string">"Z"</span> + nextZ.toFixed(<span class="hljs-number">5</span>); 
+  }
+  log.debug(<span class="hljs-string">"circleInterpolation: end gcode = "</span> + gcode);
+  gcode += <span class="hljs-string">"F"</span> + speed;
+  runtime.emit_gcode(gcode);
+
+  <span class="hljs-keyword">return</span>;
+
+};</div></div></div></div></body></html>

@@ -1,0 +1,33 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/core/parseHTML</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/core/parseHTML"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/core/parseHTML.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/core/parseHTML.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"../core"</span>,
+	<span class="hljs-string">"./var/rsingleTag"</span>,
+	<span class="hljs-string">"../manipulation"</span> <span class="hljs-comment">// buildFragment</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery, rsingleTag </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>data: string of html
+context (optional): If specified, the fragment will be created in this context, defaults to document
+keepScripts (optional): If true, will include scripts passed in the html string</p></div></div><div class="code"><div class="wrapper">jQuery.parseHTML = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> data, context, keepScripts </span>) </span>{
+	<span class="hljs-keyword">if</span> ( !data || <span class="hljs-keyword">typeof</span> data !== <span class="hljs-string">"string"</span> ) {
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+	}
+	<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">typeof</span> context === <span class="hljs-string">"boolean"</span> ) {
+		keepScripts = context;
+		context = <span class="hljs-literal">false</span>;
+	}
+	context = context || <span class="hljs-built_in">document</span>;
+
+	<span class="hljs-keyword">var</span> parsed = rsingleTag.exec( data ),
+		scripts = !keepScripts &amp;&amp; [];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Single tag</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( parsed ) {
+		<span class="hljs-keyword">return</span> [ context.createElement( parsed[<span class="hljs-number">1</span>] ) ];
+	}
+
+	parsed = jQuery.buildFragment( [ data ], context, scripts );
+
+	<span class="hljs-keyword">if</span> ( scripts &amp;&amp; scripts.length ) {
+		jQuery( scripts ).remove();
+	}
+
+	<span class="hljs-keyword">return</span> jQuery.merge( [], parsed.childNodes );
+};
+
+<span class="hljs-keyword">return</span> jQuery.parseHTML;
+
+});</div></div></div></div></body></html>

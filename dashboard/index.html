@@ -1,0 +1,54 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/index</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../"><meta name="groc-document-path" content="dashboard/index"><meta name="groc-project-path" content="dashboard/index.js"><link rel="stylesheet" type="text/css" media="all" href="../assets/style.css"><script type="text/javascript" src="../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/index.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>dashboard/index.js</p>
+<p>This module defines the functions and data for managing dashboard apps</p></div></div><div class="code"><div class="wrapper">app_manager = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./app_manager'</span>);
+config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../config'</span>);
+util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../util'</span>);
+path = <span class="hljs-built_in">require</span>(<span class="hljs-string">'path'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Instantiate the app manager
+Call only once at startup
+TODO - callback really doesn&#39;t do anything here.  Look at callback behavior</p></div></div><div class="code"><div class="wrapper">exports.configure = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	manager = <span class="hljs-keyword">new</span> app_manager.AppManager({
+		app_directory : config.getDataDir(<span class="hljs-string">'apps'</span>),
+		approot_directory : config.getDataDir(path.join(<span class="hljs-string">'approot'</span>, <span class="hljs-string">'approot'</span>))
+	});
+	exports.appManager = manager;
+	setImmediate(callback, <span class="hljs-literal">null</span>);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The rest of these functions just define the singleton app manager interface
+TODO - this could be simplified</p></div></div><div class="code"><div class="wrapper">exports.loadApps = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	exports.appManager.loadApps(callback);
+};
+
+exports.getAppIndex = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">return</span> exports.appManager.getAppIndex() || [];
+};
+
+exports.getAppConfig = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">id</span>) </span>{
+	<span class="hljs-keyword">return</span> exports.appManager.getAppConfig(id);
+};
+
+exports.setAppConfig = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">id, cfg, callback</span>) </span>{
+	<span class="hljs-keyword">return</span> exports.appManager.setAppConfig(id, cfg, callback);
+};
+
+exports.getAppList = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">return</span> exports.appManager.getAppList() || [];
+};
+
+exports.getAppFiles = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">id</span>) </span>{
+	app_root = exports.appManager.getAppRoot(id);
+	<span class="hljs-keyword">return</span> util.walkDir(app_root);
+};
+
+exports.loadApp = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">pathname, options, callback</span>) </span>{
+	<span class="hljs-keyword">return</span> exports.appManager.loadApp(pathname, options, callback);
+};
+
+exports.installAppArchive = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">path, name, callback</span>) </span>{
+	<span class="hljs-keyword">return</span> exports.appManager.installAppArchive(path, name, callback);
+};
+
+exports.deleteApp = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">id, callback</span>) </span>{
+	<span class="hljs-keyword">return</span> exports.appManager.deleteApp(id, callback);
+};
+
+exports.reloadApp = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">id, callback</span>) </span>{
+	<span class="hljs-keyword">return</span> exports.appManager.reloadApp(id, callback);
+}</div></div></div></div></body></html>

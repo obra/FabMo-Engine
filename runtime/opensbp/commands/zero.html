@@ -1,0 +1,238 @@
+<!DOCTYPE html><html lang="en"><head><title>runtime/opensbp/commands/zero</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../"><meta name="groc-document-path" content="runtime/opensbp/commands/zero"><meta name="groc-project-path" content="runtime/opensbp/commands/zero.js"><link rel="stylesheet" type="text/css" media="all" href="../../../assets/style.css"><script type="text/javascript" src="../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">runtime/opensbp/commands/zero.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../log'</span>).logger(<span class="hljs-string">'sbp'</span>);
+<span class="hljs-keyword">var</span> g2 = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../g2'</span>);
+<span class="hljs-keyword">var</span> sb3_commands = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../sb3_commands'</span>);
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../config'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>ZERO </p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>{&quot;mpo&quot;:&quot;&quot;}  return absolute machine positions fox XYZABC axes.
+!!!!!!!!!!!! Always in mm, regardless of G20/G21 setting</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>{&quot;pos&quot;:&quot;&quot;}  return work coordinate positions fox XYZABC axes.
+             In mm or inches depending on G20 or G21</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>{&quot;g55&quot;:&quot;&quot;}  returns the current offset to the UCS origin
+             In mm or inches depending on G20 or G21</p></div></div><div class="code"><div class="wrapper">exports.ZX = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'mpox'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, MPO</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+		<span class="hljs-keyword">var</span> zxObj = {};
+		<span class="hljs-keyword">var</span> unitConv = <span class="hljs-number">1.0</span>;
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.machine.driver.status.unit === <span class="hljs-string">'in'</span> ) {  <span class="hljs-comment">// inches</span>
+			unitConv = <span class="hljs-number">0.039370079</span>;
+		}
+		zxObj.g55x = <span class="hljs-built_in">Number</span>((MPO * unitConv).toFixed(<span class="hljs-number">5</span>));
+		config.driver.setMany(zxObj, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+			<span class="hljs-keyword">this</span>.cmd_posx = <span class="hljs-keyword">this</span>.posx = <span class="hljs-number">0</span>;
+			callback();
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+
+	<span class="hljs-comment">//this.emit_gcode("G10 L20 P2 X0");</span>
+	<span class="hljs-comment">//callback()</span>
+};
+
+exports.ZY = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'mpoy'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, MPO</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+		<span class="hljs-keyword">var</span> zyObj = {};
+		<span class="hljs-keyword">var</span> unitConv = <span class="hljs-number">1.0</span>;
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.machine.driver.status.unit === <span class="hljs-string">'in'</span> ) {  <span class="hljs-comment">// inches</span>
+			unitConv = <span class="hljs-number">0.039370079</span>;
+		}
+		zyObj.g55y = <span class="hljs-built_in">Number</span>((MPO * unitConv).toFixed(<span class="hljs-number">5</span>));
+		config.driver.setMany(zyObj, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+			<span class="hljs-keyword">this</span>.cmd_posy = <span class="hljs-keyword">this</span>.posy = <span class="hljs-number">0</span>;
+				callback();
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+	<span class="hljs-comment">//this.emit_gcode("G10 L20 P2 Y0");</span>
+	<span class="hljs-comment">//callback()</span>
+
+};
+
+exports.ZZ = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'mpoz'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, MPO</span>) </span>{
+		<span class="hljs-keyword">var</span> zzObj = {};
+		<span class="hljs-keyword">var</span> unitConv = <span class="hljs-number">1.0</span>;
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.machine.driver.status.unit === <span class="hljs-string">'in'</span> ) {  <span class="hljs-comment">// inches</span>
+			unitConv = <span class="hljs-number">0.039370079</span>;
+		}
+		zzObj.g55z = <span class="hljs-built_in">Number</span>((MPO * unitConv).toFixed(<span class="hljs-number">5</span>));
+		config.driver.setMany(zzObj, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+			<span class="hljs-keyword">this</span>.cmd_posz = <span class="hljs-keyword">this</span>.posz = <span class="hljs-number">0</span>;
+			callback();
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+
+	<span class="hljs-comment">//this.emit_gcode("G10 L20 P2 Z0");</span>
+	<span class="hljs-comment">//callback()</span>
+};
+
+exports.ZA = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'mpoa'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, MPO</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+		<span class="hljs-keyword">var</span> zaObj = {};
+		<span class="hljs-keyword">var</span> unitConv = <span class="hljs-number">1.0</span>;
+		<span class="hljs-comment">/*??????????????????????????????????????????????????????????
+		              How is unit conversion handled
+		              if the A is a linear axis?
+		????????????????????????????????????????????????????????????*/</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>if ( this.machine.driver.status.unit === &#39;in&#39; ) {  // inches
+    unitConv = 0.039370079;</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-comment">// </span>
+		zaObj.g55a = <span class="hljs-built_in">Number</span>((MPO * unitConv).toFixed(<span class="hljs-number">5</span>));
+		config.driver.setMany(zaObj, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+			<span class="hljs-keyword">this</span>.cmd_posa = <span class="hljs-keyword">this</span>.posa = <span class="hljs-number">0</span>;
+			callback();
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+};
+
+exports.ZB = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'mpob'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, MPO</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+		<span class="hljs-keyword">var</span> zbObj = {};
+		zbObj.g55b = <span class="hljs-built_in">Number</span>((MPO).toFixed(<span class="hljs-number">5</span>));
+		config.driver.setMany(zbObj, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+			<span class="hljs-keyword">this</span>.cmd_posb = <span class="hljs-keyword">this</span>.posb = <span class="hljs-number">0</span>;
+			callback();
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+};
+
+exports.ZC = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'mpoc'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, MPO</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+		<span class="hljs-keyword">var</span> zcObj = {};
+		zcObj.g55c = <span class="hljs-built_in">Number</span>((MPO).toFixed(<span class="hljs-number">5</span>));
+		config.driver.setMany(zcObj, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+			<span class="hljs-keyword">this</span>.cmd_posc = <span class="hljs-keyword">this</span>.posc = <span class="hljs-number">0</span>;
+			callback();
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+};
+
+exports.Z2 = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>)  </span>{
+	<span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'mpo'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, MPO</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+		<span class="hljs-keyword">var</span> z2Obj = {};
+		<span class="hljs-keyword">var</span> unitConv = <span class="hljs-number">1.0</span>;
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.machine.driver.status.unit === <span class="hljs-string">'in'</span> ) {  <span class="hljs-comment">// inches</span>
+			unitConv = <span class="hljs-number">0.039370079</span>;
+		}
+		z2Obj.g55x = <span class="hljs-built_in">Number</span>((MPO.x * unitConv).toFixed(<span class="hljs-number">5</span>));
+		z2Obj.g55y = <span class="hljs-built_in">Number</span>((MPO.y * unitConv).toFixed(<span class="hljs-number">5</span>));
+		config.driver.setMany(z2Obj, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+			<span class="hljs-keyword">this</span>.cmd_posx = <span class="hljs-keyword">this</span>.posx = <span class="hljs-number">0</span>;
+			<span class="hljs-keyword">this</span>.cmd_posy = <span class="hljs-keyword">this</span>.posy = <span class="hljs-number">0</span>;
+			callback();
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+};
+
+exports.Z3 = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args,callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'mpo'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, MPO</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+		<span class="hljs-keyword">var</span> z3Obj = {};
+		log.debug(<span class="hljs-built_in">JSON</span>.stringify(MPO));
+		<span class="hljs-keyword">var</span> unitConv = <span class="hljs-number">1.0</span>;
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.machine.driver.status.unit === <span class="hljs-string">'in'</span> ) {  <span class="hljs-comment">// inches</span>
+			unitConv = <span class="hljs-number">0.039370079</span>;
+		}
+		z3Obj.g55x = <span class="hljs-built_in">Number</span>((MPO.x * unitConv).toFixed(<span class="hljs-number">5</span>));
+		z3Obj.g55y = <span class="hljs-built_in">Number</span>((MPO.y * unitConv).toFixed(<span class="hljs-number">5</span>));
+		z3Obj.g55z = <span class="hljs-built_in">Number</span>((MPO.z * unitConv).toFixed(<span class="hljs-number">5</span>));
+		log.debug(<span class="hljs-built_in">JSON</span>.stringify(z3Obj));
+		config.driver.setMany(z3Obj, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+			<span class="hljs-keyword">this</span>.cmd_posx = <span class="hljs-keyword">this</span>.posx = <span class="hljs-number">0.0</span>;
+			<span class="hljs-keyword">this</span>.cmd_posy = <span class="hljs-keyword">this</span>.posy = <span class="hljs-number">0.0</span>;
+			<span class="hljs-keyword">this</span>.cmd_posz = <span class="hljs-keyword">this</span>.posz = <span class="hljs-number">0.0</span>;
+			callback();
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+};
+
+exports.Z4 = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args,callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'mpo'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, MPO</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+		<span class="hljs-keyword">var</span> z4Obj = {};
+		unitConv = <span class="hljs-number">1.0</span>;
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.machine.driver.status.unit === <span class="hljs-string">'in'</span> ) {  <span class="hljs-comment">// inches</span>
+			unitConv = <span class="hljs-number">0.039370079</span>;
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Unit conversion</p></div></div><div class="code"><div class="wrapper">		z4Obj.g55x = <span class="hljs-built_in">Number</span>((MPO.x * unitConv).toFixed(<span class="hljs-number">5</span>));
+		z4Obj.g55y = <span class="hljs-built_in">Number</span>((MPO.y * unitConv).toFixed(<span class="hljs-number">5</span>));
+		z4Obj.g55z = <span class="hljs-built_in">Number</span>((MPO.z * unitConv).toFixed(<span class="hljs-number">5</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>No unit conversion (rotary)</p></div></div><div class="code"><div class="wrapper">		z4Obj.g55a = <span class="hljs-built_in">Number</span>((MPO.a).toFixed(<span class="hljs-number">5</span>));
+		config.driver.setMany(z4Obj, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+			<span class="hljs-keyword">this</span>.cmd_posx = <span class="hljs-keyword">this</span>.posx = <span class="hljs-number">0.0</span>;
+			<span class="hljs-keyword">this</span>.cmd_posy = <span class="hljs-keyword">this</span>.posy = <span class="hljs-number">0.0</span>;
+			<span class="hljs-keyword">this</span>.cmd_posz = <span class="hljs-keyword">this</span>.posz = <span class="hljs-number">0.0</span>;
+		 	<span class="hljs-keyword">this</span>.cmd_posa = <span class="hljs-keyword">this</span>.posa = <span class="hljs-number">0.0</span>;
+			callback();
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+};
+
+exports.Z5 = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args,callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'mpo'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, MPO</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+		<span class="hljs-keyword">var</span> z5Obj = {};
+		unitConv = <span class="hljs-number">1.0</span>;
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.machine.driver.status.unit === <span class="hljs-string">'in'</span> ) {  <span class="hljs-comment">// inches</span>
+			unitConv = <span class="hljs-number">0.039370079</span>;
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Unit conversion</p></div></div><div class="code"><div class="wrapper">		z5Obj.g55x = <span class="hljs-built_in">Number</span>((MPO.x * unitConv).toFixed(<span class="hljs-number">5</span>));
+		z5Obj.g55y = <span class="hljs-built_in">Number</span>((MPO.y * unitConv).toFixed(<span class="hljs-number">5</span>));
+		z5Obj.g55z = <span class="hljs-built_in">Number</span>((MPO.z * unitConv).toFixed(<span class="hljs-number">5</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>No unit conversion (rotary)</p></div></div><div class="code"><div class="wrapper">		z5Obj.g55a = <span class="hljs-built_in">Number</span>((MPO.a).toFixed(<span class="hljs-number">5</span>));
+		z5Obj.g55b = <span class="hljs-built_in">Number</span>((MPO.b).toFixed(<span class="hljs-number">5</span>));
+		config.driver.setMany(z5Obj, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+			<span class="hljs-keyword">this</span>.cmd_posx = <span class="hljs-keyword">this</span>.posx = <span class="hljs-number">0.0</span>;
+			<span class="hljs-keyword">this</span>.cmd_posy = <span class="hljs-keyword">this</span>.posy = <span class="hljs-number">0.0</span>;
+			<span class="hljs-keyword">this</span>.cmd_posz = <span class="hljs-keyword">this</span>.posz = <span class="hljs-number">0.0</span>;
+		 	<span class="hljs-keyword">this</span>.cmd_posa = <span class="hljs-keyword">this</span>.posa = <span class="hljs-number">0.0</span>;
+		 	<span class="hljs-keyword">this</span>.cmd_posb = <span class="hljs-keyword">this</span>.posb = <span class="hljs-number">0.0</span>;
+			callback();
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+};
+
+exports.Z6 = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args,callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'mpo'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, MPO</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+		<span class="hljs-keyword">var</span> z6Obj = {};
+		unitConv = <span class="hljs-number">1.0</span>;
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.machine.driver.status.unit === <span class="hljs-string">'in'</span> ) {  <span class="hljs-comment">// inches</span>
+			unitConv = <span class="hljs-number">0.039370079</span>;
+		}
+		z6Obj.g55x = <span class="hljs-built_in">Number</span>((MPO.x * unitConv).toFixed(<span class="hljs-number">5</span>));
+		z6Obj.g55y = <span class="hljs-built_in">Number</span>((MPO.y * unitConv).toFixed(<span class="hljs-number">5</span>));
+		z6Obj.g55z = <span class="hljs-built_in">Number</span>((MPO.z * unitConv).toFixed(<span class="hljs-number">5</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>No unit conversion</p></div></div><div class="code"><div class="wrapper">		z6Obj.g55a = <span class="hljs-built_in">Number</span>((MPO.a).toFixed(<span class="hljs-number">5</span>));
+		z6Obj.g55b = <span class="hljs-built_in">Number</span>((MPO.b).toFixed(<span class="hljs-number">5</span>));
+		z6Obj.g55c = <span class="hljs-built_in">Number</span>((MPO.c).toFixed(<span class="hljs-number">5</span>));
+		config.driver.setMany(z6Obj, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+			<span class="hljs-keyword">this</span>.cmd_posx = <span class="hljs-keyword">this</span>.posx = <span class="hljs-number">0.0</span>;
+			<span class="hljs-keyword">this</span>.cmd_posy = <span class="hljs-keyword">this</span>.posy = <span class="hljs-number">0.0</span>;
+			<span class="hljs-keyword">this</span>.cmd_posz = <span class="hljs-keyword">this</span>.posz = <span class="hljs-number">0.0</span>;
+			<span class="hljs-keyword">this</span>.cmd_posa = <span class="hljs-keyword">this</span>.posa = <span class="hljs-number">0.0</span>;
+			<span class="hljs-keyword">this</span>.cmd_posb = <span class="hljs-keyword">this</span>.posb = <span class="hljs-number">0.0</span>;
+			<span class="hljs-keyword">this</span>.cmd_posc = <span class="hljs-keyword">this</span>.posc = <span class="hljs-number">0.0</span>;
+			callback();
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+};
+
+exports.ZT = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{
+	ztObj = {};
+	ztObj.g55x = <span class="hljs-number">0.0</span>;
+	ztObj.g55y = <span class="hljs-number">0.0</span>;
+	ztObj.g55z = <span class="hljs-number">0.0</span>;
+    <span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">"G28.3 X0 Y0 Z0"</span>);
+	config.driver.setMany(ztObj, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+		<span class="hljs-keyword">this</span>.cmd_posx = <span class="hljs-keyword">this</span>.posx = <span class="hljs-number">0.0</span>;
+		<span class="hljs-keyword">this</span>.cmd_posy = <span class="hljs-keyword">this</span>.posy = <span class="hljs-number">0.0</span>;
+		<span class="hljs-keyword">this</span>.cmd_posz = <span class="hljs-keyword">this</span>.posz = <span class="hljs-number">0.0</span>;
+		<span class="hljs-keyword">this</span>.driver.requestStatusReport(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">report</span>) </span>{
+			log.debug(<span class="hljs-string">"report = "</span> + <span class="hljs-built_in">JSON</span>.stringify(report));
+			callback();
+		});
+	}.bind(<span class="hljs-keyword">this</span>));
+};</div></div></div></div></body></html>

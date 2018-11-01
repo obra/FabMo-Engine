@@ -1,0 +1,96 @@
+<!DOCTYPE html><html lang="en"><head><title>runtime/idle</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../"><meta name="groc-document-path" content="runtime/idle"><meta name="groc-project-path" content="runtime/idle.js"><link rel="stylesheet" type="text/css" media="all" href="../assets/style.css"><script type="text/javascript" src="../assets/behavior.js"></script><body><div id="meta"><div class="file-path">runtime/idle.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>runtime/idle.js</p>
+<p>This module defines the IdleRuntime which is the default runtime for the machine model.
+It essentially does nothing, and is just a placeholder, there to be a runtime when the machine isn&#39;t doing anything else.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../log'</span>).logger(<span class="hljs-string">'idle'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>IdleRuntime constructor</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">IdleRuntime</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">this</span>.machine = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.driver = <span class="hljs-literal">null</span>;
+}
+
+IdleRuntime.prototype.toString = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">return</span> <span class="hljs-string">"[IdleRuntime]"</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Connect to the machine.  When this happens, the runtime has singular control of the machine.
+The idle runtime can be disconnected (eg by the machine) at any time.  This happens usually to replace
+the idle runtime with a more interesting one.
+  machine - The machine model to connect this runtime to</p></div></div><div class="code"><div class="wrapper">IdleRuntime.prototype.connect = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">machine</span>) </span>{
+    <span class="hljs-keyword">this</span>.machine = machine;
+	<span class="hljs-keyword">this</span>.driver = machine.driver;
+	<span class="hljs-keyword">this</span>.ok_to_disconnect = <span class="hljs-literal">true</span>;
+	<span class="hljs-keyword">this</span>.status_report = {};
+	<span class="hljs-keyword">this</span>.status_handler =  <span class="hljs-keyword">this</span>._onG2Status.bind(<span class="hljs-keyword">this</span>);
+	<span class="hljs-keyword">this</span>.driver.on(<span class="hljs-string">'status'</span>,<span class="hljs-keyword">this</span>.status_handler);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Disconnect from the machine.</p></div></div><div class="code"><div class="wrapper">IdleRuntime.prototype.disconnect = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">this</span>.driver.removeListener(<span class="hljs-string">'status'</span>, <span class="hljs-keyword">this</span>.status_handler);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the machine state to newstate
+  newstate - The state to change to</p></div></div><div class="code"><div class="wrapper">IdleRuntime.prototype._changeState = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">newstate</span>) </span>{
+	<span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, newstate);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This function is called internally when G2 hits a software limit.
+TODO - There is work to be done here.  I wouldn&#39;t trust anything here.</p></div></div><div class="code"><div class="wrapper">IdleRuntime.prototype._limit = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">var</span> er = <span class="hljs-keyword">this</span>.driver.getLastException();
+	<span class="hljs-keyword">if</span>(er &amp;&amp; er.st == <span class="hljs-number">203</span>) {
+		<span class="hljs-keyword">var</span> msg = er.msg.replace(<span class="hljs-regexp">/\[[^\[\]]*\]/</span>,<span class="hljs-string">''</span>);
+		<span class="hljs-keyword">this</span>.driver.clearLastException();
+		<span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'stopped'</span>, {<span class="hljs-string">'error'</span> : msg});
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+	}
+	<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Internal handler for the G2 status report</p></div></div><div class="code"><div class="wrapper">IdleRuntime.prototype._onG2Status = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">status</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update the machine copy of g2 status variables</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> key <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.machine.status) {
+		<span class="hljs-keyword">if</span>(key <span class="hljs-keyword">in</span> status) {
+			<span class="hljs-keyword">this</span>.machine.status[key] = status[key];
+		}
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update our copy of the system status</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">for</span> (key <span class="hljs-keyword">in</span> status) {
+		<span class="hljs-keyword">this</span>.status_report[key] = status[key];
+	}
+
+	<span class="hljs-keyword">switch</span>(<span class="hljs-keyword">this</span>.status_report.stat) {
+		<span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_INTERLOCK:
+		<span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_SHUTDOWN:
+		<span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_PANIC:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If any of these states are seen, it&#39;s curtains.  Go into the unrecoverable error state.</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._die();
+			<span class="hljs-keyword">break</span>;
+		<span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_ALARM:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Do the limit handling if this was because of a limit.  Otherwise, carry on.</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._limit()) { <span class="hljs-keyword">return</span>; }
+			<span class="hljs-keyword">break</span>;
+	}
+
+
+	<span class="hljs-keyword">switch</span>(<span class="hljs-keyword">this</span>.machine.status.state) {
+		<span class="hljs-keyword">case</span> <span class="hljs-string">"not_ready"</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This shouldn&#39;t happen.</p></div></div><div class="code"><div class="wrapper">			log.error(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Unexpectedly encountered the 'not ready' state in IdleRuntime"</span>));
+			<span class="hljs-keyword">break</span>;
+
+		<span class="hljs-keyword">case</span> <span class="hljs-string">"manual"</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle transitions out of the manual state</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span>(status.stat === <span class="hljs-keyword">this</span>.driver.STAT_HOLDING &amp;&amp; status.stat === <span class="hljs-number">0</span>) {
+				<span class="hljs-keyword">this</span>._changeState(<span class="hljs-string">"paused"</span>);
+				<span class="hljs-keyword">break</span>;
+			}
+			<span class="hljs-keyword">if</span>((status.stat === <span class="hljs-keyword">this</span>.driver.STAT_STOP || status.stat === <span class="hljs-keyword">this</span>.driver.STAT_END) &amp;&amp; status.hold === <span class="hljs-number">0</span>) {
+				<span class="hljs-keyword">this</span>._changeState(<span class="hljs-string">"idle"</span>);
+				<span class="hljs-keyword">break</span>;
+			}
+			<span class="hljs-keyword">break</span>;
+
+		<span class="hljs-keyword">case</span> <span class="hljs-string">"stopped"</span>:
+		<span class="hljs-keyword">case</span> <span class="hljs-string">"paused"</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle transitions out of a stopped state</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span>((status.stat === <span class="hljs-keyword">this</span>.driver.STAT_STOP || status.stat === <span class="hljs-keyword">this</span>.driver.STAT_END) &amp;&amp; status.hold === <span class="hljs-number">0</span>) {
+				<span class="hljs-keyword">this</span>._changeState(<span class="hljs-string">"idle"</span>);
+				<span class="hljs-keyword">break</span>;
+			}
+			<span class="hljs-keyword">break</span>;
+
+		<span class="hljs-keyword">case</span> <span class="hljs-string">"idle"</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle transition out of the idle state
+This probably shouldn&#39;t happen, because if we&#39;re transitioning to the running state, we&#39;re probably
+doing it because a runtime (not this runtime) requested that we do it. </p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span>(status.stat === <span class="hljs-keyword">this</span>.driver.STAT_RUNNING) {
+				<span class="hljs-keyword">this</span>._changeState(<span class="hljs-string">"running"</span>);
+				<span class="hljs-keyword">break</span>;
+			}
+			<span class="hljs-keyword">break</span>;
+
+		<span class="hljs-keyword">case</span> <span class="hljs-string">"running"</span>:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle transition out of running, back to idle</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span>(status.stat === <span class="hljs-keyword">this</span>.driver.STAT_END) {
+				<span class="hljs-keyword">this</span>._changeState(<span class="hljs-string">"idle"</span>);
+			}		
+			<span class="hljs-keyword">break</span>;
+	}
+	<span class="hljs-keyword">this</span>.machine.emit(<span class="hljs-string">'status'</span>,<span class="hljs-keyword">this</span>.machine.status);
+};
+
+
+IdleRuntime.prototype.executeCode = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">code</span>) </span>{}
+IdleRuntime.prototype.pause = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{ <span class="hljs-comment">/*this.driver.feedHold();*/</span> }
+IdleRuntime.prototype.quit = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{ <span class="hljs-keyword">this</span>.driver.quit(); }
+IdleRuntime.prototype.resume = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{ <span class="hljs-comment">/*this.driver.resume();*/</span> }
+
+exports.IdleRuntime = IdleRuntime;</div></div></div></div></body></html>

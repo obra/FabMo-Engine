@@ -1,0 +1,644 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/js/path</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/js/path"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/js/path.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../assets/style.css"><script type="text/javascript" src="../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/js/path.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-comment">/*jslint todo: true, browser: true, continue: true, white: true*/</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Written by Alex Canales for ShopBotTools, Inc.</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This file contains the class managing the path view.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> THREE = <span class="hljs-built_in">require</span>(<span class="hljs-string">"three"</span>);
+<span class="hljs-keyword">var</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">"./util"</span>);
+
+<span class="hljs-comment">//Class to create the meshes showing the measure of the path</span>
+exports.TotalSize = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">scene</span>) </span>{
+<span class="hljs-pi">    "use strict"</span>;
+    <span class="hljs-keyword">var</span> that = <span class="hljs-keyword">this</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Removes the meshes from the scene.</p></div></div><div class="code"><div class="wrapper">    that.remove = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        that.scene.remove(that.textWidth);
+        that.scene.remove(that.lineWidth);
+        that.scene.remove(that.textLength);
+        that.scene.remove(that.lineLength);
+        that.scene.remove(that.textHeight);
+        that.scene.remove(that.lineHeight);
+    };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Adds the meshes to the scene.</p></div></div><div class="code"><div class="wrapper">    that.add = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        that.scene.add(that.textWidth);
+        that.scene.add(that.lineWidth);
+        that.scene.add(that.textLength);
+        that.scene.add(that.lineLength);
+        that.scene.add(that.textHeight);
+        that.scene.add(that.lineHeight);
+    };
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">createMeshText</span>(<span class="hljs-params">message, options, color</span>) </span>{
+        <span class="hljs-keyword">var</span> material = <span class="hljs-keyword">new</span> THREE.MeshBasicMaterial({ color: color,
+            side: THREE.DoubleSide });
+        <span class="hljs-keyword">var</span> textShapes = THREE.FontUtils.generateShapes(message, options);
+        <span class="hljs-keyword">var</span> geo = <span class="hljs-keyword">new</span> THREE.ShapeGeometry(textShapes);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> THREE.Mesh(geo, material);
+    }
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">sizeMesh</span>(<span class="hljs-params">mesh, axe</span>) </span>{
+        <span class="hljs-keyword">var</span> bb = {};
+        mesh.geometry.computeBoundingBox();
+        bb = mesh.geometry.boundingBox;
+        <span class="hljs-keyword">return</span> <span class="hljs-built_in">Math</span>.abs(bb.max[axe] - bb.min[axe]);
+    }
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">calculateFontSize</span>(<span class="hljs-params">width, length, height</span>) </span>{
+        <span class="hljs-keyword">var</span> minSize = <span class="hljs-number">0.25</span>, maxSize = <span class="hljs-number">3</span>, coeff = <span class="hljs-number">20</span>;
+        <span class="hljs-keyword">var</span> biggest = <span class="hljs-built_in">Math</span>.max(width, length, height);
+        <span class="hljs-keyword">var</span> size = minSize;
+
+        size = <span class="hljs-built_in">Math</span>.max(minSize, biggest / coeff);
+        size = <span class="hljs-built_in">Math</span>.min(maxSize, size);
+
+        <span class="hljs-keyword">return</span> size;
+    }</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Sets the meshes.</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>totalSize must be an object.</strong><br/>(The total size of the whole path.)</p>
+</li>
+<li><p><strong>displayInMm must be a boolean.</strong><br/>(If true, shows the size in millimeter. Else in inch.)</p>
+</li>
+<li><p><strong>initialPosition must be an object.</strong><br/>(The position, in 3D, where thr whole path begins (optional).)</p>
+</li>
+</ul></div></div><div class="code"><div class="wrapper">    that.setMeshes = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">totalSize, displayInMm, initialPosition</span>) </span>{
+        <span class="hljs-keyword">var</span> INCH_TO_MILLIMETER = <span class="hljs-number">25.4</span>;
+        <span class="hljs-keyword">if</span>(totalSize === <span class="hljs-literal">undefined</span>) {
+            <span class="hljs-keyword">return</span>;
+        }
+        <span class="hljs-keyword">var</span> color = <span class="hljs-number">0x000000</span>;
+        <span class="hljs-keyword">var</span> margin = <span class="hljs-number">0.5</span>;
+        <span class="hljs-keyword">var</span> material = <span class="hljs-keyword">new</span> THREE.LineBasicMaterial({ color : color });
+        <span class="hljs-keyword">var</span> geometry = <span class="hljs-keyword">new</span> THREE.Geometry();
+        <span class="hljs-keyword">var</span> type = (displayInMm === <span class="hljs-literal">false</span>) ? <span class="hljs-string">"in"</span> : <span class="hljs-string">"mm"</span>;
+        <span class="hljs-keyword">var</span> d = (displayInMm === <span class="hljs-literal">false</span>) ? <span class="hljs-number">1</span> : INCH_TO_MILLIMETER;
+        <span class="hljs-keyword">var</span> width = <span class="hljs-built_in">Math</span>.abs(totalSize.max.x - totalSize.min.x);
+        <span class="hljs-keyword">var</span> length = <span class="hljs-built_in">Math</span>.abs(totalSize.max.y - totalSize.min.y);
+        <span class="hljs-keyword">var</span> height = <span class="hljs-built_in">Math</span>.abs(totalSize.max.z - totalSize.min.z);
+        <span class="hljs-keyword">var</span> textW = (width * d).toFixed(<span class="hljs-number">2</span>);
+        <span class="hljs-keyword">var</span> textL = (length * d).toFixed(<span class="hljs-number">2</span>);
+        <span class="hljs-keyword">var</span> textH = (height * d).toFixed(<span class="hljs-number">2</span>);
+        <span class="hljs-keyword">var</span> fontSize = calculateFontSize(width, length, height);
+        <span class="hljs-keyword">var</span> options = {<span class="hljs-string">'font'</span> : <span class="hljs-string">'helvetiker'</span>,<span class="hljs-string">'weight'</span> : <span class="hljs-string">'normal'</span>,
+            <span class="hljs-string">'style'</span> : <span class="hljs-string">'normal'</span>,<span class="hljs-string">'size'</span> : fontSize,<span class="hljs-string">'curveSegments'</span> : <span class="hljs-number">300</span>};
+
+        that.remove();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>For x axe</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">var</span> y = totalSize.max.y + margin;
+        geometry.vertices.push(<span class="hljs-keyword">new</span> THREE.Vector3(totalSize.min.x, y , <span class="hljs-number">0</span>));
+        geometry.vertices.push(<span class="hljs-keyword">new</span> THREE.Vector3(totalSize.max.x, y , <span class="hljs-number">0</span>));
+        that.lineWidth =  <span class="hljs-keyword">new</span> THREE.Line(geometry, material);
+        that.textWidth = createMeshText(textW + <span class="hljs-string">" "</span> + type, options, color);
+        that.textWidth.position.x = that.lineWidth.geometry.vertices[<span class="hljs-number">0</span>].x +
+            (width - sizeMesh(that.textWidth, <span class="hljs-string">"x"</span>)) / <span class="hljs-number">2</span>;
+        that.textWidth.position.y = that.lineWidth.geometry.vertices[<span class="hljs-number">0</span>].y +
+            options.size;
+        that.textWidth.position.z = that.lineWidth.geometry.vertices[<span class="hljs-number">0</span>].z;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>For y axe</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">var</span> x = totalSize.max.x + margin;
+        geometry = <span class="hljs-keyword">new</span> THREE.Geometry();
+        geometry.vertices.push(<span class="hljs-keyword">new</span> THREE.Vector3(x, totalSize.min.y, <span class="hljs-number">0</span>));
+        geometry.vertices.push(<span class="hljs-keyword">new</span> THREE.Vector3(x, totalSize.max.y, <span class="hljs-number">0</span>));
+        that.lineLength =  <span class="hljs-keyword">new</span> THREE.Line(geometry, material);
+        that.textLength = createMeshText(textL + <span class="hljs-string">" "</span> + type, options, color);
+        that.textLength.rotateZ(-<span class="hljs-built_in">Math</span>.PI/<span class="hljs-number">2</span>);
+        that.textLength.position.x = that.lineLength.geometry.vertices[<span class="hljs-number">0</span>].x +
+            options.size;
+        that.textLength.position.y = that.lineLength.geometry.vertices[<span class="hljs-number">0</span>].y +
+            (length + sizeMesh(that.textLength, <span class="hljs-string">"x"</span>)) / <span class="hljs-number">2</span>;  <span class="hljs-comment">//x 'cause rotation</span>
+        that.textLength.position.z = that.lineLength.geometry.vertices[<span class="hljs-number">0</span>].z;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>For z axe</p></div></div><div class="code"><div class="wrapper">        geometry = <span class="hljs-keyword">new</span> THREE.Geometry();
+        geometry.vertices.push(<span class="hljs-keyword">new</span> THREE.Vector3(x, y, totalSize.min.z));
+        geometry.vertices.push(<span class="hljs-keyword">new</span> THREE.Vector3(x, y, totalSize.max.z));
+        that.lineHeight =  <span class="hljs-keyword">new</span> THREE.Line(geometry, material);
+        that.textHeight = createMeshText(textH + <span class="hljs-string">" "</span> + type, options, color);
+        that.textHeight.rotateX(<span class="hljs-built_in">Math</span>.PI / <span class="hljs-number">2</span>);
+        that.textHeight.position.x = that.lineHeight.geometry.vertices[<span class="hljs-number">0</span>].x +
+            options.size;
+        that.textHeight.position.y = that.lineHeight.geometry.vertices[<span class="hljs-number">0</span>].y;
+        that.textHeight.position.z = that.lineHeight.geometry.vertices[<span class="hljs-number">0</span>].z +
+            (height - sizeMesh(that.textHeight, <span class="hljs-string">"y"</span>)) / <span class="hljs-number">2</span>;  <span class="hljs-comment">//y 'cause rotation</span>
+
+        <span class="hljs-keyword">if</span>(initialPosition !== <span class="hljs-literal">undefined</span>) {
+            that.lineWidth.position.x += initialPosition.x;
+            that.textWidth.position.x += initialPosition.x;
+            that.lineLength.position.y += initialPosition.y;
+            that.textLength.position.y += initialPosition.y;
+            that.textHeight.position.z += initialPosition.z;
+            that.lineHeight.position.z += initialPosition.z;
+        }
+
+        that.add();
+    };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>initialize</p></div></div><div class="code"><div class="wrapper">    that.scene = scene;
+    that.textWidth = {};
+    that.lineWidth = {};
+    that.textLength = {};
+    that.lineLength = {};
+    that.textHeight = {};
+    that.lineHeight = {};
+};
+
+
+exports.Path = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">scene</span>) </span>{
+<span class="hljs-pi">    "use strict"</span>;
+    <span class="hljs-keyword">var</span> that = <span class="hljs-keyword">this</span>;
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">resetPathsMesh</span>(<span class="hljs-params"></span>) </span>{
+        that.remove();
+        that.meshG0Undone = {};
+        that.meshG1Undone = {};
+        that.meshG2G3Undone = {};
+        that.meshG0Done = {};
+        that.meshG1Done = {};
+        that.meshG2G3Done = {};
+        that.meshDoing = {};
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Removes the meshes from the scene.</p></div></div><div class="code"><div class="wrapper">    that.remove = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        that.scene.remove(that.meshG0Undone);
+        that.scene.remove(that.meshG1Undone);
+        that.scene.remove(that.meshG2G3Undone);
+        that.scene.remove(that.meshG0Done);
+        that.scene.remove(that.meshG1Done);
+        that.scene.remove(that.meshG2G3Done);
+        that.scene.remove(that.meshDoing);
+    };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Adds the meshes to the scene.</p></div></div><div class="code"><div class="wrapper">    that.add = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        that.scene.add(that.meshG0Undone);
+        that.scene.add(that.meshG1Undone);
+        that.scene.add(that.meshG2G3Undone);
+        that.scene.add(that.meshG0Done);
+        that.scene.add(that.meshG1Done);
+        that.scene.add(that.meshG2G3Done);
+    };
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getGeometryStraight</span>(<span class="hljs-params">line</span>) </span>{
+        <span class="hljs-keyword">var</span> s = line.start, e = line.end;
+        <span class="hljs-keyword">var</span> geometry = <span class="hljs-keyword">new</span> THREE.Geometry();
+        geometry.vertices.push(<span class="hljs-keyword">new</span> THREE.Vector3(s.x, s.y, s.z));
+        geometry.vertices.push(<span class="hljs-keyword">new</span> THREE.Vector3(e.x, e.y, e.z));
+        <span class="hljs-keyword">return</span> geometry;
+    }
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getGeometryCurve</span>(<span class="hljs-params">line</span>) </span>{
+        <span class="hljs-keyword">var</span> i = <span class="hljs-number">0</span>, j = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">var</span> bez = line.beziers;
+        <span class="hljs-keyword">var</span> p0 = {}, p1 = {}, p2 = {}, p3 = {};
+        <span class="hljs-keyword">var</span> v = [];
+        <span class="hljs-keyword">var</span> geometry = <span class="hljs-keyword">new</span> THREE.Geometry();
+
+        <span class="hljs-keyword">for</span>(i=<span class="hljs-number">0</span>; i &lt; bez.length; i++) {
+            p0 = <span class="hljs-keyword">new</span> THREE.Vector3(bez[i].p0.x, bez[i].p0.y, bez[i].p0.z);
+            p1 = <span class="hljs-keyword">new</span> THREE.Vector3(bez[i].p1.x, bez[i].p1.y, bez[i].p1.z);
+            p2 = <span class="hljs-keyword">new</span> THREE.Vector3(bez[i].p2.x, bez[i].p2.y, bez[i].p2.z);
+            p3 = <span class="hljs-keyword">new</span> THREE.Vector3(bez[i].p3.x, bez[i].p3.y, bez[i].p3.z);
+
+            v = <span class="hljs-keyword">new</span> THREE.CubicBezierCurve3(p0, p1, p2, p3).getPoints(<span class="hljs-number">32</span>);
+            <span class="hljs-keyword">for</span>(j=<span class="hljs-number">0</span>; j &lt; v.length-<span class="hljs-number">1</span>; j++) {
+                geometry.vertices.push(v[j]);
+            }
+        }
+        <span class="hljs-comment">//When mutltiple Bézier curves, useless to have the end point and the</span>
+        <span class="hljs-comment">//next start point in the same place</span>
+        geometry.vertices.push(v[v.length-<span class="hljs-number">1</span>]);
+        <span class="hljs-keyword">return</span> geometry;
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Returns the geometries</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">setGeometries</span>(<span class="hljs-params">lines</span>) </span>{
+        <span class="hljs-keyword">var</span> i = <span class="hljs-number">0</span>, j = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">var</span> geometry = <span class="hljs-keyword">new</span> THREE.Geometry();
+        <span class="hljs-keyword">var</span> geometries = {
+            G0 : <span class="hljs-keyword">new</span> THREE.Geometry(),
+            G1 : <span class="hljs-keyword">new</span> THREE.Geometry(),
+            G2G3 : <span class="hljs-keyword">new</span> THREE.Geometry()
+        };
+
+        <span class="hljs-comment">//Store the number of vertices of each command</span>
+        that.commandsUndoneManager = [];
+        that.commandsDoneManager = [];
+
+        <span class="hljs-keyword">if</span>(lines.length === <span class="hljs-number">0</span>) {
+            <span class="hljs-keyword">return</span> geometries;
+        }
+
+        <span class="hljs-keyword">for</span>(i=<span class="hljs-number">0</span>; i &lt; lines.length; i++) {
+            <span class="hljs-keyword">if</span>(lines[i].type === <span class="hljs-string">"G0"</span>) {
+                geometry = getGeometryStraight(lines[i]);
+                geometries.G0.merge(geometry);
+
+                that.commandsUndoneManager.push({
+                    type : lines[i].type,
+                    lineNumber : lines[i].lineNumber,
+                    feedrate : lines[i].feedrate,
+                    start : util.copyPoint(geometry.vertices[<span class="hljs-number">0</span>]),
+                    end : util.copyPoint(geometry.vertices[geometry.vertices.length - <span class="hljs-number">1</span>]),
+                    numberVertices : geometry.vertices.length
+                });
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(lines[i].type === <span class="hljs-string">"G1"</span>) {
+                geometry = getGeometryStraight(lines[i]);
+                geometries.G1.merge(geometry);
+
+                that.commandsUndoneManager.push({
+                    type : lines[i].type,
+                    lineNumber : lines[i].lineNumber,
+                    feedrate : lines[i].feedrate,
+                    start : util.copyPoint(geometry.vertices[<span class="hljs-number">0</span>]),
+                    end : util.copyPoint(geometry.vertices[geometry.vertices.length - <span class="hljs-number">1</span>]),
+                    numberVertices : geometry.vertices.length
+                });
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(lines[i].type === <span class="hljs-string">"G2"</span> || lines[i].type === <span class="hljs-string">"G3"</span>) {
+                geometry = getGeometryCurve(lines[i]);
+                geometries.G2G3.vertices.push(geometry.vertices[<span class="hljs-number">0</span>]);
+
+                <span class="hljs-keyword">for</span>(j=<span class="hljs-number">1</span>; j &lt; geometry.vertices.length-<span class="hljs-number">1</span>; j++) {
+                    geometries.G2G3.vertices.push(geometry.vertices[j]);
+                    geometries.G2G3.vertices.push(geometry.vertices[j]);
+                }
+                geometries.G2G3.vertices.push(geometry.vertices[j]);
+
+                that.commandsUndoneManager.push({
+                    type : lines[i].type,
+                    lineNumber : lines[i].lineNumber,
+                    feedrate : lines[i].feedrate,
+                    start : util.copyPoint(geometry.vertices[<span class="hljs-number">0</span>]),
+                    end : util.copyPoint(geometry.vertices[geometry.vertices.length - <span class="hljs-number">1</span>]),
+                    numberVertices : (geometry.vertices.length - <span class="hljs-number">1</span>) * <span class="hljs-number">2</span>
+                });
+            }
+        }
+
+        <span class="hljs-keyword">return</span> geometries;
+    }</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Sets the meshes (and remove the old ones).</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>lines must be an array.</strong><br/>(The array of lines describing the whole path.)</p>
+</li>
+<li><p><strong>initialPosition must be an object.</strong><br/>(The position, in 3D, where thr whole path begins (optional).)</p>
+</li>
+</ul></div></div><div class="code"><div class="wrapper">    that.setMeshes = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">lines, initialPosition</span>) </span>{
+        resetPathsMesh();
+        <span class="hljs-keyword">var</span> geometries = setGeometries(lines);
+        that.lines = lines;
+        that.initialPosition = { x : <span class="hljs-number">0</span>, y : <span class="hljs-number">0</span>, z : <span class="hljs-number">0</span>};
+
+        that.meshG0Undone = <span class="hljs-keyword">new</span> THREE.Line(geometries.G0,
+                that.matG0Undone, THREE.LinePieces);
+        that.meshG1Undone = <span class="hljs-keyword">new</span> THREE.Line(geometries.G1,
+                that.matG1Undone, THREE.LinePieces);
+        that.meshG2G3Undone = <span class="hljs-keyword">new</span> THREE.Line(geometries.G2G3,
+                that.matG2G3Undone, THREE.LinePieces);
+        that.meshG0Done = <span class="hljs-keyword">new</span> THREE.Line(<span class="hljs-keyword">new</span> THREE.Geometry(),
+                that.matG0Done, THREE.LinePieces);
+        that.meshG1Done = <span class="hljs-keyword">new</span> THREE.Line(<span class="hljs-keyword">new</span> THREE.Geometry(),
+                that.matG1Done, THREE.LinePieces);
+        that.meshG2G3Done = <span class="hljs-keyword">new</span> THREE.Line(<span class="hljs-keyword">new</span> THREE.Geometry(),
+                that.matG2G3Done, THREE.LinePieces);
+
+        that.meshDoing = <span class="hljs-keyword">new</span> THREE.Line(<span class="hljs-keyword">new</span> THREE.Geometry(),
+                that.matDoing, THREE.LinePieces);
+
+        <span class="hljs-keyword">if</span>(initialPosition !== <span class="hljs-literal">undefined</span>) {
+            that.initialPosition.x = initialPosition.x;
+            that.initialPosition.y = initialPosition.y;
+            that.initialPosition.z = initialPosition.z;
+            that.meshG0Undone.position.set(initialPosition.x,
+                    initialPosition.y, initialPosition.z);
+            that.meshG1Undone.position.set(initialPosition.x,
+                    initialPosition.y, initialPosition.z);
+            that.meshG2G3Undone.position.set(initialPosition.x,
+                    initialPosition.y, initialPosition.z);
+            that.meshG0Done.position.set(initialPosition.x,
+                    initialPosition.y, initialPosition.z);
+            that.meshG1Done.position.set(initialPosition.x,
+                    initialPosition.y, initialPosition.z);
+            that.meshG2G3Done.position.set(initialPosition.x,
+                    initialPosition.y, initialPosition.z);
+        }
+        that.add();
+    };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Redoes the meshes as it was</p></div></div><div class="code"><div class="wrapper">    that.redoMeshes = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        <span class="hljs-keyword">if</span>(that.meshG0Done.geometry.vertices.length &gt; <span class="hljs-number">0</span> ||
+                that.meshG1Done.geometry.vertices.length &gt; <span class="hljs-number">0</span> ||
+                that.meshG2G3Done.geometry.vertices.length &gt; <span class="hljs-number">0</span>)
+        {
+            that.remove();
+            that.setMeshes(that.lines, that.initialPosition);
+            that.add();
+        }
+    };</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Returns the path the animation has to follow.</p>
+<p><strong>Returns an array</strong><br/>(The path the animation has to follow.)</p></div></div><div class="code"><div class="wrapper">    that.getPath = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        <span class="hljs-keyword">var</span> iG0 = <span class="hljs-number">0</span>, iG1 = <span class="hljs-number">0</span>, iG2G3 = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">var</span> iCommand = <span class="hljs-number">0</span>, iCurrent = <span class="hljs-number">0</span>, iEnd = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">var</span> command = {};
+        <span class="hljs-keyword">var</span> path = [], vertices = [];
+
+        <span class="hljs-keyword">if</span>(that.lines === <span class="hljs-literal">undefined</span>) {
+            <span class="hljs-keyword">return</span> [];
+        }
+
+        <span class="hljs-keyword">for</span>(iCommand=<span class="hljs-number">0</span>; iCommand &lt; that.commandsUndoneManager.length; iCommand++) {
+            command = that.commandsUndoneManager[iCommand];
+            <span class="hljs-keyword">if</span>(command.type === <span class="hljs-string">"G0"</span>) {
+                iCurrent = iG0;
+                vertices = that.meshG0Undone.geometry.vertices;
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(command.type === <span class="hljs-string">"G1"</span>) {
+                iCurrent = iG1;
+                vertices = that.meshG1Undone.geometry.vertices;
+            } <span class="hljs-keyword">else</span> {
+                iCurrent = iG2G3;
+                vertices = that.meshG2G3Undone.geometry.vertices;
+            }
+            iEnd = iCurrent + command.numberVertices - <span class="hljs-number">1</span>;
+
+            path.push({
+                point : util.copyPoint(vertices[iCurrent]),
+                type : command.type,
+                lineNumber : command.lineNumber,
+                commandNumber : iCommand,
+                feedrate : command.feedrate
+            });
+            iCurrent++;
+            <span class="hljs-keyword">while</span>(iCurrent &lt; iEnd) {
+                path.push({
+                    point : util.copyPoint(vertices[iCurrent]),
+                    type : command.type,
+                    lineNumber : command.lineNumber,
+                    commandNumber : iCommand,
+                    feedrate : command.feedrate
+                });
+                iCurrent += <span class="hljs-number">2</span>;
+            }
+            path.push({
+                point : util.copyPoint(vertices[iCurrent]),
+                type : command.type,
+                lineNumber : command.lineNumber,
+                commandNumber : iCommand,
+                feedrate : command.feedrate
+            });
+            iCurrent++;
+
+            <span class="hljs-keyword">if</span>(command.type === <span class="hljs-string">"G0"</span>) {
+               iG0 = iCurrent;
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(command.type === <span class="hljs-string">"G1"</span>) {
+               iG1 = iCurrent;
+            } <span class="hljs-keyword">else</span> {
+               iG2G3 = iCurrent;
+            }
+        }
+
+        <span class="hljs-keyword">return</span> path;
+    };
+
+    <span class="hljs-comment">//This is ridiculous not to manage to update the vertices</span>
+    <span class="hljs-comment">//Change the selectionned mesh</span>
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">changeMesh</span>(<span class="hljs-params">vertices, type, done</span>) </span>{
+        <span class="hljs-keyword">var</span> mat = {}, pos = {};
+        <span class="hljs-keyword">var</span> geo = <span class="hljs-keyword">new</span> THREE.Geometry();
+        geo.vertices = vertices;
+
+        <span class="hljs-keyword">if</span>(done === <span class="hljs-literal">true</span>) {
+            <span class="hljs-keyword">if</span>(type === <span class="hljs-string">"G0"</span>) {
+                mat = that.matG0Done;
+                pos = that.meshG0Done.position.clone();
+                that.scene.remove(that.meshG0Done);
+                that.meshG0Done = <span class="hljs-keyword">new</span> THREE.Line(geo, mat, THREE.LinePieces);
+                that.meshG0Done.position.set(pos.x, pos.y, pos.z);
+                that.scene.add(that.meshG0Done);
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(type === <span class="hljs-string">"G1"</span>) {
+                mat = that.matG1Done;
+                pos = that.meshG1Done.position.clone();
+                that.scene.remove(that.meshG1Done);
+                that.meshG1Done = <span class="hljs-keyword">new</span> THREE.Line(geo, mat, THREE.LinePieces);
+                that.meshG1Done.position.set(pos.x, pos.y, pos.z);
+                that.scene.add(that.meshG1Done);
+            } <span class="hljs-keyword">else</span> {
+                mat = that.matG2G3Done;
+                pos = that.meshG2G3Done.position.clone();
+                that.scene.remove(that.meshG2G3Done);
+                that.meshG2G3Done = <span class="hljs-keyword">new</span> THREE.Line(geo, mat, THREE.LinePieces);
+                that.meshG2G3Done.position.set(pos.x, pos.y, pos.z);
+                that.scene.add(that.meshG2G3Done);
+            }
+        } <span class="hljs-keyword">else</span> {
+            <span class="hljs-keyword">if</span>(type === <span class="hljs-string">"G0"</span>) {
+                mat = that.matG0Undone;
+                pos = that.meshG0Undone.position.clone();
+                that.scene.remove(that.meshG0Undone);
+                that.meshG0Undone = <span class="hljs-keyword">new</span> THREE.Line(geo, mat, THREE.LinePieces);
+                that.meshG0Undone.position.set(pos.x, pos.y, pos.z);
+                that.scene.add(that.meshG0Undone);
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(type === <span class="hljs-string">"G1"</span>) {
+                mat = that.matG1Undone;
+                pos = that.meshG1Undone.position.clone();
+                that.scene.remove(that.meshG1Undone);
+                that.meshG1Undone = <span class="hljs-keyword">new</span> THREE.Line(geo, mat, THREE.LinePieces);
+                that.meshG1Undone.position.set(pos.x, pos.y, pos.z);
+                that.scene.add(that.meshG1Undone);
+            } <span class="hljs-keyword">else</span> {
+                mat = that.matG2G3Undone;
+                pos = that.meshG2G3Undone.position.clone();
+                that.scene.remove(that.meshG2G3Undone);
+                that.meshG2G3Undone = <span class="hljs-keyword">new</span> THREE.Line(geo, mat, THREE.LinePieces);
+                that.meshG2G3Undone.position.set(pos.x, pos.y, pos.z);
+                that.scene.add(that.meshG2G3Undone);
+            }
+        }
+    }
+
+    <span class="hljs-comment">//Return an object containing the "undone" and the "done" meshes</span>
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getMeshes</span>(<span class="hljs-params">type</span>) </span>{
+        <span class="hljs-keyword">var</span> res = { undone : {}, done : {} };
+
+        <span class="hljs-keyword">if</span>(type === <span class="hljs-string">"G0"</span>) {
+            res.undone = that.meshG0Undone;
+            res.done = that.meshG0Done;
+        } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(type === <span class="hljs-string">"G1"</span>) {
+            res.undone = that.meshG1Undone;
+            res.done = that.meshG1Done;
+        } <span class="hljs-keyword">else</span> {  <span class="hljs-comment">//I assume the types are correct</span>
+            res.undone = that.meshG2G3Undone;
+            res.done = that.meshG2G3Done;
+        }
+
+        <span class="hljs-keyword">return</span> res;
+    }</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>To call when the bit starts a new path.</p>
+<p>Parameters:</p>
+<ul>
+<li><strong>pointPath must be an object.</strong><br/>(The point path the bit is reaching (this point is from the path returned by getPath).)</li>
+</ul></div></div><div class="code"><div class="wrapper">    that.startPath = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">pointPath</span>) </span>{
+        <span class="hljs-keyword">var</span> meshes = getMeshes(pointPath.type);
+        <span class="hljs-keyword">var</span> meshDone = meshes.done;
+        <span class="hljs-keyword">var</span> verticesDone = meshDone.geometry.vertices;
+        <span class="hljs-keyword">var</span> p = pointPath.point;
+
+        verticesDone.push(<span class="hljs-keyword">new</span> THREE.Vector3(p.x, p.y, p.z));
+        verticesDone.push(<span class="hljs-keyword">new</span> THREE.Vector3(p.x, p.y, p.z));
+        <span class="hljs-comment">//No need to change vertices of the meshUndone</span>
+
+        changeMesh(verticesDone, pointPath.type, <span class="hljs-literal">true</span>);
+
+        that.commandsDoneManager.push({
+            type : that.commandsUndoneManager[<span class="hljs-number">0</span>].type,
+            lineNumber : that.commandsUndoneManager[<span class="hljs-number">0</span>].lineNumber,
+            feedrate : that.commandsUndoneManager[<span class="hljs-number">0</span>].feedrate,
+            start : util.copyPoint(that.commandsUndoneManager[<span class="hljs-number">0</span>].start),
+            end : util.copyPoint(that.commandsUndoneManager[<span class="hljs-number">0</span>].end),
+            numberVertices : <span class="hljs-number">2</span>
+        });
+    };</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>To call when the bit ends a path.</p>
+<p>Parameters:</p>
+<ul>
+<li><strong>pointPath must be an object.</strong><br/>(The point path the bit is reaching (this point is from the path returned by getPath).)</li>
+</ul></div></div><div class="code"><div class="wrapper">    that.endPath = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">pointPath</span>) </span>{
+        <span class="hljs-keyword">var</span> meshes = getMeshes(pointPath.type);
+        <span class="hljs-keyword">var</span> meshDone = meshes.done, meshUndone = meshes.undone;
+        <span class="hljs-keyword">var</span> verticesDone = meshDone.geometry.vertices;
+        <span class="hljs-keyword">var</span> verticesUndone = meshUndone.geometry.vertices;
+        <span class="hljs-keyword">var</span> p = pointPath.point;
+
+        <span class="hljs-keyword">if</span>(verticesDone.length === <span class="hljs-number">0</span>) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+        }
+        verticesDone[verticesDone.length -<span class="hljs-number">1</span>] = <span class="hljs-keyword">new</span> THREE.Vector3(p.x, p.y, p.z);
+
+        <span class="hljs-comment">//Remove the vertex following the bit and the one at the end of the path</span>
+        verticesUndone.splice(<span class="hljs-number">0</span>, <span class="hljs-number">2</span>);
+
+        changeMesh(verticesDone, pointPath.type, <span class="hljs-literal">true</span>);
+        changeMesh(verticesUndone, pointPath.type, <span class="hljs-literal">false</span>);
+
+        <span class="hljs-keyword">if</span>(that.commandsUndoneManager[<span class="hljs-number">0</span>].numberVertices &gt; <span class="hljs-number">2</span>) {
+            that.commandsUndoneManager[<span class="hljs-number">0</span>].numberVertices -= <span class="hljs-number">2</span>;
+        } <span class="hljs-keyword">else</span> {
+            that.commandsUndoneManager.splice(<span class="hljs-number">0</span>, <span class="hljs-number">1</span>);
+        }
+    };</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>To call when the bit reaches an intermediate point of a path.</p>
+<p>Parameters:</p>
+<ul>
+<li><strong>pointPath must be an object.</strong><br/>(The point path the bit is reaching (this point is from the path returned by getPath).)</li>
+</ul></div></div><div class="code"><div class="wrapper">    that.reachedIntermediate = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">pointPath</span>) </span>{
+        that.endPath(pointPath);
+        that.startPath(pointPath);
+    };</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>To call when the bit from the animation is reaching one point from the
+path.</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>pointPath must be an object.</strong><br/>(The point path the bit is reaching (this point is from the path returned by getPath).)</p>
+</li>
+<li><p><strong>currentPosition must be an object.</strong><br/>(The current position of the bit in 3D.)</p>
+</li>
+</ul>
+<p><strong>Returns a boolean</strong><br/>(False if there was a problem.)</p></div></div><div class="code"><div class="wrapper">    that.isReachingPoint = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">pointPath, currentPosition</span>) </span>{
+        <span class="hljs-keyword">var</span> meshes = getMeshes(pointPath.type);
+        <span class="hljs-keyword">var</span> meshDone = meshes.done, meshUndone = meshes.undone;
+        <span class="hljs-keyword">var</span> verticesDone = meshDone.geometry.vertices;
+        <span class="hljs-keyword">var</span> verticesUndone = meshUndone.geometry.vertices;
+        <span class="hljs-keyword">var</span> p = currentPosition;
+
+        <span class="hljs-keyword">if</span>(verticesDone.length &lt; <span class="hljs-number">2</span>) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+        }
+        verticesUndone[<span class="hljs-number">0</span>].set(p.x, p.y, p.z);
+        verticesDone[verticesDone.length -<span class="hljs-number">1</span>].set(p.x, p.y, p.z);
+        changeMesh(verticesDone, pointPath.type, <span class="hljs-literal">true</span>);
+        changeMesh(verticesUndone, pointPath.type, <span class="hljs-literal">false</span>);
+
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+    };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>//Returns false if error else returns true
+that.goToLine = function(lineNumber) {
+    //NOTE: commandsUndoneManager and commandsDoneManager were creating
+    //to ease and improve the way to generate meshes when the users wants
+    //to go directly to a specific line.
+    //To sum up the algorithm:
+    //<em> find if need to increment or decrement
+    //</em> extract for the undone (increment) or done (decrement) vertices
+    //  according to numberVertices and push them to the other one mesh
+    //* update commandsUndoneManager and commandsDoneManager</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-comment">// ;</span></div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Highlights the currently executed line command.</p>
+<p>Parameters:</p>
+<ul>
+<li><strong>The must be a number.</strong><br/>(line number of the command.)</li>
+</ul>
+<p><strong>Returns a boolean</strong><br/>(True if the command is displayed.)</p></div></div><div class="code"><div class="wrapper">    that.highlightCommand = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">lineNumber</span>) </span>{
+        <span class="hljs-keyword">var</span> i = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">var</span> meshes;
+        <span class="hljs-keyword">var</span> geometry, position;
+        <span class="hljs-keyword">var</span> addingGeometry, removingGeometry, numberVertices, vertices;
+
+        <span class="hljs-keyword">if</span>(lineNumber === that.currentLineNumber) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+        }
+
+        <span class="hljs-comment">//Checking if the commands in this line are possibly displayed</span>
+        <span class="hljs-keyword">if</span>(that.commandsUndoneManager.length === <span class="hljs-number">0</span>) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+        }
+        <span class="hljs-keyword">while</span>(that.commandsUndoneManager[i].lineNumber !== lineNumber) {
+            <span class="hljs-keyword">if</span>(that.commandsUndoneManager[i].lineNumber &gt; lineNumber) {
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+            }
+            <span class="hljs-keyword">if</span>(i === that.commandsUndoneManager.length - <span class="hljs-number">1</span>) {
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+            }
+            i++;
+        }
+        that.currentLineNumber = lineNumber;
+
+        <span class="hljs-comment">//<span class="hljs-doctag">NOTE:</span> At this point, that.commandsUndoneManager[0] corresponds to the</span>
+        <span class="hljs-comment">//doing mesh</span>
+
+        <span class="hljs-comment">//Put in done meshes the vertices of the doing mesh</span>
+        <span class="hljs-keyword">while</span>(that.meshDoing.geometry.vertices.length &gt; <span class="hljs-number">0</span>) {
+            meshes = getMeshes(that.commandsUndoneManager[<span class="hljs-number">0</span>].type);
+            addingGeometry = meshes.done.geometry;
+            removingGeometry = that.meshDoing.geometry;
+            numberVertices = that.commandsUndoneManager[<span class="hljs-number">0</span>].numberVertices;
+
+            vertices = removingGeometry.vertices.splice(<span class="hljs-number">0</span>, numberVertices);
+            addingGeometry.vertices = addingGeometry.vertices.concat(vertices);
+        }
+
+        <span class="hljs-comment">//Put from undone to done all the commands that are passed</span>
+        <span class="hljs-keyword">while</span>(that.commandsUndoneManager[<span class="hljs-number">0</span>] !== <span class="hljs-literal">undefined</span> &amp;&amp;
+                that.commandsUndoneManager[<span class="hljs-number">0</span>].lineNumber !== lineNumber) {
+            meshes = getMeshes(that.commandsUndoneManager[<span class="hljs-number">0</span>].type);
+            addingGeometry = meshes.done.geometry;
+            removingGeometry = meshes.undone.geometry;
+            numberVertices = that.commandsUndoneManager[<span class="hljs-number">0</span>].numberVertices;
+
+            vertices = removingGeometry.vertices.splice(<span class="hljs-number">0</span>, numberVertices);
+            addingGeometry.vertices = addingGeometry.vertices.concat(vertices);
+
+            that.commandsUndoneManager.splice(<span class="hljs-number">0</span>, <span class="hljs-number">1</span>);
+        }
+
+        <span class="hljs-comment">//Put the vertices in the doing of the currently executed commands and</span>
+        <span class="hljs-comment">//remove the vertices in the undone meshes</span>
+        <span class="hljs-keyword">while</span>(that.commandsUndoneManager[<span class="hljs-number">0</span>] !== <span class="hljs-literal">undefined</span> &amp;&amp;
+                that.commandsUndoneManager[<span class="hljs-number">0</span>].lineNumber === lineNumber) {
+            meshes = getMeshes(that.commandsUndoneManager[<span class="hljs-number">0</span>].type);
+            addingGeometry = that.meshDoing.geometry;
+            removingGeometry = meshes.undone.geometry;
+            numberVertices = that.commandsUndoneManager[<span class="hljs-number">0</span>].numberVertices;
+
+            vertices = removingGeometry.vertices.splice(<span class="hljs-number">0</span>, numberVertices);
+            addingGeometry.vertices = addingGeometry.vertices.concat(vertices);
+
+            that.commandsUndoneManager.splice(<span class="hljs-number">0</span>, <span class="hljs-number">1</span>);
+        }
+
+        <span class="hljs-comment">//Updating meshes</span>
+        changeMesh(that.meshG0Undone.geometry.vertices, <span class="hljs-string">"G0"</span>, <span class="hljs-literal">false</span>);
+        changeMesh(that.meshG1Undone.geometry.vertices, <span class="hljs-string">"G1"</span>, <span class="hljs-literal">false</span>);
+        changeMesh(that.meshG2G3Undone.geometry.vertices, <span class="hljs-string">"G2G3"</span>, <span class="hljs-literal">false</span>);
+        changeMesh(that.meshG0Done.geometry.vertices, <span class="hljs-string">"G0"</span>, <span class="hljs-literal">true</span>);
+        changeMesh(that.meshG1Done.geometry.vertices, <span class="hljs-string">"G1"</span>, <span class="hljs-literal">true</span>);
+        changeMesh(that.meshG2G3Done.geometry.vertices, <span class="hljs-string">"G2G3"</span>, <span class="hljs-literal">true</span>);
+
+        that.scene.remove(that.meshDoing);
+        geometry = <span class="hljs-keyword">new</span> THREE.Geometry();
+        geometry.vertices = that.meshDoing.geometry.vertices;
+        position = that.meshDoing.position.clone();
+        that.meshDoing = <span class="hljs-keyword">new</span> THREE.Line(geometry, that.matDoing, THREE.LinePieces);
+        that.meshDoing.position.set(position.x, position.y, position.z);
+        that.scene.add(that.meshDoing);
+
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+    };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>initialize</p></div></div><div class="code"><div class="wrapper">    that.scene = scene;
+    that.commandsUndoneManager = [];
+    that.commandsDoneManager = [];
+
+    that.currentLineNumber = -<span class="hljs-number">1</span>;
+
+    resetPathsMesh();
+    that.matG0Undone = <span class="hljs-keyword">new</span> THREE.LineBasicMaterial({ color : <span class="hljs-number">0xff0000</span> });
+    that.matG1Undone = <span class="hljs-keyword">new</span> THREE.LineBasicMaterial({ color : <span class="hljs-number">0x000ff</span> });
+    that.matG2G3Undone = <span class="hljs-keyword">new</span> THREE.LineBasicMaterial({ color : <span class="hljs-number">0x000ff</span> });
+    that.matG0Done = <span class="hljs-keyword">new</span> THREE.LineBasicMaterial({ color : <span class="hljs-number">0xff00ff</span> });
+    that.matG1Done = <span class="hljs-keyword">new</span> THREE.LineBasicMaterial({color : <span class="hljs-number">0xff00ff</span> });
+    that.matG2G3Done = <span class="hljs-keyword">new</span> THREE.LineBasicMaterial({ color : <span class="hljs-number">0xff00ff</span> });
+
+    that.matDoing = <span class="hljs-keyword">new</span> THREE.LineBasicMaterial({
+        color : <span class="hljs-number">0x00ffff</span>, linewidth : <span class="hljs-number">7</span>
+    });
+};</div></div></div></div></body></html>

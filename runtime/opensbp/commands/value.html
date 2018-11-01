@@ -1,0 +1,414 @@
+<!DOCTYPE html><html lang="en"><head><title>runtime/opensbp/commands/value</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../"><meta name="groc-document-path" content="runtime/opensbp/commands/value"><meta name="groc-project-path" content="runtime/opensbp/commands/value.js"><link rel="stylesheet" type="text/css" media="all" href="../../../assets/style.css"><script type="text/javascript" src="../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">runtime/opensbp/commands/value.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../log'</span>).logger(<span class="hljs-string">'sbp'</span>);
+<span class="hljs-keyword">var</span> g2 = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../g2'</span>);
+<span class="hljs-keyword">var</span> sb3_commands = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../sb3_commands'</span>);
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../config'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>VALUES </p></div></div><div class="code"><div class="wrapper">exports.VA = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{
+	log.debug(<span class="hljs-string">"VA Command: "</span> + args);
+
+	<span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'mpo'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, MPO</span>) </span>{
+
+		<span class="hljs-keyword">var</span> setVA_G2 = {};
+		<span class="hljs-keyword">var</span> setVA_SBP = {};
+		<span class="hljs-keyword">var</span> newLocation = <span class="hljs-number">0</span>;
+		<span class="hljs-keyword">var</span> unitConv = <span class="hljs-number">1</span>;
+		<span class="hljs-keyword">var</span> offset = <span class="hljs-number">0</span>;
+
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.machine.driver.status.unit === <span class="hljs-string">"in"</span> ) {  <span class="hljs-comment">// inches</span>
+			unitConv = <span class="hljs-number">0.039370079</span>;
+		}
+
+		<span class="hljs-keyword">if</span> (args[<span class="hljs-number">6</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//X Base Coordinate</span>
+		    <span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">"G28.3 X"</span> + args[<span class="hljs-number">6</span>] );
+		    MPO.x = args[<span class="hljs-number">6</span>] / unitConv;
+		}
+		<span class="hljs-keyword">if</span> (args[<span class="hljs-number">7</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//Y Base Coordinate</span>
+		    <span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">"G28.3 Y"</span> + args[<span class="hljs-number">7</span>] );
+		    MPO.y = args[<span class="hljs-number">7</span>] / unitConv;
+		}
+		<span class="hljs-keyword">if</span> (args[<span class="hljs-number">8</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//Z Base Coordinate</span>
+		    <span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">"G28.3 Z"</span> + args[<span class="hljs-number">8</span>] );
+		    MPO.z = args[<span class="hljs-number">8</span>] / unitConv;
+		}
+		<span class="hljs-keyword">if</span> (args[<span class="hljs-number">9</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//A Base Coordinate</span>
+		    <span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">"G28.3 A"</span> + args[<span class="hljs-number">9</span>] );
+		    MPO.a = args[<span class="hljs-number">9</span>];<span class="hljs-comment">// / unitConv; // No unit conversion for rotary</span>
+		}
+		<span class="hljs-keyword">if</span> (args[<span class="hljs-number">10</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//B Base Coordinate</span>
+		    <span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">"G28.3 B"</span> + args[<span class="hljs-number">10</span>] );
+		    MPO.b = args[<span class="hljs-number">10</span>];<span class="hljs-comment">// / unitConv; // No unit conversion for rotary</span>
+		}
+		<span class="hljs-keyword">if</span> (args[<span class="hljs-number">11</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//C Base Coordinate</span>
+		    <span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">"G28.3 C"</span> + args[<span class="hljs-number">11</span>] );
+		    MPO.c = args[<span class="hljs-number">11</span>];<span class="hljs-comment">// / unitConv; // No unit conversion for rotary</span>
+		}
+		<span class="hljs-keyword">if</span> (args[<span class="hljs-number">0</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//X location</span>
+			setVA_G2.g55x = <span class="hljs-built_in">Number</span>(((MPO.x * unitConv) - args[<span class="hljs-number">0</span>]).toFixed(<span class="hljs-number">5</span>));
+			log.debug(<span class="hljs-string">"    g55X"</span> + <span class="hljs-built_in">JSON</span>.stringify(setVA_G2.g55x) + <span class="hljs-string">"  MPO.x = "</span> + MPO.x + <span class="hljs-string">" args[0] = "</span> + args[<span class="hljs-number">0</span>]);
+			<span class="hljs-keyword">this</span>.cmd_posx = <span class="hljs-keyword">this</span>.posx = args[<span class="hljs-number">0</span>];
+		}
+		<span class="hljs-keyword">if</span> (args[<span class="hljs-number">1</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//Y location</span>
+			setVA_G2.g55y = <span class="hljs-built_in">Number</span>(((MPO.y * unitConv) - args[<span class="hljs-number">1</span>]).toFixed(<span class="hljs-number">5</span>));
+			log.debug(<span class="hljs-string">"    g55Y"</span> + <span class="hljs-built_in">JSON</span>.stringify(setVA_G2.g55y) + <span class="hljs-string">"  MPO.y = "</span> + MPO.y + <span class="hljs-string">" args[1] = "</span> + args[<span class="hljs-number">1</span>]);
+			<span class="hljs-keyword">this</span>.cmd_posy = <span class="hljs-keyword">this</span>.posy = args[<span class="hljs-number">1</span>];
+		}
+		<span class="hljs-keyword">if</span> (args[<span class="hljs-number">2</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//Z location</span>
+			setVA_G2.g55z = <span class="hljs-built_in">Number</span>(((MPO.z * unitConv) - args[<span class="hljs-number">2</span>]).toFixed(<span class="hljs-number">5</span>));
+			<span class="hljs-keyword">this</span>.cmd_posz = <span class="hljs-keyword">this</span>.posz = args[<span class="hljs-number">2</span>];
+		}
+		<span class="hljs-keyword">if</span> (args[<span class="hljs-number">3</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//A location</span>
+			setVA_G2.g55a = <span class="hljs-built_in">Number</span>(((MPO.a * <span class="hljs-number">1.0</span> <span class="hljs-comment">/*unitConv*/</span>) - args[<span class="hljs-number">3</span>]).toFixed(<span class="hljs-number">5</span>));
+			<span class="hljs-keyword">this</span>.cmd_posa = <span class="hljs-keyword">this</span>.posa = args[<span class="hljs-number">3</span>];
+		}
+		<span class="hljs-keyword">if</span> (args[<span class="hljs-number">4</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//B location</span>
+			setVA_G2.g55b = <span class="hljs-built_in">Number</span>(((MPO.b * <span class="hljs-number">1.0</span> <span class="hljs-comment">/*unitConv*/</span>) - args[<span class="hljs-number">4</span>]).toFixed(<span class="hljs-number">5</span>));
+			<span class="hljs-keyword">this</span>.cmd_posb = <span class="hljs-keyword">this</span>.posb = args[<span class="hljs-number">4</span>];
+		}
+		<span class="hljs-keyword">if</span> (args[<span class="hljs-number">5</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//C location</span>
+			setVA_G2.g55c = <span class="hljs-built_in">Number</span>(((MPO.c * <span class="hljs-number">1.0</span> <span class="hljs-comment">/*unitConv*/</span>) - args[<span class="hljs-number">5</span>]).toFixed(<span class="hljs-number">5</span>));
+			<span class="hljs-keyword">this</span>.cmd_posc = <span class="hljs-keyword">this</span>.posc = args[<span class="hljs-number">5</span>];
+		}
+
+		config.driver.setMany(setVA_G2, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+			callback();
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+};
+
+exports.VC = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>log.debug( &quot;VC - args = &quot; + args );</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> sbp_values = {};
+
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">0</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//args[0] = sbp_settings.cutterDia	// Cutter Diameter</span>
+		sbp_values.cutterDia = args[<span class="hljs-number">0</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>args[1] = Obsolete
+args[2] = Obsolete</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">3</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">//Safe Z Pull Up</span>
+		sbp_values.safeZpullUp = args[<span class="hljs-number">3</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>if (args[4] !== undefined) {     // Plunge Direction</p></div></div><div class="code"><div class="wrapper"><span class="hljs-comment">//	</span>
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">5</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">// % Pocket Overlap for CR and CG commands</span>
+		sbp_values.pocketOverlap = args[<span class="hljs-number">5</span>];
+	}
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">6</span>] !== <span class="hljs-literal">undefined</span>) { 	<span class="hljs-comment">// Safe A Pull Up</span>
+		sbp_values.safeApullUp = args[<span class="hljs-number">6</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>args[7] = triggeredOutput        // triggered output switch
+args[8] = triggerONthreshold        // trigger ON threshold
+args[9] = triggerOFFthreshold    // trigger OFF threshold
+args[10] = vertAxisMonitor        // vertical axis monitored
+args[11] = triggerOutputNum        // triggered output switch #</p></div></div><div class="code"><div class="wrapper">	config.opensbp.setMany(sbp_values, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, values</span>) </span>{
+		log.debug( <span class="hljs-string">"VC-sbp_values = "</span> + <span class="hljs-built_in">JSON</span>.stringify(sbp_values) );
+		callback();
+	});
+};
+
+exports.VD = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>For all axes - the values are:
+   0=Disable; 1=Standard Mode; 2=Inhibited; 3=Radius Mode
+XYZ Unit type</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( args[<span class="hljs-number">2</span>] !== <span class="hljs-literal">undefined</span> ) {
+		<span class="hljs-keyword">var</span> unitType = args[<span class="hljs-number">2</span>];
+		log.debug(<span class="hljs-string">"VD:Current X = "</span> + <span class="hljs-keyword">this</span>.cmd_posx );
+		log.debug(<span class="hljs-string">"VD:Current Y = "</span> + <span class="hljs-keyword">this</span>.cmd_posy );
+		log.debug(<span class="hljs-string">"VD:Current Z = "</span> + <span class="hljs-keyword">this</span>.cmd_posz );
+		<span class="hljs-keyword">switch</span>(args[<span class="hljs-number">2</span>]) {
+			<span class="hljs-keyword">case</span> <span class="hljs-number">0</span>:
+				<span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">"G20"</span>); <span class="hljs-comment">// inches</span>
+				<span class="hljs-keyword">this</span>._setUnits(<span class="hljs-string">'in'</span>);
+				log.debug(<span class="hljs-string">"VD: returned from setting units to in"</span>);
+				<span class="hljs-keyword">break</span>;
+
+			<span class="hljs-keyword">case</span> <span class="hljs-number">1</span>:
+				<span class="hljs-keyword">this</span>.emit_gcode(<span class="hljs-string">"G21"</span>);
+				<span class="hljs-keyword">this</span>._setUnits(<span class="hljs-string">'mm'</span>);
+				log.debug(<span class="hljs-string">"VD: returned from setting units to mm"</span>);
+				<span class="hljs-keyword">break</span>;
+			<span class="hljs-keyword">default</span>:
+				<span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Invalid unit setting: "</span> + args[<span class="hljs-number">2</span>]);
+				<span class="hljs-keyword">break</span>;
+		}
+		log.debug(<span class="hljs-string">"VD:Converted X = "</span> + <span class="hljs-keyword">this</span>.cmd_posx );
+		log.debug(<span class="hljs-string">"VD:Converted Y = "</span> + <span class="hljs-keyword">this</span>.cmd_posy );
+		log.debug(<span class="hljs-string">"VD:Converted Z = "</span> + <span class="hljs-keyword">this</span>.cmd_posz );
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A Unit type
+    if ( args[3] !== undefined ) {
+        var unitType = args[3];
+        if ( unitType === 0 || unitType === 1 ){
+            if ( unitType === 0 ){
+                this.emit_gcode(&quot;G20&quot;); // inches
+                log.debug(&quot;Changing units to inch&quot;);
+            }
+            else if ( unitType == 1 ){
+                this.emit_gcode=(&quot;G21&quot;); // mm
+                log.debug(&quot;Changing units to mm&quot;);
+            }
+            else if ( unitType === 3 ){
+// <strong><strong><strong><em>*</em></strong></strong></strong> Need output to set to degrees <strong><strong><strong>*</strong></strong></strong>
+                this.emit_gcode(&quot;G21&quot;); // deg
+                log.debug(&quot;Changing units to mm&quot;);
+            }
+        }
+    }
+B Unit type
+    if ( args[4] !== undefined ) {
+        var unitType = args[4];
+        if ( unitType === 0 || unitType === 1 ){
+            if ( unitType === 0 ){
+                this.emit_gcode(&quot;G20&quot;); // inches
+                log.debug(&quot;Changing units to inch&quot;);
+            }
+            else if ( unitType === 1 ){
+                this.emit_gcode(&quot;G21&quot;); // mm
+                log.debug(&quot;Changing units to mm&quot;);
+            }
+            else if ( unitType === 3 ){
+// <strong><strong><strong><em>*</em></strong></strong></strong> Need output to set to degrees <strong><strong><strong>*</strong></strong></strong>
+                this.emit_gcode(&quot;G21&quot;); // deg
+                log.debug(&quot;Changing units to mm&quot;);
+            }
+        }
+    }
+C Unit type
+    if ( args[5] !== undefined ) {
+        var unitType = args[5];
+        if ( unitType === 0 || unitType === 1 ){
+            if ( unitType === 0 ){
+                this.emit_gcode(&quot;G20&quot;); // inches
+                log.debug(&quot;Changing units to inch&quot;);
+            }
+            else if ( unitType === 1 ){
+                this.emit_gcode(&quot;G21&quot;); // mm
+                log.debug(&quot;Changing units to mm&quot;);
+            }
+            else if ( unitType === 3 ){
+// <strong><strong><strong><em>*</em></strong></strong></strong> Need output to set to degrees <strong><strong><strong>*</strong></strong></strong>
+                this.emit_gcode(&quot;G21&quot;); // deg
+                log.debug(&quot;Changing units to mm&quot;);
+            }
+        }
+    }</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Show control console
+Display File Comments
+Keypad fixed distance
+    if ( args[8] !== undefined ){
+        var fDist = args[8];
+//        log.debug(&quot;Keypad fixed distance set to: &quot; + fDist );
+        log.debug(&quot;Fixed Distance setting not implemented&quot; );
+    }
+Keypad remote
+Keypad Switch AutoOff
+Write Part File Log
+Write System File Log
+Message Screen Location X
+Message Screen Location Y
+Message Screen Size X
+Message Screen Size Y
+Keypad outputs Auto-Off
+Show file Progress
+Main Display Type
+config.driver.setMany(g2_VD, function(err, values) {
+    callback();</p></div></div><div class="code"><div class="wrapper"><span class="hljs-comment">//	);</span>
+};
+
+exports.VI = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args,callback</span>) </span>{
+	<span class="hljs-keyword">var</span> g2_VI = {};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Driver 1 Channel</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( args[<span class="hljs-number">0</span>] !== <span class="hljs-literal">undefined</span> ){
+		<span class="hljs-keyword">var</span> res1 = <span class="hljs-string">"xyzabcXYZABC"</span>.indexOf(<span class="hljs-built_in">String</span>(args[<span class="hljs-number">0</span>]));
+		<span class="hljs-keyword">if</span> ( res1 &gt;= <span class="hljs-number">0</span> &amp;&amp; res1&lt;= <span class="hljs-number">5</span> ){ g2_VI[<span class="hljs-string">'1ma'</span>] = res1; }
+		<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( res1 &gt;= <span class="hljs-number">6</span> &amp;&amp; res1 &lt;= <span class="hljs-number">11</span> ){ g2_VI[<span class="hljs-string">'1ma'</span>] = res1-<span class="hljs-number">6</span>; }
+		<span class="hljs-keyword">else</span> { <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"VI-CH1: parameter "</span> + args[<span class="hljs-number">0</span>] + <span class="hljs-string">" out of range!"</span>); }
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Driver 2 Channel</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( args[<span class="hljs-number">1</span>] !== <span class="hljs-literal">undefined</span> ){
+		<span class="hljs-keyword">var</span> res2 = <span class="hljs-string">"xyzabcXYZABC"</span>.indexOf(<span class="hljs-built_in">String</span>(args[<span class="hljs-number">1</span>]));
+		<span class="hljs-keyword">if</span> ( res2 &gt;= <span class="hljs-number">0</span> &amp;&amp; res2&lt;= <span class="hljs-number">5</span> ){ g2_VI[<span class="hljs-string">'2ma'</span>] = res2; }
+		<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( res2 &gt;= <span class="hljs-number">6</span> &amp;&amp; res2 &lt;= <span class="hljs-number">11</span> ){ g2_VI[<span class="hljs-string">'2ma'</span>] = res2-<span class="hljs-number">6</span>; }
+		<span class="hljs-keyword">else</span> { <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"VI-CH1: parameter "</span> + args[<span class="hljs-number">1</span>] + <span class="hljs-string">" out of range!"</span>); }
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Driver 3 Channel</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( args[<span class="hljs-number">2</span>] !== <span class="hljs-literal">undefined</span> ){
+		<span class="hljs-keyword">var</span> res3 = <span class="hljs-string">"xyzabcXYZABC"</span>.indexOf(<span class="hljs-built_in">String</span>(args[<span class="hljs-number">2</span>]));
+		<span class="hljs-keyword">if</span> ( res3 &gt;= <span class="hljs-number">0</span> &amp;&amp; res3&lt;= <span class="hljs-number">5</span> ){ g2_VI[<span class="hljs-string">'3ma'</span>] = res3; }
+		<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( res3 &gt;= <span class="hljs-number">6</span> &amp;&amp; res3 &lt;= <span class="hljs-number">11</span> ){ g2_VI[<span class="hljs-string">'3ma'</span>] = res3-<span class="hljs-number">6</span>; }
+		<span class="hljs-keyword">else</span> { <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"VI-CH1: parameter "</span> + args[<span class="hljs-number">2</span>] + <span class="hljs-string">" out of range!"</span>); }
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Driver 4 Channel</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( args[<span class="hljs-number">3</span>] !== <span class="hljs-literal">undefined</span> ){
+		<span class="hljs-keyword">var</span> res4 = <span class="hljs-string">"xyzabcXYZABC"</span>.indexOf(<span class="hljs-built_in">String</span>(args[<span class="hljs-number">3</span>]));
+		<span class="hljs-keyword">if</span> ( res4 &gt;= <span class="hljs-number">0</span> &amp;&amp; res4&lt;= <span class="hljs-number">5</span> ){ g2_VI[<span class="hljs-string">'4ma'</span>] = res4; }
+		<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( res4 &gt;= <span class="hljs-number">6</span> &amp;&amp; res4 &lt;= <span class="hljs-number">11</span> ){ g2_VI[<span class="hljs-string">'4ma'</span>] = res4-<span class="hljs-number">6</span>; }
+		<span class="hljs-keyword">else</span> { <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"VI-CH1: parameter "</span> + args[<span class="hljs-number">3</span>] + <span class="hljs-string">" out of range!"</span>); }
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Driver 5 Channel</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( args[<span class="hljs-number">4</span>] !== <span class="hljs-literal">undefined</span> ){
+		<span class="hljs-keyword">var</span> res5 = <span class="hljs-string">"xyzabcXYZABC"</span>.indexOf(<span class="hljs-built_in">String</span>(args[<span class="hljs-number">4</span>]));
+		<span class="hljs-keyword">if</span> ( res5 &gt;= <span class="hljs-number">0</span> &amp;&amp; res5&lt;= <span class="hljs-number">5</span> ){ g2_VI[<span class="hljs-string">'5ma'</span>] = res5; }
+		<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( res5 &gt;= <span class="hljs-number">6</span> &amp;&amp; res5 &lt;= <span class="hljs-number">11</span> ){ g2_VI[<span class="hljs-string">'5ma'</span>] = res5-<span class="hljs-number">6</span>; }
+		<span class="hljs-keyword">else</span> { <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"VI-CH1: parameter "</span> + args[<span class="hljs-number">4</span>] + <span class="hljs-string">" out of range!"</span>); }
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Driver 6 Channel</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( args[<span class="hljs-number">5</span>] !== <span class="hljs-literal">undefined</span> ){
+		<span class="hljs-keyword">var</span> res6 = <span class="hljs-string">"xyzabcXYZABC"</span>.indexOf(<span class="hljs-built_in">String</span>(args[<span class="hljs-number">5</span>]));
+		<span class="hljs-keyword">if</span> ( res6 &gt;= <span class="hljs-number">0</span> &amp;&amp; res6&lt;= <span class="hljs-number">5</span> ){ g2_VI[<span class="hljs-string">'6ma'</span>] = res6; }
+		<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( res6 &gt;= <span class="hljs-number">6</span> &amp;&amp; res6 &lt;= <span class="hljs-number">11</span> ){ g2_VI[<span class="hljs-string">'6ma'</span>] = res6-<span class="hljs-number">6</span>; }
+		<span class="hljs-keyword">else</span> { <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"VI-CH1: parameter "</span> + args[<span class="hljs-number">5</span>] + <span class="hljs-string">" out of range!"</span>); }
+	}
+	config.driver.setMany(g2_VI, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, values</span>) </span>{
+		callback();
+	});
+};
+
+exports.VL = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args,callback</span>) </span>{
+
+	<span class="hljs-keyword">var</span> g2_VL = {};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>X - Low Limit</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">0</span>] !== <span class="hljs-literal">undefined</span>){
+		g2_VL.xtn = args[<span class="hljs-number">0</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>X - High Limit</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">1</span>] !== <span class="hljs-literal">undefined</span>){
+		g2_VL.xtm = args[<span class="hljs-number">1</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Y - Low Limit</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">2</span>] !== <span class="hljs-literal">undefined</span>){
+		g2_VL.ytn = args[<span class="hljs-number">2</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Y - High Limit</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">3</span>] !== <span class="hljs-literal">undefined</span>){
+		g2_VL.ytm = args[<span class="hljs-number">3</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Z - Low Limit</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">4</span>] !== <span class="hljs-literal">undefined</span>){
+		g2_VL.ztn = args[<span class="hljs-number">4</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Z - High Limit</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">5</span>] !== <span class="hljs-literal">undefined</span>){
+		g2_VL.ztm = args[<span class="hljs-number">5</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A - Low Limit</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">6</span>] !== <span class="hljs-literal">undefined</span>){
+		g2_VL.atn = args[<span class="hljs-number">6</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A - High Limit</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">7</span>] !== <span class="hljs-literal">undefined</span>){
+		g2_VL.atm = args[<span class="hljs-number">7</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Soft limit checking ON-OFF</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>B - Low Limit</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">9</span>] !== <span class="hljs-literal">undefined</span>){
+		g2_VL.btn = args[<span class="hljs-number">9</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>B - High Limit</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">10</span>] !== <span class="hljs-literal">undefined</span>){
+		g2_VL.btm = args[<span class="hljs-number">10</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Number of axes limits to check</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>C - Low Limit</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">12</span>] !== <span class="hljs-literal">undefined</span>){
+		g2_VL.ctn = args[<span class="hljs-number">12</span>];
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>C - High Limit</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">13</span>] !== <span class="hljs-literal">undefined</span>){
+		g2_VL.ctm = args[<span class="hljs-number">13</span>];
+	}
+
+	config.driver.setMany(g2_VL, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, values</span>) </span>{
+		callback();
+	});
+};
+
+<span class="hljs-comment">//exports.VN = function(args) {</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Limits 0-OFF, 1-ON
+Input #4 Switch mode 0-Nrm Closed Stop, 1-Nrm Open Stop, 2-Not Used
+Enable Torch Height Controller, Laser or Analog Control
+    0-Off, 1-Torch, 2-Laser, 3-An1 Control, 4-An2 Control, 5-An1 &amp; An2 Control</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Input Switch Modes = 0-Standard Switch, 1-Nrm Open Limit, 2-Nrm Closed Limit, 3-Nrm Open Stop, 4-Nrm Closed Stop
+Input #1 Switch mode
+Input #2 Switch mode
+Input #3 Switch mode
+Input #5 Switch mode
+Input #6 Switch mode
+Input #7 Switch mode
+Input #8 Switch mode
+Input #9 Switch mode
+Input #10 Switch mode
+Input #11 Switch mode
+Input #12 Switch mode
+Output Switch Modes = 0-StdON/FileOFF, 1-StdON/NoOFF, 2-StdON/LIStpOFF, 3-AutoON/FileOFF, 4-AutoON/NoOFF, 5-AutoON/FIStpOFF
+Output #1 Mode
+Output #2 Mode
+Output #3 Mode
+Output #5 Mode
+Output #6 Mode
+Output #7 Mode
+Output #8 Mode
+Output #9 Mode
+Output #10 Mode
+Output #11 Mode
+Output #12 Mode</p></div></div><div class="code"><div class="wrapper"><span class="hljs-comment">//};</span>
+
+exports.VP = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Grid
+Table Size X
+Table Size Y
+Table Size Z
+Simulate Cutting
+Draw Tool
+Start Actual Location
+Show Jugs</p></div></div><div class="code"><div class="wrapper">};
+
+exports.VR = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args, callback</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>XY Move Ramp Speed</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">0</span>] !== <span class="hljs-literal">undefined</span>) {
+		<span class="hljs-keyword">this</span>.maxjerk_xy = args[<span class="hljs-number">0</span>];
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'xjm'</span>:<span class="hljs-keyword">this</span>.maxjerk_xy});
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'yjm'</span>:<span class="hljs-keyword">this</span>.maxjerk_xy});
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Z Move Ramp Speed = args[0];</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">1</span>] !== <span class="hljs-literal">undefined</span>) {
+		<span class="hljs-keyword">this</span>.maxjerk_z = args[<span class="hljs-number">1</span>];
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'zjm'</span>:<span class="hljs-keyword">this</span>.maxjerk_z});
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A Move Ramp Speed</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">2</span>] !== <span class="hljs-literal">undefined</span>) {
+		<span class="hljs-keyword">this</span>.maxjerk_a = args[<span class="hljs-number">2</span>];
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'ajm'</span>:<span class="hljs-keyword">this</span>.maxjerk_a});
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>B Move Ramp Speed</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">3</span>] !== <span class="hljs-literal">undefined</span>) {
+		<span class="hljs-keyword">this</span>.maxjerk_b = args[<span class="hljs-number">3</span>];
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'bjm'</span>:<span class="hljs-keyword">this</span>.maxjerk_b});
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>C Move Ramp Speed</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">4</span>] !== <span class="hljs-literal">undefined</span>) {
+		<span class="hljs-keyword">this</span>.maxjerk_c = args[<span class="hljs-number">4</span>];
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'cjm'</span>:<span class="hljs-keyword">this</span>.maxjerk_c});
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>[JT] Junction Integration Time</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">5</span>] !== <span class="hljs-literal">undefined</span>) {
+		<span class="hljs-keyword">this</span>.jt = args[<span class="hljs-number">5</span>];
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'jt'</span>:<span class="hljs-keyword">this</span>.jt});
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>[CT] Chordal Tolerance</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">6</span>] !== <span class="hljs-literal">undefined</span>) {
+		<span class="hljs-keyword">this</span>.chordalTol = args[<span class="hljs-number">6</span>];
+		<span class="hljs-keyword">this</span>.machine.driver.command({<span class="hljs-string">'ct'</span>:<span class="hljs-keyword">this</span>.chordalTol});
+	}
+    vs_change = <span class="hljs-number">1</span>;
+    callback();
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>exports.VS = function(args,callback) {</p></div></div><div class="code"><div class="wrapper">exports.VS = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">args</span>) </span>{
+	<span class="hljs-keyword">var</span> speed_change = <span class="hljs-number">0.0</span>;
+
+	<span class="hljs-comment">//Set XY move speed</span>
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">0</span>] !== <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">this</span>.movespeed_xy = args[<span class="hljs-number">0</span>]; }
+	<span class="hljs-comment">//Set Z move speed</span>
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">1</span>] !== <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">this</span>.movespeed_z = args[<span class="hljs-number">1</span>]; }
+	<span class="hljs-comment">//Set A move speed</span>
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">2</span>] !== <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">this</span>.movespeed_a = args[<span class="hljs-number">2</span>]; }
+	<span class="hljs-comment">//Set B move speed</span>
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">3</span>] !== <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">this</span>.movespeed_b = args[<span class="hljs-number">3</span>]; }
+	<span class="hljs-comment">//Set C move speed</span>
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">4</span>] !== <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">this</span>.movespeed_c = args[<span class="hljs-number">4</span>]; }
+	<span class="hljs-comment">//Set XY jog speed</span>
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">5</span>] !== <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">this</span>.jogspeed_xy = args[<span class="hljs-number">5</span>]; }
+	<span class="hljs-comment">//Set Z jog speed</span>
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">6</span>] !== <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">this</span>.jogspeed_z = args[<span class="hljs-number">6</span>]; }
+	<span class="hljs-comment">//Set A jog speed</span>
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">7</span>] !== <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">this</span>.jogspeed_a = args[<span class="hljs-number">7</span>]; }
+	<span class="hljs-comment">//Set B jog speed</span>
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">8</span>] !== <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">this</span>.jogspeed_b = args[<span class="hljs-number">8</span>]; }
+	<span class="hljs-comment">//Set C jog speed</span>
+	<span class="hljs-keyword">if</span> (args[<span class="hljs-number">9</span>] !== <span class="hljs-literal">undefined</span>) { <span class="hljs-keyword">this</span>.jogspeed_c = args[<span class="hljs-number">9</span>]; }
+
+    <span class="hljs-keyword">this</span>.vs_change = <span class="hljs-number">1</span>;
+
+};
+
+<span class="hljs-comment">//exports.VU = function(args,callback) {</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>var G2_2get = [    &#39;1sa&#39;,&#39;1mi&#39;,
+                &#39;2sa&#39;,&#39;2mi&#39;,
+                &#39;3sa&#39;,&#39;3mi&#39;,
+                &#39;4sa&#39;,&#39;4mi&#39;,
+                &#39;5sa&#39;,&#39;5mi&#39;,
+                &#39;6sa&#39;,&#39;6mi&#39; ];</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>var SBP_2get = [&#39;gearBoxRatio1&#39;,
+                &#39;gearBoxRatio2&#39;,
+                &#39;gearBoxRatio3&#39;,
+                &#39;gearBoxRatio4&#39;,
+                &#39;gearBoxRatio5&#39;,
+                &#39;gearBoxRatio6&#39; ];</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>var SBunitVal = 0.0;
+var g2_VU = {};
+var sbp_VU = {};
+var getG2_VU = config.driver.getMany(G2_2get);
+var getSBP_VU = config.opensbp.getMany(SBP_2get);</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>log.debug(&quot;getG2_VU: &quot; + JSON.stringify(getG2_VU));
+log.debug(&quot;getSBP_VU: &quot; + JSON.stringify(getSBP_VU));</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Channel 1 unit value
+if (args[0] !== undefined){
+    sbp_VU.units1 = args[0];
+    g2_VU[&#39;1tr&#39;] = ((360/getG2_VU[&#39;1sa&#39;]) * getG2_VU[&#39;1mi&#39;]) / sbp_VU.units1;</p></div></div><div class="code"><div class="wrapper"><span class="hljs-comment">//	</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>// Channel 2 unit value
+if (args[1] !== undefined){
+    sbp_VU.units2 = args[1];
+    g2_VU[&#39;2tr&#39;] = ((360/getG2_VU[&#39;2sa&#39;]) * getG2_VU[&#39;2mi&#39;]) / sbp_VU.units2;</p></div></div><div class="code"><div class="wrapper"><span class="hljs-comment">//	</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Channel 3 unit value
+if (args[2] !== undefined){
+    sbp_VU.units3 = args[2];
+    g2_VU[&#39;3tr&#39;] = ((360/getG2_VU[&#39;3sa&#39;]) * getG2_VU[&#39;3mi&#39;]) / sbp_VU.units3;</p></div></div><div class="code"><div class="wrapper"><span class="hljs-comment">//	</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Channel 4 unit value
+if (args[3] !== undefined){
+    sbp_VU.units4 = args[3];
+    g2_VU[&#39;4tr&#39;] = ((360/getG2_VU[&#39;4sa&#39;]) * getG2_VU[&#39;4mi&#39;]) / sbp_VU.units4;</p></div></div><div class="code"><div class="wrapper"><span class="hljs-comment">//	</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Channel 5 unit value
+if (args[4] !== undefined){
+    sbp_VU.units5 = args[4];
+    g2_VU[&#39;5tr&#39;] = ((360/getG2_VU[&#39;5sa&#39;]) * getG2_VU[&#39;5mi&#39;]) / sbp_VU.units5;</p></div></div><div class="code"><div class="wrapper"><span class="hljs-comment">//	</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Channel 6 unit value
+if (args[5] !== undefined){
+    sbp_VU.units6 = args[5];
+    g2_VU[&#39;6tr&#39;] = ((360/getG2_VU[&#39;6sa&#39;]) * getG2_VU[&#39;6mi&#39;]) / sbp_VU.units6;</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-comment">// </span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>// Channel 1 multiplier
+if (args[6] !== undefined){}
+// Channel 2 multiplier
+if (args[7] !== undefined){}
+// Channel 3 multiplier
+if (args[8] !== undefined){}
+// Channel 4 multiplier
+if (args[9] !== undefined){}
+// Channel 5 multiplier
+if (args[10] !== undefined){}
+// Channel 6 multiplier
+if (args[11] !== undefined){}</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>log.debug(JSON.stringify(sbp_VU));
+log.debug(JSON.stringify(g2_VU));</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>We set the g2 config (Which updates the g2 hardware but also our persisted copy of its settings)
+    config.opensbp.setMany(sbp_VU, function(err, values) {
+        config.driver.setMany(g2_VU, function(err, values) {
+            callback();
+        });
+    });</p></div></div><div class="code"><div class="wrapper"><span class="hljs-comment">// ;</span></div></div></div></div></body></html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/attributes/classes</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/attributes/classes"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/attributes/classes.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/attributes/classes.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"../core"</span>,
+	<span class="hljs-string">"../var/rnotwhite"</span>,
+	<span class="hljs-string">"../var/strundefined"</span>,
+	<span class="hljs-string">"../data/var/data_priv"</span>,
+	<span class="hljs-string">"../core/init"</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery, rnotwhite, strundefined, data_priv </span>) </span>{
+
+<span class="hljs-keyword">var</span> rclass = <span class="hljs-regexp">/[\t\r\n\f]/g</span>;
+
+jQuery.fn.extend({
+	addClass: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> value </span>) </span>{
+		<span class="hljs-keyword">var</span> classes, elem, cur, clazz, j, finalValue,
+			proceed = <span class="hljs-keyword">typeof</span> value === <span class="hljs-string">"string"</span> &amp;&amp; value,
+			i = <span class="hljs-number">0</span>,
+			len = <span class="hljs-keyword">this</span>.length;
+
+		<span class="hljs-keyword">if</span> ( jQuery.isFunction( value ) ) {
+			<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.each(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> j </span>) </span>{
+				jQuery( <span class="hljs-keyword">this</span> ).addClass( value.call( <span class="hljs-keyword">this</span>, j, <span class="hljs-keyword">this</span>.className ) );
+			});
+		}
+
+		<span class="hljs-keyword">if</span> ( proceed ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The disjunction here is for better compressibility (see removeClass)</p></div></div><div class="code"><div class="wrapper">			classes = ( value || <span class="hljs-string">""</span> ).match( rnotwhite ) || [];
+
+			<span class="hljs-keyword">for</span> ( ; i &lt; len; i++ ) {
+				elem = <span class="hljs-keyword">this</span>[ i ];
+				cur = elem.nodeType === <span class="hljs-number">1</span> &amp;&amp; ( elem.className ?
+					( <span class="hljs-string">" "</span> + elem.className + <span class="hljs-string">" "</span> ).replace( rclass, <span class="hljs-string">" "</span> ) :
+					<span class="hljs-string">" "</span>
+				);
+
+				<span class="hljs-keyword">if</span> ( cur ) {
+					j = <span class="hljs-number">0</span>;
+					<span class="hljs-keyword">while</span> ( (clazz = classes[j++]) ) {
+						<span class="hljs-keyword">if</span> ( cur.indexOf( <span class="hljs-string">" "</span> + clazz + <span class="hljs-string">" "</span> ) &lt; <span class="hljs-number">0</span> ) {
+							cur += clazz + <span class="hljs-string">" "</span>;
+						}
+					}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>only assign if different to avoid unneeded rendering.</p></div></div><div class="code"><div class="wrapper">					finalValue = jQuery.trim( cur );
+					<span class="hljs-keyword">if</span> ( elem.className !== finalValue ) {
+						elem.className = finalValue;
+					}
+				}
+			}
+		}
+
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+	},
+
+	removeClass: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> value </span>) </span>{
+		<span class="hljs-keyword">var</span> classes, elem, cur, clazz, j, finalValue,
+			proceed = <span class="hljs-built_in">arguments</span>.length === <span class="hljs-number">0</span> || <span class="hljs-keyword">typeof</span> value === <span class="hljs-string">"string"</span> &amp;&amp; value,
+			i = <span class="hljs-number">0</span>,
+			len = <span class="hljs-keyword">this</span>.length;
+
+		<span class="hljs-keyword">if</span> ( jQuery.isFunction( value ) ) {
+			<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.each(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> j </span>) </span>{
+				jQuery( <span class="hljs-keyword">this</span> ).removeClass( value.call( <span class="hljs-keyword">this</span>, j, <span class="hljs-keyword">this</span>.className ) );
+			});
+		}
+		<span class="hljs-keyword">if</span> ( proceed ) {
+			classes = ( value || <span class="hljs-string">""</span> ).match( rnotwhite ) || [];
+
+			<span class="hljs-keyword">for</span> ( ; i &lt; len; i++ ) {
+				elem = <span class="hljs-keyword">this</span>[ i ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This expression is here for better compressibility (see addClass)</p></div></div><div class="code"><div class="wrapper">				cur = elem.nodeType === <span class="hljs-number">1</span> &amp;&amp; ( elem.className ?
+					( <span class="hljs-string">" "</span> + elem.className + <span class="hljs-string">" "</span> ).replace( rclass, <span class="hljs-string">" "</span> ) :
+					<span class="hljs-string">""</span>
+				);
+
+				<span class="hljs-keyword">if</span> ( cur ) {
+					j = <span class="hljs-number">0</span>;
+					<span class="hljs-keyword">while</span> ( (clazz = classes[j++]) ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Remove <em>all</em> instances</p></div></div><div class="code"><div class="wrapper">						<span class="hljs-keyword">while</span> ( cur.indexOf( <span class="hljs-string">" "</span> + clazz + <span class="hljs-string">" "</span> ) &gt;= <span class="hljs-number">0</span> ) {
+							cur = cur.replace( <span class="hljs-string">" "</span> + clazz + <span class="hljs-string">" "</span>, <span class="hljs-string">" "</span> );
+						}
+					}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Only assign if different to avoid unneeded rendering.</p></div></div><div class="code"><div class="wrapper">					finalValue = value ? jQuery.trim( cur ) : <span class="hljs-string">""</span>;
+					<span class="hljs-keyword">if</span> ( elem.className !== finalValue ) {
+						elem.className = finalValue;
+					}
+				}
+			}
+		}
+
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+	},
+
+	toggleClass: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> value, stateVal </span>) </span>{
+		<span class="hljs-keyword">var</span> type = <span class="hljs-keyword">typeof</span> value;
+
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">typeof</span> stateVal === <span class="hljs-string">"boolean"</span> &amp;&amp; type === <span class="hljs-string">"string"</span> ) {
+			<span class="hljs-keyword">return</span> stateVal ? <span class="hljs-keyword">this</span>.addClass( value ) : <span class="hljs-keyword">this</span>.removeClass( value );
+		}
+
+		<span class="hljs-keyword">if</span> ( jQuery.isFunction( value ) ) {
+			<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.each(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> i </span>) </span>{
+				jQuery( <span class="hljs-keyword">this</span> ).toggleClass( value.call(<span class="hljs-keyword">this</span>, i, <span class="hljs-keyword">this</span>.className, stateVal), stateVal );
+			});
+		}
+
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.each(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">if</span> ( type === <span class="hljs-string">"string"</span> ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Toggle individual class names</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">var</span> className,
+					i = <span class="hljs-number">0</span>,
+					self = jQuery( <span class="hljs-keyword">this</span> ),
+					classNames = value.match( rnotwhite ) || [];
+
+				<span class="hljs-keyword">while</span> ( (className = classNames[ i++ ]) ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check each className given, space separated list</p></div></div><div class="code"><div class="wrapper">					<span class="hljs-keyword">if</span> ( self.hasClass( className ) ) {
+						self.removeClass( className );
+					} <span class="hljs-keyword">else</span> {
+						self.addClass( className );
+					}
+				}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Toggle whole class name</p></div></div><div class="code"><div class="wrapper">			} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( type === strundefined || type === <span class="hljs-string">"boolean"</span> ) {
+				<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.className ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>store className if set</p></div></div><div class="code"><div class="wrapper">					data_priv.set( <span class="hljs-keyword">this</span>, <span class="hljs-string">"__className__"</span>, <span class="hljs-keyword">this</span>.className );
+				}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If the element has a class name or if we&#39;re passed <code>false</code>,
+then remove the whole classname (if there was one, the above saved it).
+Otherwise bring back whatever was previously saved (if anything),
+falling back to the empty string if nothing was stored.</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">this</span>.className = <span class="hljs-keyword">this</span>.className || value === <span class="hljs-literal">false</span> ? <span class="hljs-string">""</span> : data_priv.get( <span class="hljs-keyword">this</span>, <span class="hljs-string">"__className__"</span> ) || <span class="hljs-string">""</span>;
+			}
+		});
+	},
+
+	hasClass: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> selector </span>) </span>{
+		<span class="hljs-keyword">var</span> className = <span class="hljs-string">" "</span> + selector + <span class="hljs-string">" "</span>,
+			i = <span class="hljs-number">0</span>,
+			l = <span class="hljs-keyword">this</span>.length;
+		<span class="hljs-keyword">for</span> ( ; i &lt; l; i++ ) {
+			<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>[i].nodeType === <span class="hljs-number">1</span> &amp;&amp; (<span class="hljs-string">" "</span> + <span class="hljs-keyword">this</span>[i].className + <span class="hljs-string">" "</span>).replace(rclass, <span class="hljs-string">" "</span>).indexOf( className ) &gt;= <span class="hljs-number">0</span> ) {
+				<span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+			}
+		}
+
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+	}
+});
+
+});</div></div></div></div></body></html>

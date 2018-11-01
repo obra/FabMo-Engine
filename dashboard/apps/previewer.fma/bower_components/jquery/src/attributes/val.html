@@ -1,0 +1,126 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/attributes/val</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/attributes/val"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/attributes/val.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/attributes/val.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"../core"</span>,
+	<span class="hljs-string">"./support"</span>,
+	<span class="hljs-string">"../core/init"</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery, support </span>) </span>{
+
+<span class="hljs-keyword">var</span> rreturn = <span class="hljs-regexp">/\r/g</span>;
+
+jQuery.fn.extend({
+	val: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> value </span>) </span>{
+		<span class="hljs-keyword">var</span> hooks, ret, isFunction,
+			elem = <span class="hljs-keyword">this</span>[<span class="hljs-number">0</span>];
+
+		<span class="hljs-keyword">if</span> ( !<span class="hljs-built_in">arguments</span>.length ) {
+			<span class="hljs-keyword">if</span> ( elem ) {
+				hooks = jQuery.valHooks[ elem.type ] || jQuery.valHooks[ elem.nodeName.toLowerCase() ];
+
+				<span class="hljs-keyword">if</span> ( hooks &amp;&amp; <span class="hljs-string">"get"</span> <span class="hljs-keyword">in</span> hooks &amp;&amp; (ret = hooks.get( elem, <span class="hljs-string">"value"</span> )) !== <span class="hljs-literal">undefined</span> ) {
+					<span class="hljs-keyword">return</span> ret;
+				}
+
+				ret = elem.value;
+
+				<span class="hljs-keyword">return</span> <span class="hljs-keyword">typeof</span> ret === <span class="hljs-string">"string"</span> ?</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle most common string cases</p></div></div><div class="code"><div class="wrapper">					ret.replace(rreturn, <span class="hljs-string">""</span>) :</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle cases where value is null/undef or number</p></div></div><div class="code"><div class="wrapper">					ret == <span class="hljs-literal">null</span> ? <span class="hljs-string">""</span> : ret;
+			}
+
+			<span class="hljs-keyword">return</span>;
+		}
+
+		isFunction = jQuery.isFunction( value );
+
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.each(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> i </span>) </span>{
+			<span class="hljs-keyword">var</span> val;
+
+			<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">this</span>.nodeType !== <span class="hljs-number">1</span> ) {
+				<span class="hljs-keyword">return</span>;
+			}
+
+			<span class="hljs-keyword">if</span> ( isFunction ) {
+				val = value.call( <span class="hljs-keyword">this</span>, i, jQuery( <span class="hljs-keyword">this</span> ).val() );
+			} <span class="hljs-keyword">else</span> {
+				val = value;
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Treat null/undefined as &quot;&quot;; convert numbers to string</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( val == <span class="hljs-literal">null</span> ) {
+				val = <span class="hljs-string">""</span>;
+
+			} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( <span class="hljs-keyword">typeof</span> val === <span class="hljs-string">"number"</span> ) {
+				val += <span class="hljs-string">""</span>;
+
+			} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( jQuery.isArray( val ) ) {
+				val = jQuery.map( val, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> value </span>) </span>{
+					<span class="hljs-keyword">return</span> value == <span class="hljs-literal">null</span> ? <span class="hljs-string">""</span> : value + <span class="hljs-string">""</span>;
+				});
+			}
+
+			hooks = jQuery.valHooks[ <span class="hljs-keyword">this</span>.type ] || jQuery.valHooks[ <span class="hljs-keyword">this</span>.nodeName.toLowerCase() ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If set returns undefined, fall back to normal setting</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( !hooks || !(<span class="hljs-string">"set"</span> <span class="hljs-keyword">in</span> hooks) || hooks.set( <span class="hljs-keyword">this</span>, val, <span class="hljs-string">"value"</span> ) === <span class="hljs-literal">undefined</span> ) {
+				<span class="hljs-keyword">this</span>.value = val;
+			}
+		});
+	}
+});
+
+jQuery.extend({
+	valHooks: {
+		option: {
+			get: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem </span>) </span>{
+				<span class="hljs-keyword">var</span> val = jQuery.find.attr( elem, <span class="hljs-string">"value"</span> );
+				<span class="hljs-keyword">return</span> val != <span class="hljs-literal">null</span> ?
+					val :</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: IE10-11+
+option.text throws exceptions (#14686, #14858)</p></div></div><div class="code"><div class="wrapper">					jQuery.trim( jQuery.text( elem ) );
+			}
+		},
+		select: {
+			get: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem </span>) </span>{
+				<span class="hljs-keyword">var</span> value, option,
+					options = elem.options,
+					index = elem.selectedIndex,
+					one = elem.type === <span class="hljs-string">"select-one"</span> || index &lt; <span class="hljs-number">0</span>,
+					values = one ? <span class="hljs-literal">null</span> : [],
+					max = one ? index + <span class="hljs-number">1</span> : options.length,
+					i = index &lt; <span class="hljs-number">0</span> ?
+						max :
+						one ? index : <span class="hljs-number">0</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Loop through all the selected options</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">for</span> ( ; i &lt; max; i++ ) {
+					option = options[ i ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>IE6-9 doesn&#39;t update selected after form reset (#2551)</p></div></div><div class="code"><div class="wrapper">					<span class="hljs-keyword">if</span> ( ( option.selected || i === index ) &amp;&amp;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Don&#39;t return options that are disabled or in a disabled optgroup</p></div></div><div class="code"><div class="wrapper">							( support.optDisabled ? !option.disabled : option.getAttribute( <span class="hljs-string">"disabled"</span> ) === <span class="hljs-literal">null</span> ) &amp;&amp;
+							( !option.parentNode.disabled || !jQuery.nodeName( option.parentNode, <span class="hljs-string">"optgroup"</span> ) ) ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get the specific value for the option</p></div></div><div class="code"><div class="wrapper">						value = jQuery( option ).val();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>We don&#39;t need an array for one selects</p></div></div><div class="code"><div class="wrapper">						<span class="hljs-keyword">if</span> ( one ) {
+							<span class="hljs-keyword">return</span> value;
+						}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Multi-Selects return an array</p></div></div><div class="code"><div class="wrapper">						values.push( value );
+					}
+				}
+
+				<span class="hljs-keyword">return</span> values;
+			},
+
+			set: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem, value </span>) </span>{
+				<span class="hljs-keyword">var</span> optionSet, option,
+					options = elem.options,
+					values = jQuery.makeArray( value ),
+					i = options.length;
+
+				<span class="hljs-keyword">while</span> ( i-- ) {
+					option = options[ i ];
+					<span class="hljs-keyword">if</span> ( (option.selected = jQuery.inArray( option.value, values ) &gt;= <span class="hljs-number">0</span>) ) {
+						optionSet = <span class="hljs-literal">true</span>;
+					}
+				}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Force browsers to behave consistently when non-matching value is set</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( !optionSet ) {
+					elem.selectedIndex = -<span class="hljs-number">1</span>;
+				}
+				<span class="hljs-keyword">return</span> values;
+			}
+		}
+	}
+});</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Radios and checkboxes getter/setter</p></div></div><div class="code"><div class="wrapper">jQuery.each([ <span class="hljs-string">"radio"</span>, <span class="hljs-string">"checkbox"</span> ], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	jQuery.valHooks[ <span class="hljs-keyword">this</span> ] = {
+		set: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem, value </span>) </span>{
+			<span class="hljs-keyword">if</span> ( jQuery.isArray( value ) ) {
+				<span class="hljs-keyword">return</span> ( elem.checked = jQuery.inArray( jQuery(elem).val(), value ) &gt;= <span class="hljs-number">0</span> );
+			}
+		}
+	};
+	<span class="hljs-keyword">if</span> ( !support.checkOn ) {
+		jQuery.valHooks[ <span class="hljs-keyword">this</span> ].get = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> elem </span>) </span>{
+			<span class="hljs-keyword">return</span> elem.getAttribute(<span class="hljs-string">"value"</span>) === <span class="hljs-literal">null</span> ? <span class="hljs-string">"on"</span> : elem.value;
+		};
+	}
+});
+
+});</div></div></div></div></body></html>

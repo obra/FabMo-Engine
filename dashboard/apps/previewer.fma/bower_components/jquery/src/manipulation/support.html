@@ -1,0 +1,23 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/manipulation/support</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/manipulation/support"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/manipulation/support.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/manipulation/support.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"../var/support"</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> support </span>) </span>{
+
+(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">var</span> fragment = <span class="hljs-built_in">document</span>.createDocumentFragment(),
+		div = fragment.appendChild( <span class="hljs-built_in">document</span>.createElement( <span class="hljs-string">"div"</span> ) ),
+		input = <span class="hljs-built_in">document</span>.createElement( <span class="hljs-string">"input"</span> );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: Safari&lt;=5.1
+Check state lost if the name is set (#11217)
+Support: Windows Web Apps (WWA)
+<code>name</code> and <code>type</code> must use .setAttribute for WWA (#14901)</p></div></div><div class="code"><div class="wrapper">	input.setAttribute( <span class="hljs-string">"type"</span>, <span class="hljs-string">"radio"</span> );
+	input.setAttribute( <span class="hljs-string">"checked"</span>, <span class="hljs-string">"checked"</span> );
+	input.setAttribute( <span class="hljs-string">"name"</span>, <span class="hljs-string">"t"</span> );
+
+	div.appendChild( input );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: Safari&lt;=5.1, Android&lt;4.2
+Older WebKit doesn&#39;t clone checked state correctly in fragments</p></div></div><div class="code"><div class="wrapper">	support.checkClone = div.cloneNode( <span class="hljs-literal">true</span> ).cloneNode( <span class="hljs-literal">true</span> ).lastChild.checked;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: IE&lt;=11+
+Make sure textarea (and checkbox) defaultValue is properly cloned</p></div></div><div class="code"><div class="wrapper">	div.innerHTML = <span class="hljs-string">"&lt;textarea&gt;x&lt;/textarea&gt;"</span>;
+	support.noCloneChecked = !!div.cloneNode( <span class="hljs-literal">true</span> ).lastChild.defaultValue;
+})();
+
+<span class="hljs-keyword">return</span> support;
+
+});</div></div></div></div></body></html>

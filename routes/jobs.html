@@ -1,0 +1,345 @@
+<!DOCTYPE html><html lang="en"><head><title>routes/jobs</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../"><meta name="groc-document-path" content="routes/jobs"><meta name="groc-project-path" content="routes/jobs.js"><link rel="stylesheet" type="text/css" media="all" href="../assets/style.css"><script type="text/javascript" src="../assets/behavior.js"></script><body><div id="meta"><div class="file-path">routes/jobs.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> db = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../db'</span>);
+<span class="hljs-keyword">var</span> path = <span class="hljs-built_in">require</span>(<span class="hljs-string">'path'</span>);
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../config'</span>);
+<span class="hljs-keyword">var</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../util'</span>);
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../log'</span>).logger(<span class="hljs-string">'routes'</span>);
+<span class="hljs-keyword">var</span> machine = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../machine'</span>).machine;
+<span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs'</span>);
+<span class="hljs-keyword">var</span> uuid = <span class="hljs-built_in">require</span>(<span class="hljs-string">'node-uuid'</span>);
+<span class="hljs-keyword">var</span> upload = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./util'</span>).upload;
+
+<span class="hljs-keyword">var</span> submitJob = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, next</span>) </span>{
+    upload(req, res, next, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, upload</span>) </span>{
+        uploads = upload.files</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Single file only, for now</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">if</span>(uploads.length &gt; <span class="hljs-number">1</span>) {
+            log.warn(<span class="hljs-string">"Got an upload of "</span> + uploads.length + <span class="hljs-string">' files for a submitted job when only one is allowed.'</span>)
+        }
+
+        <span class="hljs-keyword">async</span>.eachOf(
+            uploads,
+            <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">create_job</span>(<span class="hljs-params">item, index, callback</span>) </span>{
+                <span class="hljs-keyword">var</span> file = item.file;
+                <span class="hljs-keyword">var</span> filename = item.filename || (!file.name || file.name === <span class="hljs-string">'blob'</span>) ? item.filename : file.name;
+                item.filename = filename;
+                item.name = item.name || filename;
+                item.index = index;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Reject disallowed files</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">if</span>(!util.allowed_file(filename)) {
+                    <span class="hljs-keyword">return</span> callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"File "</span> + filename + <span class="hljs-string">" is not allowed."</span>));
+                }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create a job and respond</p></div></div><div class="code"><div class="wrapper">                db.createJob(file, item, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, job</span>) </span>{
+                    callback(err, job);
+                });
+            }, <span class="hljs-comment">// create_job</span>
+            <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">on_complete</span>(<span class="hljs-params">err, jobs</span>) </span>{
+                log.info(<span class="hljs-string">"Just completed upload of "</span> + uploads.length + <span class="hljs-string">" jobs."</span>);
+                    <span class="hljs-keyword">if</span>(err) {
+                        log.error(err.message);
+                        <span class="hljs-keyword">return</span> res.json({
+                            status:<span class="hljs-string">"error"</span>,
+                            message:err.message
+                        });
+                    }
+                    <span class="hljs-keyword">return</span> res.json({
+                        status:<span class="hljs-string">"success"</span>,
+                        data : {
+                            status : <span class="hljs-string">'complete'</span>,
+                            data : {<span class="hljs-string">'jobs'</span>:jobs}
+                        }
+                    });
+            }); <span class="hljs-comment">// on_complete</span>
+        }); <span class="hljs-comment">// async.map</span>
+} <span class="hljs-comment">// submitJob</span></div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> api {delete} /jobs/queue Clear job queue, apiGroup Jobs, apiDescription Empty the job queue of all pending jobs., apiSuccess {String} status <code>success</code>, apiSuccess {Object} data null, apiError {String} status <code>error</code>, and apiError {Object} message Error message</span></p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> clearQueue = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, next</span>) </span>{
+    <span class="hljs-keyword">var</span> answer;
+    db.Job.deletePending(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+        <span class="hljs-keyword">if</span>(err) {
+            answer = {
+                status:<span class="hljs-string">"error"</span>,
+                message:err
+            };
+            res.json(answer);
+        } <span class="hljs-keyword">else</span> {
+            answer = {
+                status:<span class="hljs-string">"success"</span>,
+                data : <span class="hljs-literal">null</span>
+            };
+            res.json(answer);
+        }
+    });
+};</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> apiGroup Jobs, api {post} /jobs/queue/run Run next job in queue, apiDescription Runs the next job in the queue if able., apiSuccess {String} status <code>success</code>, apiSuccess {Object} data null, apiError {String} status <code>error</code>, and apiError {Object} message Error message</span></p></div></div><div class="code"><div class="wrapper">runNextJob = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, next</span>) </span>{
+    <span class="hljs-keyword">var</span> answer;
+    log.info(<span class="hljs-string">'Running the next job in the queue'</span>);
+    machine.runNextJob(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, job</span>) </span>{
+        <span class="hljs-keyword">if</span>(err) {
+            log.error(err);
+            answer = {
+                status:<span class="hljs-string">"failed"</span>,
+                data:{job:err}
+            };
+            res.json(answer);
+        } <span class="hljs-keyword">else</span> {
+            answer = {
+                status:<span class="hljs-string">"success"</span>,
+                data : {job:job}
+            };
+            res.json(answer);
+        }
+    });
+};</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> apiGroup Jobs, api {post} /jobs/:id Resubmit job, apiDescription Submit a new job identical to the one specified.  Used to re-run completed jobs without modification., apiParam {String} id ID of job to resubmit, apiSuccess {String} status <code>success</code>, apiSuccess {Object} data null, apiError {String} status <code>error</code>, and apiError {Object} message Error message</span></p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> resubmitJob = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, next</span>) </span>{
+    <span class="hljs-keyword">var</span> answer;
+    log.debug(<span class="hljs-string">"Resubmitting job "</span> + req.params.id);
+    db.Job.getById(req.params.id, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+        <span class="hljs-keyword">if</span>(err) {
+            log.error(<span class="hljs-built_in">JSON</span>.stringify(err));
+            answer = {
+                status:<span class="hljs-string">"error"</span>,
+                message:err
+            };
+            <span class="hljs-keyword">return</span> res.json(answer);
+        }
+        result.clone(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+            log.debug(<span class="hljs-string">"Cloned!"</span>);
+            <span class="hljs-keyword">if</span>(err) {
+                log.error(err);
+                answer = {
+                    status:<span class="hljs-string">"failed"</span>,
+                    data:{job:err}
+                };
+                res.json(answer);
+            } <span class="hljs-keyword">else</span> {
+                answer = {
+                    status:<span class="hljs-string">"success"</span>,
+                    data : {job:result}
+                };
+                res.json(answer);
+            }
+        });
+    });
+};</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> apiGroup Jobs, api {get} /jobs/queue Job queue, apiDescription Get a list of all the pending jobs currently in the queue., apiSuccess {String} status <code>success</code>, apiSuccess {Object} data Response data, apiSuccess {Object[]} data.jobs List of all jobs, apiSuccess {Number} data.jobs._id Unique job ID, apiSuccess {String} data.jobs.state <code>pending</code> | <code>running</code> | <code>finished</code> | <code>cancelled</code>, apiSuccess {String} data.jobs.name Human readable job name, apiSuccess {String} data.jobs.description Job description, apiSuccess {Number} data.jobs.created_at Time job was added to the queue (UNIX timestamp), apiSuccess {Number} data.jobs.started_at Time job was started (UNIX timestamp), apiSuccess {Number} data.jobs.finished_at Time job was finished (UNIX timestamp), apiError {String} status <code>error</code>, and apiError {Object} message Error message</span></p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> getQueue = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, next</span>) </span>{
+    db.Job.getPending(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, pending</span>) </span>{
+        <span class="hljs-keyword">if</span>(err) {
+            log.error(err);
+            <span class="hljs-keyword">return</span> res.json({
+                status:<span class="hljs-string">"error"</span>,
+                message:<span class="hljs-string">"failed to get pending jobs from DB"</span>
+            });
+        }
+
+        db.Job.getRunning(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, running</span>) </span>{
+            <span class="hljs-keyword">if</span>(err) {
+                log.error(err);
+                <span class="hljs-keyword">return</span> res.json({
+                    status:<span class="hljs-string">"error"</span>,
+                    message:<span class="hljs-string">"failed to get running jobs from DB"</span>
+                });
+            }
+
+            <span class="hljs-keyword">return</span> res.json({
+                status:<span class="hljs-string">"success"</span>,
+                data : {
+                    jobs:{
+                        pending : pending,
+                        running : running
+                    }
+                }
+            });
+        });
+    });
+};</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> apiGroup Jobs, api {get} /jobs List all jobs, apiDescription Get a list of all jobs, including those that are pending, currently running, and finished., apiSuccess {String} status <code>success</code>, apiSuccess {Object} data Response data, apiSuccess {Object[]} data.jobs List of all jobs, apiSuccess {Number} data.jobs._id Unique job ID, apiSuccess {String} data.jobs.state <code>pending</code> | <code>running</code> | <code>finished</code> | <code>cancelled</code>, apiSuccess {String} data.jobs.name Human readable job name, apiSuccess {String} data.jobs.description Job description, apiSuccess {Number} data.jobs.created_at Time job was added to the queue (UNIX timestamp), apiSuccess {Number} data.jobs.started_at Time job was started (UNIX timestamp), apiSuccess {Number} data.jobs.finished_at Time job was finished (UNIX timestamp), apiError {String} status <code>error</code>, and apiError {Object} message Error message</span></p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> getAllJobs = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, next</span>) </span>{
+    <span class="hljs-keyword">var</span> answer;
+    db.Job.getAll(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+        <span class="hljs-keyword">if</span>(err) {
+            log.error(err);
+            answer = {
+                status:<span class="hljs-string">"error"</span>,
+                message:<span class="hljs-string">"failed to get jobs from DB"</span>
+            };
+            res.json(answer);
+        } <span class="hljs-keyword">else</span> {
+            answer = {
+                status:<span class="hljs-string">"success"</span>,
+                data : {jobs:result}
+            };
+            res.json(answer);
+        }
+    });
+};</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> apiGroup Jobs, api {get} /jobs/history List jobs in the history, apiDescription Get a list of all jobs in the history. (This does not include the currently running job, or any jobs in the queue), apiSuccess {String} status <code>success</code>, apiSuccess {Object} data Response data, apiSuccess {Object[]} data.jobs List of all jobs, apiSuccess {Number} data.jobs._id Unique job ID, apiSuccess {String} data.jobs.state <code>pending</code> | <code>running</code> | <code>finished</code> | <code>cancelled</code>, apiSuccess {String} data.jobs.name Human readable job name, apiSuccess {String} data.jobs.description Job description, apiSuccess {Number} data.jobs.created_at Time job was added to the queue (UNIX timestamp), apiSuccess {Number} data.jobs.started_at Time job was started (UNIX timestamp), apiSuccess {Number} data.jobs.finished_at Time job was finished (UNIX timestamp), apiError {String} status <code>error</code>, and apiError {Object} message Error message</span></p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> getJobHistory = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, next</span>) </span>{
+    <span class="hljs-keyword">var</span> answer;
+    <span class="hljs-keyword">var</span> options = {
+        start : req.params.start || <span class="hljs-number">0</span>,
+        count : req.params.count || <span class="hljs-number">0</span>
+    }
+
+    db.Job.getHistory(options, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+        <span class="hljs-keyword">if</span>(err) {
+            log.error(err);
+            answer = {
+                status:<span class="hljs-string">"error"</span>,
+                message:<span class="hljs-string">"failed to get jobs from DB"</span>
+            };
+            res.json(answer);
+        } <span class="hljs-keyword">else</span> {
+            answer = {
+                status:<span class="hljs-string">"success"</span>,
+                data : {jobs:result}
+            };
+            res.json(answer);
+        }
+    });
+};</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> apiGroup Jobs, api {get} /jobs/:id Job info, apiDescription Get detailed information about a specific job., apiParam {String} id ID of requested job, apiSuccess {Object} data Response data, apiSuccess {Object} data.job Requested job, apiSuccess {Number} data.job._id Unique job ID, apiSuccess {String} data.job.state <code>pending</code> | <code>running</code> | <code>finished</code> | <code>cancelled</code>, apiSuccess {String} data.job.name Human readable job name, apiSuccess {String} data.job.description Job description, apiSuccess {Number} data.job.created_at Time job was added to the queue (UNIX timestamp), apiSuccess {Number} data.job.started_at Time job was started (UNIX timestamp), apiSuccess {Number} data.job.finished_at Time job was finished (UNIX timestamp), apiError {String} status <code>error</code>, and apiError {Object} message Error message</span></p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> getJobById = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, next</span>) </span>{
+    <span class="hljs-keyword">var</span> answer;
+    db.Job.getById(req.params.id, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, job</span>) </span>{
+        <span class="hljs-keyword">if</span>(err) {
+            answer = {
+                    status:<span class="hljs-string">"fail"</span>,
+                    data:{job:err}
+            };
+            <span class="hljs-keyword">return</span> res.json(answer);
+        }
+        db.File.getByID(job.file_id, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, file</span>) </span>{
+            <span class="hljs-keyword">if</span>(err) {
+                job.file = {};
+            } <span class="hljs-keyword">else</span> {
+                job.file = file;
+            }
+            answer = {
+                status:<span class="hljs-string">"success"</span>,
+                data : {job:job}
+            };
+            res.json(answer);
+        });
+    });
+};</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> apiGroup Jobs, api {delete} /jobs/:id Cancel job, apiDescription Cancel a pending job., apiParam {String} id ID of job to cancel, apiSuccess {String} status <code>success</code>, apiSuccess {Object} data null, apiError {String} status <code>error</code>, and apiError {Object} message Error message</span></p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> cancelJob = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, next</span>) </span>{
+    <span class="hljs-keyword">var</span> answer;
+    db.Job.getById(req.params.id, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+        <span class="hljs-keyword">if</span>(err) {
+            log.error(err);
+            answer = {
+                    status:<span class="hljs-string">"fail"</span>,
+                    data:{job:err}
+            };
+            res.json(answer);
+        } <span class="hljs-keyword">else</span> {
+            result.cancelOrTrash(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+                <span class="hljs-keyword">if</span>(err) {
+                    log.error(err);
+                    answer = {
+                            status:<span class="hljs-string">"fail"</span>,
+                            data:{job:err}
+                    };
+                    res.json(answer);
+                } <span class="hljs-keyword">else</span> {
+                    answer = {
+                        status:<span class="hljs-string">"success"</span>,
+                        data : {job:result}
+                    };
+                    res.json(answer);
+                }
+            });
+        }
+    });
+};
+
+<span class="hljs-keyword">var</span> updateOrder = <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">req, res, next</span>) </span>{
+    <span class="hljs-keyword">var</span> answer;
+    <span class="hljs-keyword">var</span> order = <span class="hljs-built_in">parseInt</span>(req.params.order);
+    <span class="hljs-keyword">var</span> id = <span class="hljs-built_in">parseInt</span>(req.params.id);
+    db.Job.getById(id, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err,result</span>) </span>{
+        <span class="hljs-keyword">if</span>(err) {
+            answer = {
+                    status:<span class="hljs-string">"fail"</span>,
+                    data:{job:err}
+            };
+            <span class="hljs-keyword">return</span> res.json(answer);
+        } <span class="hljs-keyword">else</span> {
+            result.update_order(order, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>)</span>{
+                 <span class="hljs-keyword">if</span>(err) {
+                    log.error(err);
+                    answer = {
+                            status:<span class="hljs-string">"fail"</span>,
+                            data:{job:err}
+                    };
+                    res.json(answer);
+                } <span class="hljs-keyword">else</span> {
+                    answer = {
+                        status:<span class="hljs-string">"success"</span>,
+                        data : {job:result}
+                    };
+                    res.json(answer);
+                }
+            });
+        }
+    });
+};
+
+<span class="hljs-keyword">var</span> getJobFile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, next</span>) </span>{
+    db.Job.getFileForJobId(req.params.id, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, file</span>) </span>{
+        <span class="hljs-keyword">if</span>(err) {
+            log.error(err);
+            <span class="hljs-keyword">var</span> answer = {
+                    status:<span class="hljs-string">"fail"</span>,
+                    data:{file:err}
+            };
+            res.json(answer);
+        } <span class="hljs-keyword">else</span> {
+            fs.readFile(file.path, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+                res.header(<span class="hljs-string">'Content-Type'</span>, <span class="hljs-string">'text/plain'</span>);
+                res.header(<span class="hljs-string">'Content-Disposition'</span>, <span class="hljs-string">'attachment; filename="'</span> + file.filename + <span class="hljs-string">'"'</span>);
+                res.status(<span class="hljs-number">200</span>);
+                res.write(data);
+                res.end();
+            });
+        }
+    });
+};
+
+
+
+<span class="hljs-keyword">var</span> getJobGCode = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, next</span>) </span>{
+    db.Job.getFileForJobId(req.params.id, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, file</span>) </span>{
+        <span class="hljs-keyword">if</span>(err) {
+            log.error(err);
+            <span class="hljs-keyword">var</span> answer = {
+                    status:<span class="hljs-string">"fail"</span>,
+                    data:{file:err}
+            };
+            res.json(answer);
+        } <span class="hljs-keyword">else</span> {
+            <span class="hljs-keyword">var</span> gcode_filename = <span class="hljs-string">'gcode.nc'</span>;
+            machine.getGCodeForFile(file.path, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, gcode</span>) </span>{
+              <span class="hljs-keyword">if</span>(err) {
+                <span class="hljs-keyword">return</span> res.send(<span class="hljs-number">403</span>, err.message)
+              }
+		      res.setHeader(<span class="hljs-string">'content-type'</span>, <span class="hljs-string">'applications/octet-stream'</span>);
+              res.setHeader(<span class="hljs-string">'content-disposition'</span>, <span class="hljs-string">'filename="'</span> + gcode_filename + <span class="hljs-string">'"'</span>);
+              res.send(gcode);
+            });
+        }
+    });
+};
+
+<span class="hljs-keyword">var</span> getThumbnailImage = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, next</span>) </span>{
+    db.Thumbnail.getFromJobId(req.params.id, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, thumbnail</span>) </span>{
+        <span class="hljs-keyword">if</span>(err) {
+            res.send(<span class="hljs-number">404</span>);
+        } <span class="hljs-keyword">else</span> {
+            res.setHeader(<span class="hljs-string">'content-type'</span>, <span class="hljs-string">'image/svg+xml'</span>);
+            res.write(thumbnail.image);
+            res.end();
+        }
+    });
+}
+
+<span class="hljs-built_in">module</span>.exports = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">server</span>) </span>{
+    server.post(<span class="hljs-string">'/job'</span>, submitJob);
+    server.get(<span class="hljs-string">'/jobs'</span>, getAllJobs);
+    server.get(<span class="hljs-string">'/job/:id'</span>, getJobById);
+    server.del(<span class="hljs-string">'/job/:id'</span>, cancelJob);
+    server.patch(<span class="hljs-string">'/job/:id'</span>, updateOrder);
+    server.post(<span class="hljs-string">'/job/:id'</span>, resubmitJob);
+    server.get(<span class="hljs-string">'/job/:id/file'</span>, getJobFile);
+    server.get(<span class="hljs-string">'/job/:id/gcode'</span>, getJobGCode);
+    <span class="hljs-comment">//server.get('/job/:id/thumbnail', getThumbnailImage);</span>
+
+    server.get(<span class="hljs-string">'/jobs/queue'</span>, getQueue);
+    server.del(<span class="hljs-string">'/jobs/queue'</span>, clearQueue);
+    server.post(<span class="hljs-string">'/jobs/queue/run'</span>, runNextJob);
+    server.get(<span class="hljs-string">'/jobs/history'</span>, getJobHistory);
+
+};</div></div></div></div></body></html>

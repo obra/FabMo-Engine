@@ -1,0 +1,97 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/ajax/xhr</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/ajax/xhr"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/ajax/xhr.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/ajax/xhr.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"../core"</span>,
+	<span class="hljs-string">"../var/support"</span>,
+	<span class="hljs-string">"../ajax"</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery, support </span>) </span>{
+
+jQuery.ajaxSettings.xhr = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">try</span> {
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> XMLHttpRequest();
+	} <span class="hljs-keyword">catch</span>( e ) {}
+};
+
+<span class="hljs-keyword">var</span> xhrId = <span class="hljs-number">0</span>,
+	xhrCallbacks = {},
+	xhrSuccessStatus = {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>file protocol always yields status code 0, assume 200</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-number">0</span>: <span class="hljs-number">200</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: IE9</p>
+<h1 id="1450-sometimes-ie-returns-1223-when-it-should-be-204">1450: sometimes IE returns 1223 when it should be 204</h1></div></div><div class="code"><div class="wrapper">		<span class="hljs-number">1223</span>: <span class="hljs-number">204</span>
+	},
+	xhrSupported = jQuery.ajaxSettings.xhr();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: IE9
+Open requests must be manually aborted on unload (#5280)
+See <a href="https://support.microsoft.com/kb/2856746">https://support.microsoft.com/kb/2856746</a> for more info</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">if</span> ( <span class="hljs-built_in">window</span>.attachEvent ) {
+	<span class="hljs-built_in">window</span>.attachEvent( <span class="hljs-string">"onunload"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		<span class="hljs-keyword">for</span> ( <span class="hljs-keyword">var</span> key <span class="hljs-keyword">in</span> xhrCallbacks ) {
+			xhrCallbacks[ key ]();
+		}
+	});
+}
+
+support.cors = !!xhrSupported &amp;&amp; ( <span class="hljs-string">"withCredentials"</span> <span class="hljs-keyword">in</span> xhrSupported );
+support.ajax = xhrSupported = !!xhrSupported;
+
+jQuery.ajaxTransport(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> options </span>) </span>{
+	<span class="hljs-keyword">var</span> callback;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Cross domain only allowed if supported through XMLHttpRequest</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( support.cors || xhrSupported &amp;&amp; !options.crossDomain ) {
+		<span class="hljs-keyword">return</span> {
+			send: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> headers, complete </span>) </span>{
+				<span class="hljs-keyword">var</span> i,
+					xhr = options.xhr(),
+					id = ++xhrId;
+
+				xhr.open( options.type, options.url, options.async, options.username, options.password );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Apply custom fields if provided</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( options.xhrFields ) {
+					<span class="hljs-keyword">for</span> ( i <span class="hljs-keyword">in</span> options.xhrFields ) {
+						xhr[ i ] = options.xhrFields[ i ];
+					}
+				}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Override mime type if needed</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( options.mimeType &amp;&amp; xhr.overrideMimeType ) {
+					xhr.overrideMimeType( options.mimeType );
+				}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>X-Requested-With header
+For cross-domain requests, seeing as conditions for a preflight are
+akin to a jigsaw puzzle, we simply never set it to be sure.
+(it can always be set on a per-request basis or even using ajaxSetup)
+For same-domain requests, won&#39;t change header if already provided.</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( !options.crossDomain &amp;&amp; !headers[<span class="hljs-string">"X-Requested-With"</span>] ) {
+					headers[<span class="hljs-string">"X-Requested-With"</span>] = <span class="hljs-string">"XMLHttpRequest"</span>;
+				}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set headers</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">for</span> ( i <span class="hljs-keyword">in</span> headers ) {
+					xhr.setRequestHeader( i, headers[ i ] );
+				}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Callback</p></div></div><div class="code"><div class="wrapper">				callback = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> type </span>) </span>{
+					<span class="hljs-keyword">return</span> <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+						<span class="hljs-keyword">if</span> ( callback ) {
+							<span class="hljs-keyword">delete</span> xhrCallbacks[ id ];
+							callback = xhr.onload = xhr.onerror = <span class="hljs-literal">null</span>;
+
+							<span class="hljs-keyword">if</span> ( type === <span class="hljs-string">"abort"</span> ) {
+								xhr.abort();
+							} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( type === <span class="hljs-string">"error"</span> ) {
+								complete(</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>file: protocol always yields status 0; see #8605, #14207</p></div></div><div class="code"><div class="wrapper">									xhr.status,
+									xhr.statusText
+								);
+							} <span class="hljs-keyword">else</span> {
+								complete(
+									xhrSuccessStatus[ xhr.status ] || xhr.status,
+									xhr.statusText,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: IE9
+Accessing binary-data responseText throws an exception
+(#11426)</p></div></div><div class="code"><div class="wrapper">									<span class="hljs-keyword">typeof</span> xhr.responseText === <span class="hljs-string">"string"</span> ? {
+										text: xhr.responseText
+									} : <span class="hljs-literal">undefined</span>,
+									xhr.getAllResponseHeaders()
+								);
+							}
+						}
+					};
+				};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Listen to events</p></div></div><div class="code"><div class="wrapper">				xhr.onload = callback();
+				xhr.onerror = callback(<span class="hljs-string">"error"</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create the abort callback</p></div></div><div class="code"><div class="wrapper">				callback = xhrCallbacks[ id ] = callback(<span class="hljs-string">"abort"</span>);
+
+				<span class="hljs-keyword">try</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Do send the request (this may raise an exception)</p></div></div><div class="code"><div class="wrapper">					xhr.send( options.hasContent &amp;&amp; options.data || <span class="hljs-literal">null</span> );
+				} <span class="hljs-keyword">catch</span> ( e ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><h1 id="14683-only-rethrow-if-this-hasn39t-been-notified-as-an-error-yet">14683: Only rethrow if this hasn&#39;t been notified as an error yet</h1></div></div></div><div class="segment"><div class="code"><div class="wrapper">					<span class="hljs-keyword">if</span> ( callback ) {
+						<span class="hljs-keyword">throw</span> e;
+					}
+				}
+			},
+
+			abort: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+				<span class="hljs-keyword">if</span> ( callback ) {
+					callback();
+				}
+			}
+		};
+	}
+});
+
+});</div></div></div></div></body></html>

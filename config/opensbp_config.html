@@ -1,0 +1,58 @@
+<!DOCTYPE html><html lang="en"><head><title>config/opensbp_config</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../"><meta name="groc-document-path" content="config/opensbp_config"><meta name="groc-project-path" content="config/opensbp_config.js"><link rel="stylesheet" type="text/css" media="all" href="../assets/style.css"><script type="text/javascript" src="../assets/behavior.js"></script><body><div id="meta"><div class="file-path">config/opensbp_config.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>opensbp_config.js</p>
+<p>Configuration tree for the OpenSBP runtime.
+TODO - There should be some kind of thought applied to how configuration tree branches
+       that apply specifically to runtimes are created/managed. This configuration module
+       is basically a part of the OpenSBP runtime, but lives in the configuration tree - 
+       it is poor separation of concerns.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> path = <span class="hljs-built_in">require</span>(<span class="hljs-string">'path'</span>);
+<span class="hljs-keyword">var</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'util'</span>);
+<span class="hljs-keyword">var</span> extend = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../util'</span>).extend;
+<span class="hljs-keyword">var</span> PLATFORM = <span class="hljs-built_in">require</span>(<span class="hljs-string">'process'</span>).platform;
+
+<span class="hljs-keyword">var</span> Config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./config'</span>).Config;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The OpenSBP configuration object manages the settings related to the OpenSBP runtime.
+Importantly, it keeps a field called <code>variables</code> which is a map of variable names to values
+that correspond to the persistent (dollar-sign) variables in OpenSBP - The OpenSBP runtime
+consults this configuration whenever persistent variables are read or written - it is what 
+lends the persistence to those variables.</p></div></div><div class="code"><div class="wrapper">OpenSBPConfig = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	Config.call(<span class="hljs-keyword">this</span>, <span class="hljs-string">'opensbp'</span>);
+};
+util.inherits(OpenSBPConfig, Config);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update the tree with the provided data.  Nothing special here.</p></div></div><div class="code"><div class="wrapper">OpenSBPConfig.prototype.update = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data, callback, force</span>) </span>{
+	<span class="hljs-keyword">try</span> {
+		extend(<span class="hljs-keyword">this</span>._cache, data, force);
+	} <span class="hljs-keyword">catch</span> (e) {
+		<span class="hljs-keyword">return</span> callback(e);
+	}
+		<span class="hljs-keyword">this</span>.save(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) {
+			callback(err);
+		} <span class="hljs-keyword">else</span> {
+			callback(<span class="hljs-literal">null</span>, data);
+		}
+	});
+};
+
+OpenSBPConfig.prototype.setMany = OpenSBPConfig.prototype.update;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Apply this configuration.  Currently this is a NOOP</p></div></div><div class="code"><div class="wrapper">OpenSBPConfig.prototype.apply = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	setImmediate(callback, <span class="hljs-literal">null</span>);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return the value of the variable with the specified name
+  name - The variable name to retrieve the value for, with or without the dollar sign.</p></div></div><div class="code"><div class="wrapper">OpenSBPConfig.prototype.getVariable = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">name</span>) </span>{
+	<span class="hljs-keyword">var</span> scrubbedName = name.replace(<span class="hljs-string">'$'</span>,<span class="hljs-string">''</span>);
+	<span class="hljs-keyword">var</span> variables = <span class="hljs-keyword">this</span>._cache[<span class="hljs-string">'variables'</span>];
+	<span class="hljs-keyword">if</span>(variables &amp;&amp; (scrubbedName <span class="hljs-keyword">in</span> variables)) {
+		<span class="hljs-keyword">return</span> variables[scrubbedName];
+	} <span class="hljs-keyword">else</span> {
+		<span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Variable "</span> + name + <span class="hljs-string">" was used but not defined."</span>);
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the variable named to the provided value.
+TODO - Sanitize the variable name (you could set super illegal dumb stuff here)
+      name - The name of the variable to set, with or without a dollar sign
+     value - The value to assign
+  callback - Called with an object mapping key to value, or error if error.</p></div></div><div class="code"><div class="wrapper">OpenSBPConfig.prototype.setVariable = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">name, value, callback</span>) </span>{
+	<span class="hljs-keyword">var</span> name = name.replace(<span class="hljs-string">'$'</span>,<span class="hljs-string">''</span>);
+	<span class="hljs-keyword">var</span> u = {<span class="hljs-string">'variables'</span> : {}}
+	u.variables[name] = value;
+	<span class="hljs-keyword">this</span>.update(u, callback, <span class="hljs-literal">true</span>);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return true if the provided variable has been defined (with or without dollar sign)</p></div></div><div class="code"><div class="wrapper">OpenSBPConfig.prototype.hasVariable = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">name</span>) </span>{
+	<span class="hljs-keyword">var</span> name = name.replace(<span class="hljs-string">'$'</span>,<span class="hljs-string">''</span>);
+	<span class="hljs-keyword">return</span> name <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>._cache.variables;
+}
+
+exports.OpenSBPConfig = OpenSBPConfig;</div></div></div></div></body></html>

@@ -1,0 +1,230 @@
+<!DOCTYPE html><html lang="en"><head><title>runtime/opensbp/commands/leveler</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../"><meta name="groc-document-path" content="runtime/opensbp/commands/leveler"><meta name="groc-project-path" content="runtime/opensbp/commands/leveler.js"><link rel="stylesheet" type="text/css" media="all" href="../../../assets/style.css"><script type="text/javascript" src="../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">runtime/opensbp/commands/leveler.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-comment">/*jslint todo: true, browser: true, continue: true, white: true*/</span>
+<span class="hljs-comment">/*global define*/</span>
+
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../../log'</span>).logger(<span class="hljs-string">'sbp'</span>);
+<span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs'</span>);
+<span class="hljs-keyword">var</span> triangulate = <span class="hljs-built_in">require</span>(<span class="hljs-string">"delaunay-triangulate"</span>);</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>The leveler calculates the position of points according to the given point
+cloud. This is used to have better height precision when working on a slope
+or curved surface.</p>
+<p>If the given file does not exists or a problem occurs with the triangulation,
+the triangulation is not done. Therefore before using the methods for
+finding relative heights, triangulationFailed should be called and check.</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>file must be a string.</strong><br/>(The file path of the point cloud (in XYZ format).)</p>
+</li>
+<li><p><strong>callback must be a function.</strong><br/>((optional) Callback function to call when the triangulation is done.)</p>
+</li>
+</ul></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> Leveler = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">file, callback</span>) </span>{
+<span class="hljs-pi">    "use strict"</span>;
+    <span class="hljs-keyword">var</span> that = <span class="hljs-keyword">this</span>;
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">pointOutsideBoundary</span>(<span class="hljs-params">triangle, point</span>) </span>{
+        <span class="hljs-keyword">return</span> ((point[<span class="hljs-number">0</span>] &gt; triangle[<span class="hljs-number">0</span>][<span class="hljs-number">0</span>] &amp;&amp; point[<span class="hljs-number">0</span>] &gt; triangle[<span class="hljs-number">1</span>][<span class="hljs-number">0</span>] &amp;&amp;
+                point[<span class="hljs-number">0</span>] &gt; triangle[<span class="hljs-number">2</span>][<span class="hljs-number">0</span>]) || (point[<span class="hljs-number">0</span>] &lt; triangle[<span class="hljs-number">0</span>][<span class="hljs-number">0</span>] &amp;&amp;
+                point[<span class="hljs-number">0</span>] &lt; triangle[<span class="hljs-number">1</span>][<span class="hljs-number">0</span>] &amp;&amp; point[<span class="hljs-number">0</span>] &lt; triangle[<span class="hljs-number">2</span>][<span class="hljs-number">0</span>]) ||
+               (point[<span class="hljs-number">1</span>] &gt; triangle[<span class="hljs-number">0</span>][<span class="hljs-number">1</span>] &amp;&amp; point[<span class="hljs-number">1</span>] &gt; triangle[<span class="hljs-number">1</span>][<span class="hljs-number">1</span>] &amp;&amp;
+                point[<span class="hljs-number">1</span>] &gt; triangle[<span class="hljs-number">2</span>][<span class="hljs-number">1</span>]) || (point[<span class="hljs-number">1</span>] &lt; triangle[<span class="hljs-number">0</span>][<span class="hljs-number">1</span>] &amp;&amp;
+                point[<span class="hljs-number">1</span>] &lt; triangle[<span class="hljs-number">1</span>][<span class="hljs-number">1</span>] &amp;&amp; point[<span class="hljs-number">1</span>] &lt; triangle[<span class="hljs-number">2</span>][<span class="hljs-number">1</span>]));
+    }
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">dotProduct</span>(<span class="hljs-params">v1, v2</span>) </span>{
+        <span class="hljs-keyword">return</span> v1[<span class="hljs-number">0</span>] * v2[<span class="hljs-number">0</span>] + v1[<span class="hljs-number">1</span>] * v2[<span class="hljs-number">1</span>];
+    }
+
+    <span class="hljs-comment">//Return false if not in triangle, else { triangle, coeffAC, coeffAB }</span>
+    <span class="hljs-comment">//coeffAC and coeffAB are the coefficient of the barycenter from the point</span>
+    <span class="hljs-comment">//0 (A) of the triangle</span>
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">pointInTriangle</span>(<span class="hljs-params">triangle, point</span>) </span>{
+        <span class="hljs-keyword">if</span>(pointOutsideBoundary(triangle, point) === <span class="hljs-literal">true</span>) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+        }
+
+        <span class="hljs-comment">//Algorithm from http://www.blackpawn.com/texts/pointinpoly/</span>
+
+        <span class="hljs-keyword">var</span> a = triangle[<span class="hljs-number">0</span>];
+        <span class="hljs-keyword">var</span> b = triangle[<span class="hljs-number">1</span>];
+        <span class="hljs-keyword">var</span> c = triangle[<span class="hljs-number">2</span>];
+
+        <span class="hljs-keyword">var</span> vAC = [c[<span class="hljs-number">0</span>] - a[<span class="hljs-number">0</span>], c[<span class="hljs-number">1</span>] - a[<span class="hljs-number">1</span>]];
+        <span class="hljs-keyword">var</span> vAB = [b[<span class="hljs-number">0</span>] - a[<span class="hljs-number">0</span>], b[<span class="hljs-number">1</span>] - a[<span class="hljs-number">1</span>]];
+        <span class="hljs-keyword">var</span> vAP = [point[<span class="hljs-number">0</span>] - a[<span class="hljs-number">0</span>], point[<span class="hljs-number">1</span>] - a[<span class="hljs-number">1</span>]];
+
+        <span class="hljs-keyword">var</span> dotACAC = dotProduct(vAC, vAC), dotACAB = dotProduct(vAC, vAB);
+        <span class="hljs-keyword">var</span> dotACAP = dotProduct(vAC, vAP), dotABAB = dotProduct(vAB, vAB);
+        <span class="hljs-keyword">var</span> dotABAP = dotProduct(vAB, vAP);
+
+        <span class="hljs-comment">//Find barycenter coefficients</span>
+        <span class="hljs-keyword">var</span> denominator = dotACAC * dotABAB - dotACAB * dotACAB;
+
+        <span class="hljs-comment">//Sometimes, the triangulation algorithm considers three aligned points</span>
+        <span class="hljs-comment">//as a triangle which should not be possible and gives the denominator</span>
+        <span class="hljs-comment">//the value of zero</span>
+        <span class="hljs-keyword">if</span>(denominator === <span class="hljs-number">0</span>) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+        }
+
+        <span class="hljs-keyword">var</span> coeffAC = (dotABAB * dotACAP - dotACAB * dotABAP) / denominator;
+        <span class="hljs-keyword">var</span> coeffAB = (dotACAC * dotABAP - dotACAB * dotACAP) / denominator;
+
+        <span class="hljs-keyword">if</span>(coeffAC &lt; <span class="hljs-number">0</span> || coeffAB &lt; <span class="hljs-number">0</span> || (coeffAC + coeffAB &gt; <span class="hljs-number">1</span>)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+        }
+
+        <span class="hljs-keyword">return</span> { triangle : triangle, coeffAC : coeffAC, coeffAB : coeffAB };
+    }
+
+    <span class="hljs-comment">//triangle is the triangle with the coordinates of each point</span>
+    <span class="hljs-comment">//Returns false if cannot find a triangle else the triangle with the</span>
+    <span class="hljs-comment">//barycenter coefficients</span>
+    that.findTriangleAndCoefficients = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">coordinate</span>) </span>{
+        <span class="hljs-keyword">var</span> i = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">var</span> result, triangle;
+
+        <span class="hljs-keyword">if</span>(that.triangles === <span class="hljs-literal">undefined</span>) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+        }
+
+        <span class="hljs-keyword">for</span>(i = <span class="hljs-number">0</span>; i &lt; that.triangles.length; i++) {
+            triangle = [
+                that.points[that.triangles[i][<span class="hljs-number">0</span>]],
+                that.points[that.triangles[i][<span class="hljs-number">1</span>]],
+                that.points[that.triangles[i][<span class="hljs-number">2</span>]]
+            ];
+            result = pointInTriangle(triangle, coordinate);
+            <span class="hljs-keyword">if</span>(result !== <span class="hljs-literal">false</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Have to return the indexes because miss a dimension here</p></div></div><div class="code"><div class="wrapper">                result.triangle = that.triangles[i];
+                <span class="hljs-keyword">return</span> result;
+            }
+        }
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+    };</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Finds the relative height of the point according to the given point
+cloud. If the point is outside of the point cloud on the XY plane, the
+function returns false.
+Also, foundHeight is updated each time the function is executed. When a
+height is returned, foundHeight is equal to the returned height else to
+0.</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>x must be a number.</strong><br/>(The x coordinate of the point.)</p>
+</li>
+<li><p><strong>y must be a number.</strong><br/>(The y coordinate of the point.)</p>
+</li>
+</ul>
+<p><strong>Returns a number or a boolean</strong><br/>(Returns false if the point is outside of the point cloud boundaries, else the relative height according to the surface of the point cloud.)</p></div></div><div class="code"><div class="wrapper">    that.findHeight = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">x, y</span>) </span>{
+        <span class="hljs-keyword">var</span> triangle = that.findTriangleAndCoefficients([x, y, <span class="hljs-number">0</span>]);
+        <span class="hljs-keyword">if</span>(triangle === <span class="hljs-literal">false</span>) {
+            that.foundHeight = <span class="hljs-number">0</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+        }
+        <span class="hljs-comment">//Recuperate the true points and calculate the height</span>
+        <span class="hljs-keyword">var</span> tr = triangle.triangle, coeffAC = triangle.coeffAC;
+        <span class="hljs-keyword">var</span> coeffAB = triangle.coeffAB;
+        <span class="hljs-keyword">var</span> a = that.points[tr[<span class="hljs-number">0</span>]],  b = that.points[tr[<span class="hljs-number">1</span>]];
+        <span class="hljs-keyword">var</span> c = that.points[tr[<span class="hljs-number">2</span>]];
+        <span class="hljs-keyword">var</span> height = a[<span class="hljs-number">2</span>] + coeffAC * (c[<span class="hljs-number">2</span>] - a[<span class="hljs-number">2</span>]) + coeffAB * (b[<span class="hljs-number">2</span>] - a[<span class="hljs-number">2</span>]);
+
+        that.foundHeight = height;
+        <span class="hljs-keyword">return</span> height;
+    };
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">convertPointsForTriangulation</span>(<span class="hljs-params">points3D</span>) </span>{
+        <span class="hljs-keyword">var</span> points2D = [];
+        <span class="hljs-keyword">var</span> i = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span>(i=<span class="hljs-number">0</span>; i &lt; points3D.length; i++) {
+            points2D.push([points3D[i][<span class="hljs-number">0</span>], points3D[i][<span class="hljs-number">1</span>]]);
+        }
+        <span class="hljs-keyword">return</span> points2D;
+    }
+
+    <span class="hljs-comment">//Compare the two points, returns negative if a &lt; b, 0 if a == b else positive</span>
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">comparePosition</span>(<span class="hljs-params">a, b</span>) </span>{
+        <span class="hljs-keyword">return</span> a[<span class="hljs-number">0</span>] - b[<span class="hljs-number">0</span>];
+    }
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">pointsEqual</span>(<span class="hljs-params">a, b</span>) </span>{
+        <span class="hljs-keyword">return</span> (a[<span class="hljs-number">0</span>] === b[<span class="hljs-number">0</span>] &amp;&amp; a[<span class="hljs-number">1</span>] === b[<span class="hljs-number">1</span>]);
+    }</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>The date must be in the format of an XYZ file.  Which means each line
+contains the x, y, z coordinates of a point separated by spaces.
+Example:
+    12.05 5.4 1.0
+    10.5 1.6 22.1
+    0 0 5</p>
+<p>Parameters:</p>
+<ul>
+<li><strong>The must be a string.</strong><br/>(data.)</li>
+</ul>
+<p><strong>Returns an array</strong><br/>(Array of points (defined as three dimensionnal arrays))</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">parseData</span>(<span class="hljs-params">data</span>) </span>{
+        <span class="hljs-keyword">var</span> i = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">var</span> arr = data.split(<span class="hljs-string">"\n"</span>), point = [], points = [];
+
+        <span class="hljs-keyword">for</span>(i=<span class="hljs-number">0</span>; i &lt; arr.length; i++) {
+            point = arr[i].split(<span class="hljs-string">" "</span>);
+
+            <span class="hljs-keyword">if</span>(point.length === <span class="hljs-number">3</span>) {
+                points.push([
+                    <span class="hljs-built_in">parseFloat</span>(point[<span class="hljs-number">0</span>], <span class="hljs-number">10</span>),
+                    <span class="hljs-built_in">parseFloat</span>(point[<span class="hljs-number">1</span>], <span class="hljs-number">10</span>),
+                    <span class="hljs-built_in">parseFloat</span>(point[<span class="hljs-number">2</span>], <span class="hljs-number">10</span>),
+                ]);
+            }
+        }
+
+        <span class="hljs-keyword">return</span> points;
+    }</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Returns if the triangulation failed or not.</p>
+<p><strong>Returns a boolean</strong><br/>(True if failed.)</p></div></div><div class="code"><div class="wrapper">    that.triangulationFailed = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        <span class="hljs-keyword">return</span> (that.triangles.length === <span class="hljs-number">0</span>);
+    };
+
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">parseFile</span>(<span class="hljs-params">error, data</span>) </span>{
+        <span class="hljs-keyword">if</span>(error) {
+            log.error(error);
+            <span class="hljs-keyword">return</span>;
+        }
+
+        <span class="hljs-keyword">var</span> i = <span class="hljs-number">0</span>, hightest = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">var</span> points2D = [];
+
+        that.points = parseData(data);
+        that.points.sort(comparePosition);
+
+        <span class="hljs-comment">//Remove the points in the same place</span>
+        <span class="hljs-keyword">for</span>(i = <span class="hljs-number">0</span>; i &lt; that.points.length; i++) {
+            <span class="hljs-keyword">while</span>(i &lt; that.points.length - <span class="hljs-number">1</span> &amp;&amp;
+                    pointsEqual(that.points[i], that.points[i+<span class="hljs-number">1</span>]))
+            {
+                <span class="hljs-keyword">if</span>(that.points[i][<span class="hljs-number">2</span>] !== that.points[i+<span class="hljs-number">1</span>][<span class="hljs-number">2</span>]) {
+                    hightest = <span class="hljs-built_in">Math</span>.max(that.points[i][<span class="hljs-number">2</span>],
+                            that.points[i+<span class="hljs-number">1</span>][<span class="hljs-number">2</span>]);
+                }
+                that.points.splice(i+<span class="hljs-number">1</span>, <span class="hljs-number">1</span>);
+                that.points[i][<span class="hljs-number">2</span>] = hightest;
+            }
+        }
+
+        points2D = convertPointsForTriangulation(that.points);
+
+        that.triangles = triangulate(points2D);
+
+        <span class="hljs-keyword">if</span>(that.triangulationFailed() === <span class="hljs-literal">true</span>) {
+            <span class="hljs-comment">//Should stop the job</span>
+            log.error(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Impossible to triangulate the point cloud."</span>));
+        }
+
+        <span class="hljs-keyword">if</span>(callback !== <span class="hljs-literal">undefined</span>) {
+            callback(<span class="hljs-literal">null</span>);
+        }
+    }
+
+    that.points = [];
+    that.triangles = [];
+    that.foundHeight = <span class="hljs-number">0</span>;  <span class="hljs-comment">//Useful for comparing with the previous found height</span>
+
+    <span class="hljs-keyword">var</span> stats = fs.statSync(file);
+    <span class="hljs-keyword">if</span>(stats.isFile() === <span class="hljs-literal">false</span>) {
+        <span class="hljs-keyword">return</span>;
+    }
+    parseFile(<span class="hljs-literal">null</span>, fs.readFileSync(file, <span class="hljs-string">"utf8"</span>));
+};
+
+exports.Leveler = Leveler;</div></div></div></div></body></html>

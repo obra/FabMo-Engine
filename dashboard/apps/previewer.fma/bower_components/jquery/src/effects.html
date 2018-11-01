@@ -1,0 +1,519 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/effects</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/effects"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/effects.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/effects.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"./core"</span>,
+	<span class="hljs-string">"./var/pnum"</span>,
+	<span class="hljs-string">"./css/var/cssExpand"</span>,
+	<span class="hljs-string">"./css/var/isHidden"</span>,
+	<span class="hljs-string">"./css/defaultDisplay"</span>,
+	<span class="hljs-string">"./data/var/data_priv"</span>,
+
+	<span class="hljs-string">"./core/init"</span>,
+	<span class="hljs-string">"./effects/Tween"</span>,
+	<span class="hljs-string">"./queue"</span>,
+	<span class="hljs-string">"./css"</span>,
+	<span class="hljs-string">"./deferred"</span>,
+	<span class="hljs-string">"./traversing"</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery, pnum, cssExpand, isHidden, defaultDisplay, data_priv </span>) </span>{
+
+<span class="hljs-keyword">var</span>
+	fxNow, timerId,
+	rfxtypes = <span class="hljs-regexp">/^(?:toggle|show|hide)$/</span>,
+	rfxnum = <span class="hljs-keyword">new</span> <span class="hljs-built_in">RegExp</span>( <span class="hljs-string">"^(?:([+-])=|)("</span> + pnum + <span class="hljs-string">")([a-z%]*)$"</span>, <span class="hljs-string">"i"</span> ),
+	rrun = <span class="hljs-regexp">/queueHooks$/</span>,
+	animationPrefilters = [ defaultPrefilter ],
+	tweeners = {
+		<span class="hljs-string">"*"</span>: [ <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> prop, value </span>) </span>{
+			<span class="hljs-keyword">var</span> tween = <span class="hljs-keyword">this</span>.createTween( prop, value ),
+				target = tween.cur(),
+				parts = rfxnum.exec( value ),
+				unit = parts &amp;&amp; parts[ <span class="hljs-number">3</span> ] || ( jQuery.cssNumber[ prop ] ? <span class="hljs-string">""</span> : <span class="hljs-string">"px"</span> ),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Starting value computation is required for potential unit mismatches</p></div></div><div class="code"><div class="wrapper">				start = ( jQuery.cssNumber[ prop ] || unit !== <span class="hljs-string">"px"</span> &amp;&amp; +target ) &amp;&amp;
+					rfxnum.exec( jQuery.css( tween.elem, prop ) ),
+				scale = <span class="hljs-number">1</span>,
+				maxIterations = <span class="hljs-number">20</span>;
+
+			<span class="hljs-keyword">if</span> ( start &amp;&amp; start[ <span class="hljs-number">3</span> ] !== unit ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Trust units reported by jQuery.css</p></div></div><div class="code"><div class="wrapper">				unit = unit || start[ <span class="hljs-number">3</span> ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Make sure we update the tween properties later on</p></div></div><div class="code"><div class="wrapper">				parts = parts || [];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Iteratively approximate from a nonzero starting point</p></div></div><div class="code"><div class="wrapper">				start = +target || <span class="hljs-number">1</span>;
+
+				<span class="hljs-keyword">do</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If previous iteration zeroed out, double until we get <em>something</em>.
+Use string for doubling so we don&#39;t accidentally see scale as unchanged below</p></div></div><div class="code"><div class="wrapper">					scale = scale || <span class="hljs-string">".5"</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Adjust and apply</p></div></div><div class="code"><div class="wrapper">					start = start / scale;
+					jQuery.style( tween.elem, prop, start + unit );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update scale, tolerating zero or NaN from tween.cur(),
+break the loop if scale is unchanged or perfect, or if we&#39;ve just had enough</p></div></div><div class="code"><div class="wrapper">				} <span class="hljs-keyword">while</span> ( scale !== (scale = tween.cur() / target) &amp;&amp; scale !== <span class="hljs-number">1</span> &amp;&amp; --maxIterations );
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update tween properties</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( parts ) {
+				start = tween.start = +start || +target || <span class="hljs-number">0</span>;
+				tween.unit = unit;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If a +=/-= token was provided, we&#39;re doing a relative animation</p></div></div><div class="code"><div class="wrapper">				tween.end = parts[ <span class="hljs-number">1</span> ] ?
+					start + ( parts[ <span class="hljs-number">1</span> ] + <span class="hljs-number">1</span> ) * parts[ <span class="hljs-number">2</span> ] :
+					+parts[ <span class="hljs-number">2</span> ];
+			}
+
+			<span class="hljs-keyword">return</span> tween;
+		} ]
+	};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Animations created synchronously will run synchronously</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">createFxNow</span>(<span class="hljs-params"></span>) </span>{
+	setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		fxNow = <span class="hljs-literal">undefined</span>;
+	});
+	<span class="hljs-keyword">return</span> ( fxNow = jQuery.now() );
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Generate parameters to create a standard animation</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">genFx</span>(<span class="hljs-params"> type, includeWidth </span>) </span>{
+	<span class="hljs-keyword">var</span> which,
+		i = <span class="hljs-number">0</span>,
+		attrs = { height: type };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If we include width, step value is 1 to do all cssExpand values,
+otherwise step value is 2 to skip over Left and Right</p></div></div><div class="code"><div class="wrapper">	includeWidth = includeWidth ? <span class="hljs-number">1</span> : <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">for</span> ( ; i &lt; <span class="hljs-number">4</span> ; i += <span class="hljs-number">2</span> - includeWidth ) {
+		which = cssExpand[ i ];
+		attrs[ <span class="hljs-string">"margin"</span> + which ] = attrs[ <span class="hljs-string">"padding"</span> + which ] = type;
+	}
+
+	<span class="hljs-keyword">if</span> ( includeWidth ) {
+		attrs.opacity = attrs.width = type;
+	}
+
+	<span class="hljs-keyword">return</span> attrs;
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">createTween</span>(<span class="hljs-params"> value, prop, animation </span>) </span>{
+	<span class="hljs-keyword">var</span> tween,
+		collection = ( tweeners[ prop ] || [] ).concat( tweeners[ <span class="hljs-string">"*"</span> ] ),
+		index = <span class="hljs-number">0</span>,
+		length = collection.length;
+	<span class="hljs-keyword">for</span> ( ; index &lt; length; index++ ) {
+		<span class="hljs-keyword">if</span> ( (tween = collection[ index ].call( animation, prop, value )) ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>We&#39;re done with this property</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">return</span> tween;
+		}
+	}
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">defaultPrefilter</span>(<span class="hljs-params"> elem, props, opts </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>jshint validthis: true </p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> prop, value, toggle, tween, hooks, oldfire, display, checkDisplay,
+		anim = <span class="hljs-keyword">this</span>,
+		orig = {},
+		style = elem.style,
+		hidden = elem.nodeType &amp;&amp; isHidden( elem ),
+		dataShow = data_priv.get( elem, <span class="hljs-string">"fxshow"</span> );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle queue: false promises</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( !opts.queue ) {
+		hooks = jQuery._queueHooks( elem, <span class="hljs-string">"fx"</span> );
+		<span class="hljs-keyword">if</span> ( hooks.unqueued == <span class="hljs-literal">null</span> ) {
+			hooks.unqueued = <span class="hljs-number">0</span>;
+			oldfire = hooks.empty.fire;
+			hooks.empty.fire = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+				<span class="hljs-keyword">if</span> ( !hooks.unqueued ) {
+					oldfire();
+				}
+			};
+		}
+		hooks.unqueued++;
+
+		anim.always(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Ensure the complete handler is called before this completes</p></div></div><div class="code"><div class="wrapper">			anim.always(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+				hooks.unqueued--;
+				<span class="hljs-keyword">if</span> ( !jQuery.queue( elem, <span class="hljs-string">"fx"</span> ).length ) {
+					hooks.empty.fire();
+				}
+			});
+		});
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Height/width overflow pass</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( elem.nodeType === <span class="hljs-number">1</span> &amp;&amp; ( <span class="hljs-string">"height"</span> <span class="hljs-keyword">in</span> props || <span class="hljs-string">"width"</span> <span class="hljs-keyword">in</span> props ) ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Make sure that nothing sneaks out
+Record all 3 overflow attributes because IE9-10 do not
+change the overflow attribute when overflowX and
+overflowY are set to the same value</p></div></div><div class="code"><div class="wrapper">		opts.overflow = [ style.overflow, style.overflowX, style.overflowY ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set display property to inline-block for height/width
+animations on inline elements that are having width/height animated</p></div></div><div class="code"><div class="wrapper">		display = jQuery.css( elem, <span class="hljs-string">"display"</span> );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Test default display if display is currently &quot;none&quot;</p></div></div><div class="code"><div class="wrapper">		checkDisplay = display === <span class="hljs-string">"none"</span> ?
+			data_priv.get( elem, <span class="hljs-string">"olddisplay"</span> ) || defaultDisplay( elem.nodeName ) : display;
+
+		<span class="hljs-keyword">if</span> ( checkDisplay === <span class="hljs-string">"inline"</span> &amp;&amp; jQuery.css( elem, <span class="hljs-string">"float"</span> ) === <span class="hljs-string">"none"</span> ) {
+			style.display = <span class="hljs-string">"inline-block"</span>;
+		}
+	}
+
+	<span class="hljs-keyword">if</span> ( opts.overflow ) {
+		style.overflow = <span class="hljs-string">"hidden"</span>;
+		anim.always(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			style.overflow = opts.overflow[ <span class="hljs-number">0</span> ];
+			style.overflowX = opts.overflow[ <span class="hljs-number">1</span> ];
+			style.overflowY = opts.overflow[ <span class="hljs-number">2</span> ];
+		});
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>show/hide pass</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">for</span> ( prop <span class="hljs-keyword">in</span> props ) {
+		value = props[ prop ];
+		<span class="hljs-keyword">if</span> ( rfxtypes.exec( value ) ) {
+			<span class="hljs-keyword">delete</span> props[ prop ];
+			toggle = toggle || value === <span class="hljs-string">"toggle"</span>;
+			<span class="hljs-keyword">if</span> ( value === ( hidden ? <span class="hljs-string">"hide"</span> : <span class="hljs-string">"show"</span> ) ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If there is dataShow left over from a stopped hide or show and we are going to proceed with show, we should pretend to be hidden</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( value === <span class="hljs-string">"show"</span> &amp;&amp; dataShow &amp;&amp; dataShow[ prop ] !== <span class="hljs-literal">undefined</span> ) {
+					hidden = <span class="hljs-literal">true</span>;
+				} <span class="hljs-keyword">else</span> {
+					<span class="hljs-keyword">continue</span>;
+				}
+			}
+			orig[ prop ] = dataShow &amp;&amp; dataShow[ prop ] || jQuery.style( elem, prop );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Any non-fx value stops us from restoring the original display value</p></div></div><div class="code"><div class="wrapper">		} <span class="hljs-keyword">else</span> {
+			display = <span class="hljs-literal">undefined</span>;
+		}
+	}
+
+	<span class="hljs-keyword">if</span> ( !jQuery.isEmptyObject( orig ) ) {
+		<span class="hljs-keyword">if</span> ( dataShow ) {
+			<span class="hljs-keyword">if</span> ( <span class="hljs-string">"hidden"</span> <span class="hljs-keyword">in</span> dataShow ) {
+				hidden = dataShow.hidden;
+			}
+		} <span class="hljs-keyword">else</span> {
+			dataShow = data_priv.access( elem, <span class="hljs-string">"fxshow"</span>, {} );
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Store state if its toggle - enables .stop().toggle() to &quot;reverse&quot;</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( toggle ) {
+			dataShow.hidden = !hidden;
+		}
+		<span class="hljs-keyword">if</span> ( hidden ) {
+			jQuery( elem ).show();
+		} <span class="hljs-keyword">else</span> {
+			anim.done(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+				jQuery( elem ).hide();
+			});
+		}
+		anim.done(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">var</span> prop;
+
+			data_priv.remove( elem, <span class="hljs-string">"fxshow"</span> );
+			<span class="hljs-keyword">for</span> ( prop <span class="hljs-keyword">in</span> orig ) {
+				jQuery.style( elem, prop, orig[ prop ] );
+			}
+		});
+		<span class="hljs-keyword">for</span> ( prop <span class="hljs-keyword">in</span> orig ) {
+			tween = createTween( hidden ? dataShow[ prop ] : <span class="hljs-number">0</span>, prop, anim );
+
+			<span class="hljs-keyword">if</span> ( !( prop <span class="hljs-keyword">in</span> dataShow ) ) {
+				dataShow[ prop ] = tween.start;
+				<span class="hljs-keyword">if</span> ( hidden ) {
+					tween.end = tween.start;
+					tween.start = prop === <span class="hljs-string">"width"</span> || prop === <span class="hljs-string">"height"</span> ? <span class="hljs-number">1</span> : <span class="hljs-number">0</span>;
+				}
+			}
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If this is a noop like .hide().hide(), restore an overwritten display value</p></div></div><div class="code"><div class="wrapper">	} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( (display === <span class="hljs-string">"none"</span> ? defaultDisplay( elem.nodeName ) : display) === <span class="hljs-string">"inline"</span> ) {
+		style.display = display;
+	}
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">propFilter</span>(<span class="hljs-params"> props, specialEasing </span>) </span>{
+	<span class="hljs-keyword">var</span> index, name, easing, value, hooks;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>camelCase, specialEasing and expand cssHook pass</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">for</span> ( index <span class="hljs-keyword">in</span> props ) {
+		name = jQuery.camelCase( index );
+		easing = specialEasing[ name ];
+		value = props[ index ];
+		<span class="hljs-keyword">if</span> ( jQuery.isArray( value ) ) {
+			easing = value[ <span class="hljs-number">1</span> ];
+			value = props[ index ] = value[ <span class="hljs-number">0</span> ];
+		}
+
+		<span class="hljs-keyword">if</span> ( index !== name ) {
+			props[ name ] = value;
+			<span class="hljs-keyword">delete</span> props[ index ];
+		}
+
+		hooks = jQuery.cssHooks[ name ];
+		<span class="hljs-keyword">if</span> ( hooks &amp;&amp; <span class="hljs-string">"expand"</span> <span class="hljs-keyword">in</span> hooks ) {
+			value = hooks.expand( value );
+			<span class="hljs-keyword">delete</span> props[ name ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Not quite $.extend, this won&#39;t overwrite existing keys.
+Reusing &#39;index&#39; because we have the correct &quot;name&quot;</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">for</span> ( index <span class="hljs-keyword">in</span> value ) {
+				<span class="hljs-keyword">if</span> ( !( index <span class="hljs-keyword">in</span> props ) ) {
+					props[ index ] = value[ index ];
+					specialEasing[ index ] = easing;
+				}
+			}
+		} <span class="hljs-keyword">else</span> {
+			specialEasing[ name ] = easing;
+		}
+	}
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">Animation</span>(<span class="hljs-params"> elem, properties, options </span>) </span>{
+	<span class="hljs-keyword">var</span> result,
+		stopped,
+		index = <span class="hljs-number">0</span>,
+		length = animationPrefilters.length,
+		deferred = jQuery.Deferred().always( <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Don&#39;t match elem in the :animated selector</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">delete</span> tick.elem;
+		}),
+		tick = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">if</span> ( stopped ) {
+				<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+			}
+			<span class="hljs-keyword">var</span> currentTime = fxNow || createFxNow(),
+				remaining = <span class="hljs-built_in">Math</span>.max( <span class="hljs-number">0</span>, animation.startTime + animation.duration - currentTime ),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: Android 2.3
+Archaic crash bug won&#39;t allow us to use <code>1 - ( 0.5 || 0 )</code> (#12497)</p></div></div><div class="code"><div class="wrapper">				temp = remaining / animation.duration || <span class="hljs-number">0</span>,
+				percent = <span class="hljs-number">1</span> - temp,
+				index = <span class="hljs-number">0</span>,
+				length = animation.tweens.length;
+
+			<span class="hljs-keyword">for</span> ( ; index &lt; length ; index++ ) {
+				animation.tweens[ index ].run( percent );
+			}
+
+			deferred.notifyWith( elem, [ animation, percent, remaining ]);
+
+			<span class="hljs-keyword">if</span> ( percent &lt; <span class="hljs-number">1</span> &amp;&amp; length ) {
+				<span class="hljs-keyword">return</span> remaining;
+			} <span class="hljs-keyword">else</span> {
+				deferred.resolveWith( elem, [ animation ] );
+				<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+			}
+		},
+		animation = deferred.promise({
+			elem: elem,
+			props: jQuery.extend( {}, properties ),
+			opts: jQuery.extend( <span class="hljs-literal">true</span>, { specialEasing: {} }, options ),
+			originalProperties: properties,
+			originalOptions: options,
+			startTime: fxNow || createFxNow(),
+			duration: options.duration,
+			tweens: [],
+			createTween: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> prop, end </span>) </span>{
+				<span class="hljs-keyword">var</span> tween = jQuery.Tween( elem, animation.opts, prop, end,
+						animation.opts.specialEasing[ prop ] || animation.opts.easing );
+				animation.tweens.push( tween );
+				<span class="hljs-keyword">return</span> tween;
+			},
+			stop: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> gotoEnd </span>) </span>{
+				<span class="hljs-keyword">var</span> index = <span class="hljs-number">0</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If we are going to the end, we want to run all the tweens
+otherwise we skip this part</p></div></div><div class="code"><div class="wrapper">					length = gotoEnd ? animation.tweens.length : <span class="hljs-number">0</span>;
+				<span class="hljs-keyword">if</span> ( stopped ) {
+					<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+				}
+				stopped = <span class="hljs-literal">true</span>;
+				<span class="hljs-keyword">for</span> ( ; index &lt; length ; index++ ) {
+					animation.tweens[ index ].run( <span class="hljs-number">1</span> );
+				}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Resolve when we played the last frame; otherwise, reject</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( gotoEnd ) {
+					deferred.resolveWith( elem, [ animation, gotoEnd ] );
+				} <span class="hljs-keyword">else</span> {
+					deferred.rejectWith( elem, [ animation, gotoEnd ] );
+				}
+				<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+			}
+		}),
+		props = animation.props;
+
+	propFilter( props, animation.opts.specialEasing );
+
+	<span class="hljs-keyword">for</span> ( ; index &lt; length ; index++ ) {
+		result = animationPrefilters[ index ].call( animation, elem, props, animation.opts );
+		<span class="hljs-keyword">if</span> ( result ) {
+			<span class="hljs-keyword">return</span> result;
+		}
+	}
+
+	jQuery.map( props, createTween, animation );
+
+	<span class="hljs-keyword">if</span> ( jQuery.isFunction( animation.opts.start ) ) {
+		animation.opts.start.call( elem, animation );
+	}
+
+	jQuery.fx.timer(
+		jQuery.extend( tick, {
+			elem: elem,
+			anim: animation,
+			queue: animation.opts.queue
+		})
+	);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>attach callbacks from options</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">return</span> animation.progress( animation.opts.progress )
+		.done( animation.opts.done, animation.opts.complete )
+		.fail( animation.opts.fail )
+		.always( animation.opts.always );
+}
+
+jQuery.Animation = jQuery.extend( Animation, {
+
+	tweener: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> props, callback </span>) </span>{
+		<span class="hljs-keyword">if</span> ( jQuery.isFunction( props ) ) {
+			callback = props;
+			props = [ <span class="hljs-string">"*"</span> ];
+		} <span class="hljs-keyword">else</span> {
+			props = props.split(<span class="hljs-string">" "</span>);
+		}
+
+		<span class="hljs-keyword">var</span> prop,
+			index = <span class="hljs-number">0</span>,
+			length = props.length;
+
+		<span class="hljs-keyword">for</span> ( ; index &lt; length ; index++ ) {
+			prop = props[ index ];
+			tweeners[ prop ] = tweeners[ prop ] || [];
+			tweeners[ prop ].unshift( callback );
+		}
+	},
+
+	prefilter: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> callback, prepend </span>) </span>{
+		<span class="hljs-keyword">if</span> ( prepend ) {
+			animationPrefilters.unshift( callback );
+		} <span class="hljs-keyword">else</span> {
+			animationPrefilters.push( callback );
+		}
+	}
+});
+
+jQuery.speed = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> speed, easing, fn </span>) </span>{
+	<span class="hljs-keyword">var</span> opt = speed &amp;&amp; <span class="hljs-keyword">typeof</span> speed === <span class="hljs-string">"object"</span> ? jQuery.extend( {}, speed ) : {
+		complete: fn || !fn &amp;&amp; easing ||
+			jQuery.isFunction( speed ) &amp;&amp; speed,
+		duration: speed,
+		easing: fn &amp;&amp; easing || easing &amp;&amp; !jQuery.isFunction( easing ) &amp;&amp; easing
+	};
+
+	opt.duration = jQuery.fx.off ? <span class="hljs-number">0</span> : <span class="hljs-keyword">typeof</span> opt.duration === <span class="hljs-string">"number"</span> ? opt.duration :
+		opt.duration <span class="hljs-keyword">in</span> jQuery.fx.speeds ? jQuery.fx.speeds[ opt.duration ] : jQuery.fx.speeds._default;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Normalize opt.queue - true/undefined/null -&gt; &quot;fx&quot;</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( opt.queue == <span class="hljs-literal">null</span> || opt.queue === <span class="hljs-literal">true</span> ) {
+		opt.queue = <span class="hljs-string">"fx"</span>;
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Queueing</p></div></div><div class="code"><div class="wrapper">	opt.old = opt.complete;
+
+	opt.complete = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		<span class="hljs-keyword">if</span> ( jQuery.isFunction( opt.old ) ) {
+			opt.old.call( <span class="hljs-keyword">this</span> );
+		}
+
+		<span class="hljs-keyword">if</span> ( opt.queue ) {
+			jQuery.dequeue( <span class="hljs-keyword">this</span>, opt.queue );
+		}
+	};
+
+	<span class="hljs-keyword">return</span> opt;
+};
+
+jQuery.fn.extend({
+	fadeTo: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> speed, to, easing, callback </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Show any hidden elements after setting opacity to 0</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.filter( isHidden ).css( <span class="hljs-string">"opacity"</span>, <span class="hljs-number">0</span> ).show()</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Animate to the value specified</p></div></div><div class="code"><div class="wrapper">			.end().animate({ opacity: to }, speed, easing, callback );
+	},
+	animate: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> prop, speed, easing, callback </span>) </span>{
+		<span class="hljs-keyword">var</span> empty = jQuery.isEmptyObject( prop ),
+			optall = jQuery.speed( speed, easing, callback ),
+			doAnimation = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Operate on a copy of prop so per-property easing won&#39;t be lost</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">var</span> anim = Animation( <span class="hljs-keyword">this</span>, jQuery.extend( {}, prop ), optall );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Empty animations, or finishing resolves immediately</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( empty || data_priv.get( <span class="hljs-keyword">this</span>, <span class="hljs-string">"finish"</span> ) ) {
+					anim.stop( <span class="hljs-literal">true</span> );
+				}
+			};
+			doAnimation.finish = doAnimation;
+
+		<span class="hljs-keyword">return</span> empty || optall.queue === <span class="hljs-literal">false</span> ?
+			<span class="hljs-keyword">this</span>.each( doAnimation ) :
+			<span class="hljs-keyword">this</span>.queue( optall.queue, doAnimation );
+	},
+	stop: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> type, clearQueue, gotoEnd </span>) </span>{
+		<span class="hljs-keyword">var</span> stopQueue = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> hooks </span>) </span>{
+			<span class="hljs-keyword">var</span> stop = hooks.stop;
+			<span class="hljs-keyword">delete</span> hooks.stop;
+			stop( gotoEnd );
+		};
+
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">typeof</span> type !== <span class="hljs-string">"string"</span> ) {
+			gotoEnd = clearQueue;
+			clearQueue = type;
+			type = <span class="hljs-literal">undefined</span>;
+		}
+		<span class="hljs-keyword">if</span> ( clearQueue &amp;&amp; type !== <span class="hljs-literal">false</span> ) {
+			<span class="hljs-keyword">this</span>.queue( type || <span class="hljs-string">"fx"</span>, [] );
+		}
+
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.each(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">var</span> dequeue = <span class="hljs-literal">true</span>,
+				index = type != <span class="hljs-literal">null</span> &amp;&amp; type + <span class="hljs-string">"queueHooks"</span>,
+				timers = jQuery.timers,
+				data = data_priv.get( <span class="hljs-keyword">this</span> );
+
+			<span class="hljs-keyword">if</span> ( index ) {
+				<span class="hljs-keyword">if</span> ( data[ index ] &amp;&amp; data[ index ].stop ) {
+					stopQueue( data[ index ] );
+				}
+			} <span class="hljs-keyword">else</span> {
+				<span class="hljs-keyword">for</span> ( index <span class="hljs-keyword">in</span> data ) {
+					<span class="hljs-keyword">if</span> ( data[ index ] &amp;&amp; data[ index ].stop &amp;&amp; rrun.test( index ) ) {
+						stopQueue( data[ index ] );
+					}
+				}
+			}
+
+			<span class="hljs-keyword">for</span> ( index = timers.length; index--; ) {
+				<span class="hljs-keyword">if</span> ( timers[ index ].elem === <span class="hljs-keyword">this</span> &amp;&amp; (type == <span class="hljs-literal">null</span> || timers[ index ].queue === type) ) {
+					timers[ index ].anim.stop( gotoEnd );
+					dequeue = <span class="hljs-literal">false</span>;
+					timers.splice( index, <span class="hljs-number">1</span> );
+				}
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Start the next in the queue if the last step wasn&#39;t forced.
+Timers currently will call their complete callbacks, which
+will dequeue but only if they were gotoEnd.</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( dequeue || !gotoEnd ) {
+				jQuery.dequeue( <span class="hljs-keyword">this</span>, type );
+			}
+		});
+	},
+	finish: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> type </span>) </span>{
+		<span class="hljs-keyword">if</span> ( type !== <span class="hljs-literal">false</span> ) {
+			type = type || <span class="hljs-string">"fx"</span>;
+		}
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.each(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">var</span> index,
+				data = data_priv.get( <span class="hljs-keyword">this</span> ),
+				queue = data[ type + <span class="hljs-string">"queue"</span> ],
+				hooks = data[ type + <span class="hljs-string">"queueHooks"</span> ],
+				timers = jQuery.timers,
+				length = queue ? queue.length : <span class="hljs-number">0</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Enable finishing flag on private data</p></div></div><div class="code"><div class="wrapper">			data.finish = <span class="hljs-literal">true</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Empty the queue first</p></div></div><div class="code"><div class="wrapper">			jQuery.queue( <span class="hljs-keyword">this</span>, type, [] );
+
+			<span class="hljs-keyword">if</span> ( hooks &amp;&amp; hooks.stop ) {
+				hooks.stop.call( <span class="hljs-keyword">this</span>, <span class="hljs-literal">true</span> );
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Look for any active animations, and finish them</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">for</span> ( index = timers.length; index--; ) {
+				<span class="hljs-keyword">if</span> ( timers[ index ].elem === <span class="hljs-keyword">this</span> &amp;&amp; timers[ index ].queue === type ) {
+					timers[ index ].anim.stop( <span class="hljs-literal">true</span> );
+					timers.splice( index, <span class="hljs-number">1</span> );
+				}
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Look for any animations in the old queue and finish them</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">for</span> ( index = <span class="hljs-number">0</span>; index &lt; length; index++ ) {
+				<span class="hljs-keyword">if</span> ( queue[ index ] &amp;&amp; queue[ index ].finish ) {
+					queue[ index ].finish.call( <span class="hljs-keyword">this</span> );
+				}
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Turn off finishing flag</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">delete</span> data.finish;
+		});
+	}
+});
+
+jQuery.each([ <span class="hljs-string">"toggle"</span>, <span class="hljs-string">"show"</span>, <span class="hljs-string">"hide"</span> ], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> i, name </span>) </span>{
+	<span class="hljs-keyword">var</span> cssFn = jQuery.fn[ name ];
+	jQuery.fn[ name ] = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> speed, easing, callback </span>) </span>{
+		<span class="hljs-keyword">return</span> speed == <span class="hljs-literal">null</span> || <span class="hljs-keyword">typeof</span> speed === <span class="hljs-string">"boolean"</span> ?
+			cssFn.apply( <span class="hljs-keyword">this</span>, <span class="hljs-built_in">arguments</span> ) :
+			<span class="hljs-keyword">this</span>.animate( genFx( name, <span class="hljs-literal">true</span> ), speed, easing, callback );
+	};
+});</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Generate shortcuts for custom animations</p></div></div><div class="code"><div class="wrapper">jQuery.each({
+	slideDown: genFx(<span class="hljs-string">"show"</span>),
+	slideUp: genFx(<span class="hljs-string">"hide"</span>),
+	slideToggle: genFx(<span class="hljs-string">"toggle"</span>),
+	fadeIn: { opacity: <span class="hljs-string">"show"</span> },
+	fadeOut: { opacity: <span class="hljs-string">"hide"</span> },
+	fadeToggle: { opacity: <span class="hljs-string">"toggle"</span> }
+}, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> name, props </span>) </span>{
+	jQuery.fn[ name ] = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> speed, easing, callback </span>) </span>{
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.animate( props, speed, easing, callback );
+	};
+});
+
+jQuery.timers = [];
+jQuery.fx.tick = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">var</span> timer,
+		i = <span class="hljs-number">0</span>,
+		timers = jQuery.timers;
+
+	fxNow = jQuery.now();
+
+	<span class="hljs-keyword">for</span> ( ; i &lt; timers.length; i++ ) {
+		timer = timers[ i ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Checks the timer has not already been removed</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( !timer() &amp;&amp; timers[ i ] === timer ) {
+			timers.splice( i--, <span class="hljs-number">1</span> );
+		}
+	}
+
+	<span class="hljs-keyword">if</span> ( !timers.length ) {
+		jQuery.fx.stop();
+	}
+	fxNow = <span class="hljs-literal">undefined</span>;
+};
+
+jQuery.fx.timer = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> timer </span>) </span>{
+	jQuery.timers.push( timer );
+	<span class="hljs-keyword">if</span> ( timer() ) {
+		jQuery.fx.start();
+	} <span class="hljs-keyword">else</span> {
+		jQuery.timers.pop();
+	}
+};
+
+jQuery.fx.interval = <span class="hljs-number">13</span>;
+
+jQuery.fx.start = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">if</span> ( !timerId ) {
+		timerId = setInterval( jQuery.fx.tick, jQuery.fx.interval );
+	}
+};
+
+jQuery.fx.stop = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	clearInterval( timerId );
+	timerId = <span class="hljs-literal">null</span>;
+};
+
+jQuery.fx.speeds = {
+	slow: <span class="hljs-number">600</span>,
+	fast: <span class="hljs-number">200</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Default speed</p></div></div><div class="code"><div class="wrapper">	_default: <span class="hljs-number">400</span>
+};
+
+<span class="hljs-keyword">return</span> jQuery;
+});</div></div></div></div></body></html>

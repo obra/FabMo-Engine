@@ -1,0 +1,51 @@
+<!DOCTYPE html><html lang="en"><head><title>runtime/opensbp/transformation</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../"><meta name="groc-document-path" content="runtime/opensbp/transformation"><meta name="groc-project-path" content="runtime/opensbp/transformation.js"><link rel="stylesheet" type="text/css" media="all" href="../../assets/style.css"><script type="text/javascript" src="../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">runtime/opensbp/transformation.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - Gordon, documentation here?</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../log'</span>).logger(<span class="hljs-string">'sbp'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Point X, Point Y, Point Z, Angle(in radians), Rotation Point X, Rotation Point Y</p></div></div><div class="code"><div class="wrapper">exports.rotate = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">PtNew,angle,RotPtX,RotPtY,xStart,yStart</span>)</span>{
+	<span class="hljs-keyword">if</span> ( angle !== <span class="hljs-number">0</span> ) {
+		<span class="hljs-keyword">var</span> x = PtNew.X;
+		<span class="hljs-keyword">var</span> y = PtNew.Y;
+		<span class="hljs-keyword">if</span> (angle &gt; <span class="hljs-number">360</span>) {angle -= <span class="hljs-number">360</span>;}
+		<span class="hljs-keyword">if</span> (angle &lt; -<span class="hljs-number">360</span>) {angle += <span class="hljs-number">360</span>;}
+		angle *= (-<span class="hljs-number">1</span>);
+		angle = (angle/<span class="hljs-number">180</span>)*<span class="hljs-built_in">Math</span>.PI;
+		<span class="hljs-keyword">var</span> cosB = <span class="hljs-built_in">Math</span>.cos(angle);
+		<span class="hljs-keyword">var</span> sinB = <span class="hljs-built_in">Math</span>.sin(angle);
+		<span class="hljs-keyword">if</span> (RotPtX === <span class="hljs-literal">undefined</span>) { RotPtX = <span class="hljs-number">0</span>; }
+		<span class="hljs-keyword">if</span> (RotPtY === <span class="hljs-literal">undefined</span>) { RotPtY = <span class="hljs-number">0</span>; }
+		PtNew.X = ((cosB * (x-RotPtX)) - (sinB * (y-RotPtY))) + RotPtX;
+		PtNew.Y = ((sinB * (x-RotPtX)) + (cosB * (y-RotPtY))) + RotPtY;
+     	<span class="hljs-keyword">if</span> ( <span class="hljs-string">'I'</span> <span class="hljs-keyword">in</span> PtNew || <span class="hljs-string">'J'</span> <span class="hljs-keyword">in</span> PtNew ){
+            <span class="hljs-keyword">var</span> Ipos = PtNew.I === <span class="hljs-literal">undefined</span> ? xStart : (xStart + PtNew.I);
+            <span class="hljs-keyword">var</span> Jpos = PtNew.J === <span class="hljs-literal">undefined</span> ? yStart : (yStart + PtNew.J);
+            <span class="hljs-keyword">var</span> newIpos = ((cosB * (Ipos-RotPtX)) - (sinB * (Jpos-RotPtY))) + RotPtX;
+            <span class="hljs-keyword">var</span> newJpos = ((sinB * (Ipos-RotPtX)) + (cosB * (Jpos-RotPtY))) + RotPtY;
+            PtNew.I = newIpos - PtNew.X;
+            PtNew.J = newJpos - PtNew.Y;
+		}
+	}
+	<span class="hljs-keyword">return</span> PtNew;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Point X, Point Y, Point Z, Angle</p></div></div><div class="code"><div class="wrapper">exports.shearX = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">PtNew,angle</span>)</span>{
+
+    angle = (angle * (-<span class="hljs-number">1</span>))/<span class="hljs-number">180</span>*<span class="hljs-built_in">Math</span>.PI;
+	PtNew.X = PtNew.X + (angle * PtNew.Y);
+
+	<span class="hljs-keyword">return</span> PtNew;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Point X, Point Y, Point Z, Angle</p></div></div><div class="code"><div class="wrapper">exports.shearY = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">PtNew, angle</span>)</span>{
+
+    angle = (angle * (-<span class="hljs-number">1</span>))/<span class="hljs-number">180</span>*<span class="hljs-built_in">Math</span>.PI;
+	PtNew.Y = PtNew.Y + (angle * PtNew.X);
+
+	<span class="hljs-keyword">return</span> PtNew;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Point X, Point Y, Point Z, Scale X, Scale Y, Scale Origin X, Scale Origin Y</p></div></div><div class="code"><div class="wrapper">exports.scale = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">PtNew,scaleX,scaleY,scalePtX,scalePtY</span>)</span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p> log.debug(&quot;scaling&quot;);</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( scaleX !== <span class="hljs-number">1</span> &amp;&amp; <span class="hljs-string">"X"</span> <span class="hljs-keyword">in</span> PtNew ) { 
+	    PtNew.X = (scaleX*PtNew.X)+(scalePtX*(<span class="hljs-number">1</span>-scaleX)); 
+	}
+	<span class="hljs-keyword">if</span> ( scaleY !== <span class="hljs-number">1</span> &amp;&amp; <span class="hljs-string">"Y"</span> <span class="hljs-keyword">in</span> PtNew ) {
+		PtNew.Y = (scaleY*PtNew.Y)+(scalePtY*(<span class="hljs-number">1</span>-scaleY));
+	}
+    <span class="hljs-keyword">return</span> PtNew;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Point X, Point Y, Point Z, X Move Distance, Y Move Distance, Z Move Distance</p></div></div><div class="code"><div class="wrapper">exports.translate = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">PtNew, MDistX, MDistY, MDistZ</span>)</span>{
+
+	<span class="hljs-keyword">if</span> ( MDistX !== <span class="hljs-number">0</span> &amp;&amp; <span class="hljs-string">"X"</span> <span class="hljs-keyword">in</span> PtNew ) { PtNew.X = PtNew.X + MDistX; }
+	<span class="hljs-keyword">if</span> ( MDistY !== <span class="hljs-number">0</span> &amp;&amp; <span class="hljs-string">"Y"</span> <span class="hljs-keyword">in</span> PtNew ) { PtNew.Y = PtNew.Y + MDistY; }
+	<span class="hljs-keyword">if</span> ( MDistZ !== <span class="hljs-number">0</span> &amp;&amp; <span class="hljs-string">"Z"</span> <span class="hljs-keyword">in</span> PtNew ) { PtNew.Z = PtNew.Z + MDistZ; }
+
+    <span class="hljs-keyword">return</span> PtNew;
+};</div></div></div></div></body></html>

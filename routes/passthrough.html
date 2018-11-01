@@ -1,0 +1,40 @@
+<!DOCTYPE html><html lang="en"><head><title>routes/passthrough</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../"><meta name="groc-document-path" content="routes/passthrough"><meta name="groc-project-path" content="routes/passthrough.js"><link rel="stylesheet" type="text/css" media="all" href="../assets/style.css"><script type="text/javascript" src="../assets/behavior.js"></script><body><div id="meta"><div class="file-path">routes/passthrough.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs'</span>);
+<span class="hljs-keyword">var</span> machine = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../machine'</span>).machine;
+<span class="hljs-keyword">var</span> log=<span class="hljs-built_in">require</span>(<span class="hljs-string">'../log'</span>).logger(<span class="hljs-string">"passthrough"</span>);
+<span class="hljs-keyword">var</span> restify = <span class="hljs-built_in">require</span>(<span class="hljs-string">'restify'</span>);
+<span class="hljs-keyword">var</span> path_to_passthrough_app =  <span class="hljs-string">"./static/passthrough.html"</span>;
+<span class="hljs-keyword">var</span> clients_limit = <span class="hljs-number">1</span>;
+<span class="hljs-keyword">var</span> nb_clients=<span class="hljs-number">0</span>;
+
+connect = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">socket</span>) </span>{
+
+	log.debug(<span class="hljs-string">"new_client for passthrough"</span>);
+	nb_clients++;
+	<span class="hljs-keyword">if</span> (nb_clients&lt;=clients_limit){ <span class="hljs-comment">// avoid too many connection on the g2 passthrough functionnality.</span>
+		machine.enable_passthrough(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err,err_msg</span>)</span>{
+			<span class="hljs-keyword">if</span>(err){socket.emit(<span class="hljs-string">"err"</span>,err_msg);<span class="hljs-keyword">return</span>;}
+			socket.on(<span class="hljs-string">'msg'</span>,<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">msg</span>)</span>{
+				<span class="hljs-keyword">var</span> data =msg;
+				data+=<span class="hljs-string">"\n"</span>;
+				data.trim();
+				machine.driver.write(data);
+			});
+			machine.on(<span class="hljs-string">'raw_data'</span>,<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data</span>)</span>{
+					socket.emit(<span class="hljs-string">"msg"</span>,data);
+			});
+		});
+	}
+	socket.on(<span class="hljs-string">'disconnect'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		log.debug(<span class="hljs-string">"client disconnected"</span>);
+		nb_clients--;
+		machine.disable_passthrough();
+	});
+};
+
+passthrough_app = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req,res,next</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>serve a static file</p></div></div><div class="code"><div class="wrapper">	res.writeHead(<span class="hljs-number">200</span>, {<span class="hljs-string">'Content-Type'</span>: <span class="hljs-string">'text/html'</span>});
+	fs.createReadStream(path_to_passthrough_app ).pipe(res);
+};
+
+
+<span class="hljs-built_in">module</span>.exports = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">server</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>server.get(&quot;/passthrough&quot;,passthrough_app);
+server.io.of(&#39;/passthrough&#39;).on(&#39;connection&#39;, connect);</p></div></div><div class="code"><div class="wrapper">};</div></div></div></div></body></html>

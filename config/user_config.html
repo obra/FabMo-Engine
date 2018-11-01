@@ -1,0 +1,175 @@
+<!DOCTYPE html><html lang="en"><head><title>config/user_config</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../"><meta name="groc-document-path" content="config/user_config"><meta name="groc-project-path" content="config/user_config.js"><link rel="stylesheet" type="text/css" media="all" href="../assets/style.css"><script type="text/javascript" src="../assets/behavior.js"></script><body><div id="meta"><div class="file-path">config/user_config.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>user_config.js</p>
+<p>This module defines the configuration system for managing user accounts.</p>
+<p>FabMo is a single user system - only one distinct account can be logged in at once, 
+but the same user account can log in from multiple locations.  The reasoning behind this
+decision is that while it doesn&#39;t really make sense for multiple users to be using a tool at once,
+it is typical for one user to be logged in from two different places at once, for example
+their computer and their phone.</p>
+<p>User data, like other configuration data, is stored in a JSON file in the configuration directory.
+The objects and methods in this folder are for managing that configuration in a way that obeys
+FabMo&#39;s internal policy for user management.  Passwords are all hashed for storage.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> crypto = <span class="hljs-built_in">require</span>(<span class="hljs-string">'crypto'</span>);
+<span class="hljs-keyword">var</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'util'</span>);
+<span class="hljs-keyword">var</span> extend = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../util'</span>).extend;
+<span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs-extra'</span>);
+<span class="hljs-keyword">var</span> Config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./config'</span>).Config;
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../log'</span>);
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../log'</span>).logger(<span class="hljs-string">'config'</span>);
+<span class="hljs-keyword">var</span> profiles = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../profiles'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This is the canonical account for the &#39;admin&#39; user</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> DEFAULT_ADMIN_PASSWORD = <span class="hljs-string">'go2fabmo'</span>;
+<span class="hljs-keyword">var</span> DEFAULT_ADMIN_USER = <span class="hljs-string">'admin'</span>;
+
+UserConfig = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">driver</span>) </span>{
+	Config.call(<span class="hljs-keyword">this</span>, <span class="hljs-string">'user'</span>);
+};
+util.inherits(UserConfig, Config);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create a user configuration file if one does not already exist.
+  callback - Called with an error if the file couldn&#39;t be created</p></div></div><div class="code"><div class="wrapper">UserConfig.prototype.setUpFile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>)</span>{
+    <span class="hljs-keyword">var</span> user_file = config.getDataDir() + <span class="hljs-string">'/config/user.json'</span>;
+	<span class="hljs-keyword">var</span> pass_shasum = crypto.createHash(<span class="hljs-string">'sha256'</span>).update(DEFAULT_ADMIN_PASSWORD).digest(<span class="hljs-string">'hex'</span>);
+	<span class="hljs-keyword">var</span> newUser = <span class="hljs-keyword">this</span>.User(DEFAULT_ADMIN_USER,pass_shasum,<span class="hljs-literal">true</span>);
+	<span class="hljs-keyword">var</span> data = <span class="hljs-built_in">JSON</span>.stringify(newUser);
+    fs.writeFile(user_file, data, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>)</span>{
+        <span class="hljs-keyword">if</span>(err){
+            callback(err);
+        } <span class="hljs-keyword">else</span> {
+			log.info(<span class="hljs-string">'User File Created...'</span>);	
+				callback(<span class="hljs-literal">null</span>);
+			}
+    });
+    
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Typical update function (see config.js)</p></div></div><div class="code"><div class="wrapper">UserConfig.prototype.update = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data, callback, force</span>) </span>{
+		<span class="hljs-keyword">try</span> {
+			extend(<span class="hljs-keyword">this</span>._cache, data, force);
+		} <span class="hljs-keyword">catch</span> (e) {
+			<span class="hljs-keyword">return</span> callback(e);
+		}
+			<span class="hljs-keyword">this</span>.save(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) {
+				callback(err);
+			} <span class="hljs-keyword">else</span> {
+				callback(<span class="hljs-literal">null</span>, result);
+			}
+		});
+};
+
+
+UserConfig.prototype.initUsers = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>._loaded = <span class="hljs-literal">true</span>;
+	<span class="hljs-keyword">this</span>.update(data, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>)</span>{
+		<span class="hljs-keyword">if</span>(err){
+			callback(err);
+		} <span class="hljs-keyword">else</span> {
+			callback(data);
+		}
+	}.bind(<span class="hljs-keyword">this</span>));
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create a user with the provided properties
+TODO may want to rename this method &quot;createUser&quot; or something.  The noun-like name
+     and capitalization makes it seem like this is a constructor (which it kind of is, but isn&#39;t)
+     isAdmin - boolean, true for user is an admin user
+  created_at - Datetime for creation.  (Default = Date.now())</p></div></div><div class="code"><div class="wrapper">UserConfig.prototype.User = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">username,password,isAdmin,created_at</span>) </span>{
+	<span class="hljs-keyword">var</span> obj = {};
+	 obj[username] = {
+		<span class="hljs-string">"password"</span> : password,
+		<span class="hljs-string">"isAdmin"</span> : isAdmin || <span class="hljs-literal">false</span>,
+		<span class="hljs-string">"created_at"</span> : created_at || <span class="hljs-built_in">Date</span>.now()
+	}
+	<span class="hljs-keyword">return</span> obj;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check the provided password and return true if it is correct for this user
+  username - The username of the user whose password is being checked
+  password - The password to check</p></div></div><div class="code"><div class="wrapper">UserConfig.prototype.validPassword= <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">username, password</span>) </span>{
+	<span class="hljs-keyword">var</span> pass_shasum = crypto.createHash(<span class="hljs-string">'sha256'</span>).update(password).digest(<span class="hljs-string">'hex'</span>);
+	<span class="hljs-keyword">if</span>(pass_shasum === <span class="hljs-keyword">this</span>._cache[username].password){
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+	}<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(password === <span class="hljs-keyword">this</span>._cache[username].password){</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO is this really ok to do?</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+	}<span class="hljs-keyword">else</span>{
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Delete the provided user from the configuration
+  username - The user to delete
+  callback - Called with an error if there&#39;s an error.</p></div></div><div class="code"><div class="wrapper">UserConfig.prototype.delete = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">username, callback</span>) </span>{
+	<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>._cache[username];
+	<span class="hljs-keyword">this</span>.update(<span class="hljs-keyword">this</span>._cache, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err,data</span>)</span>{
+		<span class="hljs-keyword">if</span> (err) {
+			callback(err);
+		} <span class="hljs-keyword">else</span> {
+			callback(<span class="hljs-literal">null</span>, <span class="hljs-string">'deleted '</span> + username);  <span class="hljs-comment">// TODO : Do we need the "success message" here?</span>
+		}
+	});
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>verify user password and encrypt it.
+Passwords must be between 5-15 characters and be composed only of letters numbers and a few allowable symbols.
+  password - The password tp check
+  callback - Called with the hashed pasword </p></div></div><div class="code"><div class="wrapper">UserConfig.prototype.verifyAndEncryptPassword = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">password,callback</span>) </span>{
+	<span class="hljs-keyword">if</span>(!<span class="hljs-regexp">/^([a-zA-Z0-9@*#]{5,15})$/</span>.test(password) ){ <span class="hljs-comment">//validatepassword</span>
+		<span class="hljs-keyword">if</span>(callback) callback(<span class="hljs-string">'Password not valid, it should contain between 5 and 15 characters. The only special characters authorized are "@ * #".'</span>,<span class="hljs-literal">null</span>);
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">undefined</span>;
+	}
+	<span class="hljs-keyword">var</span> pass_shasum = crypto.createHash(<span class="hljs-string">'sha256'</span>).update(password).digest(<span class="hljs-string">'hex'</span>); <span class="hljs-comment">// save encrypted password</span>
+	<span class="hljs-keyword">if</span>(callback)callback(<span class="hljs-literal">null</span>,pass_shasum);
+	<span class="hljs-keyword">return</span> pass_shasum;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Grant user admin status
+  username - The user to elevate
+  callback - Called with an error if user doesn&#39;t exist or couldn&#39;t elevate</p></div></div><div class="code"><div class="wrapper">UserConfig.prototype.grantAdmin = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">username, callback</span>)</span>{
+	<span class="hljs-keyword">this</span>.findOne(username, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>)</span>{
+		<span class="hljs-keyword">if</span>(err)callback(err) 
+		<span class="hljs-keyword">else</span> {
+			data.isAdmin = <span class="hljs-literal">true</span>;
+			<span class="hljs-keyword">this</span>.update(data, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>)</span>{
+				<span class="hljs-keyword">if</span> (err){
+					callback(err);
+				} <span class="hljs-keyword">else</span> {
+					callback(<span class="hljs-literal">null</span>);
+				}
+			})
+		}
+	});
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Revoke user admin status
+  username - The user to demote
+  callback - Called with an error if user doesn&#39;t exist or couldn&#39;t demote</p></div></div><div class="code"><div class="wrapper">UserConfig.prototype.revokeAdmin = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">username, callback</span>)</span>{
+	<span class="hljs-keyword">this</span>.findOne(username, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>)</span>{
+		<span class="hljs-keyword">if</span>(err)callback(err) 
+		<span class="hljs-keyword">else</span> {
+			data.isAdmin = <span class="hljs-literal">false</span>;
+			<span class="hljs-keyword">this</span>.update(data, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>)</span>{
+				<span class="hljs-keyword">if</span> (err){
+					callback(err);
+				} <span class="hljs-keyword">else</span> {
+					callback(<span class="hljs-string">'Admin granted'</span>);
+				}
+			})
+		}
+	});
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Add the specified user
+  username - The name of the user to add
+  password - The password for the new user
+  callback - Called with the new user object, or error if there was an error</p></div></div><div class="code"><div class="wrapper">UserConfig.prototype.add = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">username,password,callback</span>)</span>{
+	<span class="hljs-keyword">if</span>(!<span class="hljs-regexp">/^([a-zA-Z0-9]{3,20})$/</span>.test(username) ){ <span class="hljs-comment">//validate username</span>
+		callback(<span class="hljs-string">'Username not valid, it should contain between 3 and 20 characters. Special characters are not authorized.'</span>,<span class="hljs-literal">null</span>);
+		<span class="hljs-keyword">return</span> ;
+	}
+	<span class="hljs-keyword">this</span>.verifyAndEncryptPassword(password,<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err,pass_shasum</span>)</span>{
+		<span class="hljs-keyword">if</span> (err){callback(err,password);<span class="hljs-keyword">return</span> ;}
+			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._cache.hasOwnProperty(username)){
+				log.info(<span class="hljs-string">'User already exists!!!!'</span>)
+				callback(<span class="hljs-string">'Username already taken !'</span>,<span class="hljs-literal">null</span>);
+				<span class="hljs-keyword">return</span> ;
+			}<span class="hljs-keyword">else</span>{
+					<span class="hljs-keyword">var</span> newUser = <span class="hljs-keyword">this</span>.User(username ,pass_shasum);
+					<span class="hljs-keyword">this</span>.update(newUser, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err,data</span>)</span>{
+						<span class="hljs-keyword">if</span> (err) {
+							<span class="hljs-built_in">console</span>.log(err);
+						} <span class="hljs-keyword">else</span> {
+							callback(<span class="hljs-literal">null</span>, newUser);
+						}
+					}, <span class="hljs-literal">true</span>);
+				<span class="hljs-keyword">return</span> ;
+			}
+	}.bind(<span class="hljs-keyword">this</span>))
+}
+
+<span class="hljs-comment">//Maybe move this to the routes or whatever </span>
+UserConfig.prototype.findOne = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">username,callback</span>)</span>{
+	username <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>._cache ? callback(<span class="hljs-literal">null</span>, <span class="hljs-keyword">this</span>._cache[username]) : callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'The username '</span> + username + <span class="hljs-string">' is invalid.'</span>), <span class="hljs-literal">null</span>);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get a map of all user ids to values
+TODO: No need for a callback here - maybe just use a return statement?</p></div></div><div class="code"><div class="wrapper">UserConfig.prototype.getAll = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>)</span>{
+	callback(<span class="hljs-keyword">this</span>._cache);
+}
+
+exports.UserConfig = UserConfig;</div></div></div></div></body></html>

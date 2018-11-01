@@ -1,0 +1,432 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/ajax</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/ajax"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/ajax.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/ajax.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"./core"</span>,
+	<span class="hljs-string">"./var/rnotwhite"</span>,
+	<span class="hljs-string">"./ajax/var/nonce"</span>,
+	<span class="hljs-string">"./ajax/var/rquery"</span>,
+	<span class="hljs-string">"./core/init"</span>,
+	<span class="hljs-string">"./ajax/parseJSON"</span>,
+	<span class="hljs-string">"./ajax/parseXML"</span>,
+	<span class="hljs-string">"./deferred"</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery, rnotwhite, nonce, rquery </span>) </span>{
+
+<span class="hljs-keyword">var</span>
+	rhash = <span class="hljs-regexp">/#.*$/</span>,
+	rts = <span class="hljs-regexp">/([?&amp;])_=[^&amp;]*/</span>,
+	rheaders = <span class="hljs-regexp">/^(.*?):[ \t]*([^\r\n]*)$/mg</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><h1 id="7653-8125-8152-local-protocol-detection">7653, #8125, #8152: local protocol detection</h1></div></div></div><div class="segment"><div class="code"><div class="wrapper">	rlocalProtocol = <span class="hljs-regexp">/^(?:about|app|app-storage|.+-extension|file|res|widget):$/</span>,
+	rnoContent = <span class="hljs-regexp">/^(?:GET|HEAD)$/</span>,
+	rprotocol = <span class="hljs-regexp">/^\/\//</span>,
+	rurl = <span class="hljs-regexp">/^([\w.+-]+:)(?:\/\/(?:[^\/?#]*@|)([^\/?#:]*)(?::(\d+)|)|)/</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Prefilters
+1) They are useful to introduce custom dataTypes (see ajax/jsonp.js for an example)
+2) These are called:</p>
+<ul>
+<li>BEFORE asking for a transport</li>
+<li>AFTER param serialization (s.data is a string if s.processData is true)
+3) key is the dataType
+4) the catchall symbol &quot;<em>&quot; can be used
+5) execution will start with transport dataType and THEN continue down to &quot;</em>&quot; if needed</li>
+</ul></div></div><div class="code"><div class="wrapper">	prefilters = {},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Transports bindings
+1) key is the dataType
+2) the catchall symbol &quot;<em>&quot; can be used
+3) selection will start with transport dataType and THEN go to &quot;</em>&quot; if needed</p></div></div><div class="code"><div class="wrapper">	transports = {},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Avoid comment-prolog char sequence (#10098); must appease lint and evade compression</p></div></div><div class="code"><div class="wrapper">	allTypes = <span class="hljs-string">"*/"</span>.concat( <span class="hljs-string">"*"</span> ),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Document location</p></div></div><div class="code"><div class="wrapper">	ajaxLocation = <span class="hljs-built_in">window</span>.location.href,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Segment location into parts</p></div></div><div class="code"><div class="wrapper">	ajaxLocParts = rurl.exec( ajaxLocation.toLowerCase() ) || [];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Base &quot;constructor&quot; for jQuery.ajaxPrefilter and jQuery.ajaxTransport</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">addToPrefiltersOrTransports</span>(<span class="hljs-params"> structure </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>dataTypeExpression is optional and defaults to &quot;*&quot;</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">return</span> <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> dataTypeExpression, func </span>) </span>{
+
+		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">typeof</span> dataTypeExpression !== <span class="hljs-string">"string"</span> ) {
+			func = dataTypeExpression;
+			dataTypeExpression = <span class="hljs-string">"*"</span>;
+		}
+
+		<span class="hljs-keyword">var</span> dataType,
+			i = <span class="hljs-number">0</span>,
+			dataTypes = dataTypeExpression.toLowerCase().match( rnotwhite ) || [];
+
+		<span class="hljs-keyword">if</span> ( jQuery.isFunction( func ) ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>For each dataType in the dataTypeExpression</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">while</span> ( (dataType = dataTypes[i++]) ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Prepend if requested</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( dataType[<span class="hljs-number">0</span>] === <span class="hljs-string">"+"</span> ) {
+					dataType = dataType.slice( <span class="hljs-number">1</span> ) || <span class="hljs-string">"*"</span>;
+					(structure[ dataType ] = structure[ dataType ] || []).unshift( func );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Otherwise append</p></div></div><div class="code"><div class="wrapper">				} <span class="hljs-keyword">else</span> {
+					(structure[ dataType ] = structure[ dataType ] || []).push( func );
+				}
+			}
+		}
+	};
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Base inspection function for prefilters and transports</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">inspectPrefiltersOrTransports</span>(<span class="hljs-params"> structure, options, originalOptions, jqXHR </span>) </span>{
+
+	<span class="hljs-keyword">var</span> inspected = {},
+		seekingTransport = ( structure === transports );
+
+	<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">inspect</span>(<span class="hljs-params"> dataType </span>) </span>{
+		<span class="hljs-keyword">var</span> selected;
+		inspected[ dataType ] = <span class="hljs-literal">true</span>;
+		jQuery.each( structure[ dataType ] || [], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> _, prefilterOrFactory </span>) </span>{
+			<span class="hljs-keyword">var</span> dataTypeOrTransport = prefilterOrFactory( options, originalOptions, jqXHR );
+			<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">typeof</span> dataTypeOrTransport === <span class="hljs-string">"string"</span> &amp;&amp; !seekingTransport &amp;&amp; !inspected[ dataTypeOrTransport ] ) {
+				options.dataTypes.unshift( dataTypeOrTransport );
+				inspect( dataTypeOrTransport );
+				<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+			} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( seekingTransport ) {
+				<span class="hljs-keyword">return</span> !( selected = dataTypeOrTransport );
+			}
+		});
+		<span class="hljs-keyword">return</span> selected;
+	}
+
+	<span class="hljs-keyword">return</span> inspect( options.dataTypes[ <span class="hljs-number">0</span> ] ) || !inspected[ <span class="hljs-string">"*"</span> ] &amp;&amp; inspect( <span class="hljs-string">"*"</span> );
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A special extend for ajax options
+that takes &quot;flat&quot; options (not to be deep extended)
+Fixes #9887</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">ajaxExtend</span>(<span class="hljs-params"> target, src </span>) </span>{
+	<span class="hljs-keyword">var</span> key, deep,
+		flatOptions = jQuery.ajaxSettings.flatOptions || {};
+
+	<span class="hljs-keyword">for</span> ( key <span class="hljs-keyword">in</span> src ) {
+		<span class="hljs-keyword">if</span> ( src[ key ] !== <span class="hljs-literal">undefined</span> ) {
+			( flatOptions[ key ] ? target : ( deep || (deep = {}) ) )[ key ] = src[ key ];
+		}
+	}
+	<span class="hljs-keyword">if</span> ( deep ) {
+		jQuery.extend( <span class="hljs-literal">true</span>, target, deep );
+	}
+
+	<span class="hljs-keyword">return</span> target;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handles responses to an ajax request:</p>
+<ul>
+<li>finds the right dataType (mediates between content-type and expected dataType)</li>
+<li>returns the corresponding response</li>
+</ul></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">ajaxHandleResponses</span>(<span class="hljs-params"> s, jqXHR, responses </span>) </span>{
+
+	<span class="hljs-keyword">var</span> ct, type, finalDataType, firstDataType,
+		contents = s.contents,
+		dataTypes = s.dataTypes;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Remove auto dataType and get content-type in the process</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">while</span> ( dataTypes[ <span class="hljs-number">0</span> ] === <span class="hljs-string">"*"</span> ) {
+		dataTypes.shift();
+		<span class="hljs-keyword">if</span> ( ct === <span class="hljs-literal">undefined</span> ) {
+			ct = s.mimeType || jqXHR.getResponseHeader(<span class="hljs-string">"Content-Type"</span>);
+		}
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check if we&#39;re dealing with a known content-type</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( ct ) {
+		<span class="hljs-keyword">for</span> ( type <span class="hljs-keyword">in</span> contents ) {
+			<span class="hljs-keyword">if</span> ( contents[ type ] &amp;&amp; contents[ type ].test( ct ) ) {
+				dataTypes.unshift( type );
+				<span class="hljs-keyword">break</span>;
+			}
+		}
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check to see if we have a response for the expected dataType</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( dataTypes[ <span class="hljs-number">0</span> ] <span class="hljs-keyword">in</span> responses ) {
+		finalDataType = dataTypes[ <span class="hljs-number">0</span> ];
+	} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Try convertible dataTypes</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">for</span> ( type <span class="hljs-keyword">in</span> responses ) {
+			<span class="hljs-keyword">if</span> ( !dataTypes[ <span class="hljs-number">0</span> ] || s.converters[ type + <span class="hljs-string">" "</span> + dataTypes[<span class="hljs-number">0</span>] ] ) {
+				finalDataType = type;
+				<span class="hljs-keyword">break</span>;
+			}
+			<span class="hljs-keyword">if</span> ( !firstDataType ) {
+				firstDataType = type;
+			}
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Or just use first one</p></div></div><div class="code"><div class="wrapper">		finalDataType = finalDataType || firstDataType;
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If we found a dataType
+We add the dataType to the list if needed
+and return the corresponding response</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( finalDataType ) {
+		<span class="hljs-keyword">if</span> ( finalDataType !== dataTypes[ <span class="hljs-number">0</span> ] ) {
+			dataTypes.unshift( finalDataType );
+		}
+		<span class="hljs-keyword">return</span> responses[ finalDataType ];
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Chain conversions given the request and the original response
+Also sets the responseXXX fields on the jqXHR instance</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">ajaxConvert</span>(<span class="hljs-params"> s, response, jqXHR, isSuccess </span>) </span>{
+	<span class="hljs-keyword">var</span> conv2, current, conv, tmp, prev,
+		converters = {},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Work with a copy of dataTypes in case we need to modify it for conversion</p></div></div><div class="code"><div class="wrapper">		dataTypes = s.dataTypes.slice();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create converters map with lowercased keys</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span> ( dataTypes[ <span class="hljs-number">1</span> ] ) {
+		<span class="hljs-keyword">for</span> ( conv <span class="hljs-keyword">in</span> s.converters ) {
+			converters[ conv.toLowerCase() ] = s.converters[ conv ];
+		}
+	}
+
+	current = dataTypes.shift();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Convert to each sequential dataType</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">while</span> ( current ) {
+
+		<span class="hljs-keyword">if</span> ( s.responseFields[ current ] ) {
+			jqXHR[ s.responseFields[ current ] ] = response;
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Apply the dataFilter if provided</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( !prev &amp;&amp; isSuccess &amp;&amp; s.dataFilter ) {
+			response = s.dataFilter( response, s.dataType );
+		}
+
+		prev = current;
+		current = dataTypes.shift();
+
+		<span class="hljs-keyword">if</span> ( current ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>There&#39;s only work to do if current dataType is non-auto</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( current === <span class="hljs-string">"*"</span> ) {
+
+				current = prev;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Convert response if prev dataType is non-auto and differs from current</p></div></div><div class="code"><div class="wrapper">			} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( prev !== <span class="hljs-string">"*"</span> &amp;&amp; prev !== current ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Seek a direct converter</p></div></div><div class="code"><div class="wrapper">				conv = converters[ prev + <span class="hljs-string">" "</span> + current ] || converters[ <span class="hljs-string">"* "</span> + current ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If none found, seek a pair</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( !conv ) {
+					<span class="hljs-keyword">for</span> ( conv2 <span class="hljs-keyword">in</span> converters ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If conv2 outputs current</p></div></div><div class="code"><div class="wrapper">						tmp = conv2.split( <span class="hljs-string">" "</span> );
+						<span class="hljs-keyword">if</span> ( tmp[ <span class="hljs-number">1</span> ] === current ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If prev can be converted to accepted input</p></div></div><div class="code"><div class="wrapper">							conv = converters[ prev + <span class="hljs-string">" "</span> + tmp[ <span class="hljs-number">0</span> ] ] ||
+								converters[ <span class="hljs-string">"* "</span> + tmp[ <span class="hljs-number">0</span> ] ];
+							<span class="hljs-keyword">if</span> ( conv ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Condense equivalence converters</p></div></div><div class="code"><div class="wrapper">								<span class="hljs-keyword">if</span> ( conv === <span class="hljs-literal">true</span> ) {
+									conv = converters[ conv2 ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Otherwise, insert the intermediate dataType</p></div></div><div class="code"><div class="wrapper">								} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( converters[ conv2 ] !== <span class="hljs-literal">true</span> ) {
+									current = tmp[ <span class="hljs-number">0</span> ];
+									dataTypes.unshift( tmp[ <span class="hljs-number">1</span> ] );
+								}
+								<span class="hljs-keyword">break</span>;
+							}
+						}
+					}
+				}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Apply converter (if not an equivalence)</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( conv !== <span class="hljs-literal">true</span> ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Unless errors are allowed to bubble, catch and return them</p></div></div><div class="code"><div class="wrapper">					<span class="hljs-keyword">if</span> ( conv &amp;&amp; s[ <span class="hljs-string">"throws"</span> ] ) {
+						response = conv( response );
+					} <span class="hljs-keyword">else</span> {
+						<span class="hljs-keyword">try</span> {
+							response = conv( response );
+						} <span class="hljs-keyword">catch</span> ( e ) {
+							<span class="hljs-keyword">return</span> { state: <span class="hljs-string">"parsererror"</span>, error: conv ? e : <span class="hljs-string">"No conversion from "</span> + prev + <span class="hljs-string">" to "</span> + current };
+						}
+					}
+				}
+			}
+		}
+	}
+
+	<span class="hljs-keyword">return</span> { state: <span class="hljs-string">"success"</span>, data: response };
+}
+
+jQuery.extend({</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Counter for holding the number of active queries</p></div></div><div class="code"><div class="wrapper">	active: <span class="hljs-number">0</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Last-Modified header cache for next request</p></div></div><div class="code"><div class="wrapper">	lastModified: {},
+	etag: {},
+
+	ajaxSettings: {
+		url: ajaxLocation,
+		type: <span class="hljs-string">"GET"</span>,
+		isLocal: rlocalProtocol.test( ajaxLocParts[ <span class="hljs-number">1</span> ] ),
+		global: <span class="hljs-literal">true</span>,
+		processData: <span class="hljs-literal">true</span>,
+		<span class="hljs-keyword">async</span>: <span class="hljs-literal">true</span>,
+		contentType: <span class="hljs-string">"application/x-www-form-urlencoded; charset=UTF-8"</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>timeout: 0,
+data: null,
+dataType: null,
+username: null,
+password: null,
+cache: null,
+throws: false,
+traditional: false,
+headers: {},</p></div></div><div class="code"><div class="wrapper">		accepts: {
+			<span class="hljs-string">"*"</span>: allTypes,
+			text: <span class="hljs-string">"text/plain"</span>,
+			html: <span class="hljs-string">"text/html"</span>,
+			xml: <span class="hljs-string">"application/xml, text/xml"</span>,
+			json: <span class="hljs-string">"application/json, text/javascript"</span>
+		},
+
+		contents: {
+			xml: <span class="hljs-regexp">/xml/</span>,
+			html: <span class="hljs-regexp">/html/</span>,
+			json: <span class="hljs-regexp">/json/</span>
+		},
+
+		responseFields: {
+			xml: <span class="hljs-string">"responseXML"</span>,
+			text: <span class="hljs-string">"responseText"</span>,
+			json: <span class="hljs-string">"responseJSON"</span>
+		},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Data converters
+Keys separate source (or catchall &quot;*&quot;) and destination types with a single space</p></div></div><div class="code"><div class="wrapper">		converters: {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Convert anything to text</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-string">"* text"</span>: <span class="hljs-built_in">String</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Text to html (true = no transformation)</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-string">"text html"</span>: <span class="hljs-literal">true</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Evaluate text as a json expression</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-string">"text json"</span>: jQuery.parseJSON,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Parse text as xml</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-string">"text xml"</span>: jQuery.parseXML
+		},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>For options that shouldn&#39;t be deep extended:
+you can add your own custom options here if
+and when you create one that shouldn&#39;t be
+deep extended (see ajaxExtend)</p></div></div><div class="code"><div class="wrapper">		flatOptions: {
+			url: <span class="hljs-literal">true</span>,
+			context: <span class="hljs-literal">true</span>
+		}
+	},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Creates a full fledged settings object into target
+with both ajaxSettings and settings fields.
+If target is omitted, writes into ajaxSettings.</p></div></div><div class="code"><div class="wrapper">	ajaxSetup: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> target, settings </span>) </span>{
+		<span class="hljs-keyword">return</span> settings ?</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Building a settings object</p></div></div><div class="code"><div class="wrapper">			ajaxExtend( ajaxExtend( target, jQuery.ajaxSettings ), settings ) :</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Extending ajaxSettings</p></div></div><div class="code"><div class="wrapper">			ajaxExtend( jQuery.ajaxSettings, target );
+	},
+
+	ajaxPrefilter: addToPrefiltersOrTransports( prefilters ),
+	ajaxTransport: addToPrefiltersOrTransports( transports ),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Main method</p></div></div><div class="code"><div class="wrapper">	ajax: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> url, options </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If url is an object, simulate pre-1.5 signature</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( <span class="hljs-keyword">typeof</span> url === <span class="hljs-string">"object"</span> ) {
+			options = url;
+			url = <span class="hljs-literal">undefined</span>;
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Force options to be an object</p></div></div><div class="code"><div class="wrapper">		options = options || {};
+
+		<span class="hljs-keyword">var</span> transport,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>URL without anti-cache param</p></div></div><div class="code"><div class="wrapper">			cacheURL,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Response headers</p></div></div><div class="code"><div class="wrapper">			responseHeadersString,
+			responseHeaders,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>timeout handle</p></div></div><div class="code"><div class="wrapper">			timeoutTimer,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Cross-domain detection vars</p></div></div><div class="code"><div class="wrapper">			parts,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>To know if global events are to be dispatched</p></div></div><div class="code"><div class="wrapper">			fireGlobals,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Loop variable</p></div></div><div class="code"><div class="wrapper">			i,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create the final options object</p></div></div><div class="code"><div class="wrapper">			s = jQuery.ajaxSetup( {}, options ),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Callbacks context</p></div></div><div class="code"><div class="wrapper">			callbackContext = s.context || s,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Context for global events is callbackContext if it is a DOM node or jQuery collection</p></div></div><div class="code"><div class="wrapper">			globalEventContext = s.context &amp;&amp; ( callbackContext.nodeType || callbackContext.jquery ) ?
+				jQuery( callbackContext ) :
+				jQuery.event,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deferreds</p></div></div><div class="code"><div class="wrapper">			deferred = jQuery.Deferred(),
+			completeDeferred = jQuery.Callbacks(<span class="hljs-string">"once memory"</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Status-dependent callbacks</p></div></div><div class="code"><div class="wrapper">			statusCode = s.statusCode || {},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Headers (they are sent all at once)</p></div></div><div class="code"><div class="wrapper">			requestHeaders = {},
+			requestHeadersNames = {},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The jqXHR state</p></div></div><div class="code"><div class="wrapper">			state = <span class="hljs-number">0</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Default abort message</p></div></div><div class="code"><div class="wrapper">			strAbort = <span class="hljs-string">"canceled"</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Fake xhr</p></div></div><div class="code"><div class="wrapper">			jqXHR = {
+				readyState: <span class="hljs-number">0</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Builds headers hashtable if needed</p></div></div><div class="code"><div class="wrapper">				getResponseHeader: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> key </span>) </span>{
+					<span class="hljs-keyword">var</span> match;
+					<span class="hljs-keyword">if</span> ( state === <span class="hljs-number">2</span> ) {
+						<span class="hljs-keyword">if</span> ( !responseHeaders ) {
+							responseHeaders = {};
+							<span class="hljs-keyword">while</span> ( (match = rheaders.exec( responseHeadersString )) ) {
+								responseHeaders[ match[<span class="hljs-number">1</span>].toLowerCase() ] = match[ <span class="hljs-number">2</span> ];
+							}
+						}
+						match = responseHeaders[ key.toLowerCase() ];
+					}
+					<span class="hljs-keyword">return</span> match == <span class="hljs-literal">null</span> ? <span class="hljs-literal">null</span> : match;
+				},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Raw string</p></div></div><div class="code"><div class="wrapper">				getAllResponseHeaders: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+					<span class="hljs-keyword">return</span> state === <span class="hljs-number">2</span> ? responseHeadersString : <span class="hljs-literal">null</span>;
+				},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Caches the header</p></div></div><div class="code"><div class="wrapper">				setRequestHeader: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> name, value </span>) </span>{
+					<span class="hljs-keyword">var</span> lname = name.toLowerCase();
+					<span class="hljs-keyword">if</span> ( !state ) {
+						name = requestHeadersNames[ lname ] = requestHeadersNames[ lname ] || name;
+						requestHeaders[ name ] = value;
+					}
+					<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+				},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Overrides response content-type header</p></div></div><div class="code"><div class="wrapper">				overrideMimeType: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> type </span>) </span>{
+					<span class="hljs-keyword">if</span> ( !state ) {
+						s.mimeType = type;
+					}
+					<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+				},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Status-dependent callbacks</p></div></div><div class="code"><div class="wrapper">				statusCode: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> map </span>) </span>{
+					<span class="hljs-keyword">var</span> code;
+					<span class="hljs-keyword">if</span> ( map ) {
+						<span class="hljs-keyword">if</span> ( state &lt; <span class="hljs-number">2</span> ) {
+							<span class="hljs-keyword">for</span> ( code <span class="hljs-keyword">in</span> map ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Lazy-add the new callback in a way that preserves old ones</p></div></div><div class="code"><div class="wrapper">								statusCode[ code ] = [ statusCode[ code ], map[ code ] ];
+							}
+						} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Execute the appropriate callbacks</p></div></div><div class="code"><div class="wrapper">							jqXHR.always( map[ jqXHR.status ] );
+						}
+					}
+					<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+				},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Cancel the request</p></div></div><div class="code"><div class="wrapper">				abort: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> statusText </span>) </span>{
+					<span class="hljs-keyword">var</span> finalText = statusText || strAbort;
+					<span class="hljs-keyword">if</span> ( transport ) {
+						transport.abort( finalText );
+					}
+					done( <span class="hljs-number">0</span>, finalText );
+					<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+				}
+			};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Attach deferreds</p></div></div><div class="code"><div class="wrapper">		deferred.promise( jqXHR ).complete = completeDeferred.add;
+		jqXHR.success = jqXHR.done;
+		jqXHR.error = jqXHR.fail;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Remove hash character (#7531: and string promotion)
+Add protocol if not provided (prefilters might expect it)
+Handle falsy url in the settings object (#10093: consistency with old signature)
+We also use the url parameter if available</p></div></div><div class="code"><div class="wrapper">		s.url = ( ( url || s.url || ajaxLocation ) + <span class="hljs-string">""</span> ).replace( rhash, <span class="hljs-string">""</span> )
+			.replace( rprotocol, ajaxLocParts[ <span class="hljs-number">1</span> ] + <span class="hljs-string">"//"</span> );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Alias method option to type as per ticket #12004</p></div></div><div class="code"><div class="wrapper">		s.type = options.method || options.type || s.method || s.type;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Extract dataTypes list</p></div></div><div class="code"><div class="wrapper">		s.dataTypes = jQuery.trim( s.dataType || <span class="hljs-string">"*"</span> ).toLowerCase().match( rnotwhite ) || [ <span class="hljs-string">""</span> ];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A cross-domain request is in order when we have a protocol:host:port mismatch</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( s.crossDomain == <span class="hljs-literal">null</span> ) {
+			parts = rurl.exec( s.url.toLowerCase() );
+			s.crossDomain = !!( parts &amp;&amp;
+				( parts[ <span class="hljs-number">1</span> ] !== ajaxLocParts[ <span class="hljs-number">1</span> ] || parts[ <span class="hljs-number">2</span> ] !== ajaxLocParts[ <span class="hljs-number">2</span> ] ||
+					( parts[ <span class="hljs-number">3</span> ] || ( parts[ <span class="hljs-number">1</span> ] === <span class="hljs-string">"http:"</span> ? <span class="hljs-string">"80"</span> : <span class="hljs-string">"443"</span> ) ) !==
+						( ajaxLocParts[ <span class="hljs-number">3</span> ] || ( ajaxLocParts[ <span class="hljs-number">1</span> ] === <span class="hljs-string">"http:"</span> ? <span class="hljs-string">"80"</span> : <span class="hljs-string">"443"</span> ) ) )
+			);
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Convert data if not already a string</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( s.data &amp;&amp; s.processData &amp;&amp; <span class="hljs-keyword">typeof</span> s.data !== <span class="hljs-string">"string"</span> ) {
+			s.data = jQuery.param( s.data, s.traditional );
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Apply prefilters</p></div></div><div class="code"><div class="wrapper">		inspectPrefiltersOrTransports( prefilters, s, options, jqXHR );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If request was aborted inside a prefilter, stop there</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( state === <span class="hljs-number">2</span> ) {
+			<span class="hljs-keyword">return</span> jqXHR;
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>We can fire global events as of now if asked to
+Don&#39;t fire events if jQuery.event is undefined in an AMD-usage scenario (#15118)</p></div></div><div class="code"><div class="wrapper">		fireGlobals = jQuery.event &amp;&amp; s.global;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Watch for a new set of requests</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( fireGlobals &amp;&amp; jQuery.active++ === <span class="hljs-number">0</span> ) {
+			jQuery.event.trigger(<span class="hljs-string">"ajaxStart"</span>);
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Uppercase the type</p></div></div><div class="code"><div class="wrapper">		s.type = s.type.toUpperCase();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Determine if request has content</p></div></div><div class="code"><div class="wrapper">		s.hasContent = !rnoContent.test( s.type );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Save the URL in case we&#39;re toying with the If-Modified-Since
+and/or If-None-Match header later on</p></div></div><div class="code"><div class="wrapper">		cacheURL = s.url;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>More options handling for requests with no content</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( !s.hasContent ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If data is available, append data to url</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( s.data ) {
+				cacheURL = ( s.url += ( rquery.test( cacheURL ) ? <span class="hljs-string">"&amp;"</span> : <span class="hljs-string">"?"</span> ) + s.data );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><h1 id="9682-remove-data-so-that-it39s-not-used-in-an-eventual-retry">9682: remove data so that it&#39;s not used in an eventual retry</h1></div></div></div><div class="segment"><div class="code"><div class="wrapper">				<span class="hljs-keyword">delete</span> s.data;
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Add anti-cache in url if needed</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( s.cache === <span class="hljs-literal">false</span> ) {
+				s.url = rts.test( cacheURL ) ?</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If there is already a &#39;_&#39; parameter, set its value</p></div></div><div class="code"><div class="wrapper">					cacheURL.replace( rts, <span class="hljs-string">"$1_="</span> + nonce++ ) :</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Otherwise add one to the end</p></div></div><div class="code"><div class="wrapper">					cacheURL + ( rquery.test( cacheURL ) ? <span class="hljs-string">"&amp;"</span> : <span class="hljs-string">"?"</span> ) + <span class="hljs-string">"_="</span> + nonce++;
+			}
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the If-Modified-Since and/or If-None-Match header, if in ifModified mode.</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( s.ifModified ) {
+			<span class="hljs-keyword">if</span> ( jQuery.lastModified[ cacheURL ] ) {
+				jqXHR.setRequestHeader( <span class="hljs-string">"If-Modified-Since"</span>, jQuery.lastModified[ cacheURL ] );
+			}
+			<span class="hljs-keyword">if</span> ( jQuery.etag[ cacheURL ] ) {
+				jqXHR.setRequestHeader( <span class="hljs-string">"If-None-Match"</span>, jQuery.etag[ cacheURL ] );
+			}
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the correct header, if data is being sent</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( s.data &amp;&amp; s.hasContent &amp;&amp; s.contentType !== <span class="hljs-literal">false</span> || options.contentType ) {
+			jqXHR.setRequestHeader( <span class="hljs-string">"Content-Type"</span>, s.contentType );
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the Accepts header for the server, depending on the dataType</p></div></div><div class="code"><div class="wrapper">		jqXHR.setRequestHeader(
+			<span class="hljs-string">"Accept"</span>,
+			s.dataTypes[ <span class="hljs-number">0</span> ] &amp;&amp; s.accepts[ s.dataTypes[<span class="hljs-number">0</span>] ] ?
+				s.accepts[ s.dataTypes[<span class="hljs-number">0</span>] ] + ( s.dataTypes[ <span class="hljs-number">0</span> ] !== <span class="hljs-string">"*"</span> ? <span class="hljs-string">", "</span> + allTypes + <span class="hljs-string">"; q=0.01"</span> : <span class="hljs-string">""</span> ) :
+				s.accepts[ <span class="hljs-string">"*"</span> ]
+		);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check for headers option</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">for</span> ( i <span class="hljs-keyword">in</span> s.headers ) {
+			jqXHR.setRequestHeader( i, s.headers[ i ] );
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Allow custom headers/mimetypes and early abort</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( s.beforeSend &amp;&amp; ( s.beforeSend.call( callbackContext, jqXHR, s ) === <span class="hljs-literal">false</span> || state === <span class="hljs-number">2</span> ) ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Abort if not done already and return</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">return</span> jqXHR.abort();
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Aborting is no longer a cancellation</p></div></div><div class="code"><div class="wrapper">		strAbort = <span class="hljs-string">"abort"</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Install callbacks on deferreds</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">for</span> ( i <span class="hljs-keyword">in</span> { success: <span class="hljs-number">1</span>, error: <span class="hljs-number">1</span>, complete: <span class="hljs-number">1</span> } ) {
+			jqXHR[ i ]( s[ i ] );
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get transport</p></div></div><div class="code"><div class="wrapper">		transport = inspectPrefiltersOrTransports( transports, s, options, jqXHR );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If no transport, we auto-abort</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( !transport ) {
+			done( -<span class="hljs-number">1</span>, <span class="hljs-string">"No Transport"</span> );
+		} <span class="hljs-keyword">else</span> {
+			jqXHR.readyState = <span class="hljs-number">1</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Send global event</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( fireGlobals ) {
+				globalEventContext.trigger( <span class="hljs-string">"ajaxSend"</span>, [ jqXHR, s ] );
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Timeout</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( s.async &amp;&amp; s.timeout &gt; <span class="hljs-number">0</span> ) {
+				timeoutTimer = setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+					jqXHR.abort(<span class="hljs-string">"timeout"</span>);
+				}, s.timeout );
+			}
+
+			<span class="hljs-keyword">try</span> {
+				state = <span class="hljs-number">1</span>;
+				transport.send( requestHeaders, done );
+			} <span class="hljs-keyword">catch</span> ( e ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Propagate exception as error if not done</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( state &lt; <span class="hljs-number">2</span> ) {
+					done( -<span class="hljs-number">1</span>, e );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Simply rethrow otherwise</p></div></div><div class="code"><div class="wrapper">				} <span class="hljs-keyword">else</span> {
+					<span class="hljs-keyword">throw</span> e;
+				}
+			}
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Callback for when everything is done</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">done</span>(<span class="hljs-params"> status, nativeStatusText, responses, headers </span>) </span>{
+			<span class="hljs-keyword">var</span> isSuccess, success, error, response, modified,
+				statusText = nativeStatusText;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Called once</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( state === <span class="hljs-number">2</span> ) {
+				<span class="hljs-keyword">return</span>;
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>State is &quot;done&quot; now</p></div></div><div class="code"><div class="wrapper">			state = <span class="hljs-number">2</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Clear timeout if it exists</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( timeoutTimer ) {
+				clearTimeout( timeoutTimer );
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Dereference transport for early garbage collection
+(no matter how long the jqXHR object will be used)</p></div></div><div class="code"><div class="wrapper">			transport = <span class="hljs-literal">undefined</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Cache response headers</p></div></div><div class="code"><div class="wrapper">			responseHeadersString = headers || <span class="hljs-string">""</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set readyState</p></div></div><div class="code"><div class="wrapper">			jqXHR.readyState = status &gt; <span class="hljs-number">0</span> ? <span class="hljs-number">4</span> : <span class="hljs-number">0</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Determine if successful</p></div></div><div class="code"><div class="wrapper">			isSuccess = status &gt;= <span class="hljs-number">200</span> &amp;&amp; status &lt; <span class="hljs-number">300</span> || status === <span class="hljs-number">304</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get response data</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( responses ) {
+				response = ajaxHandleResponses( s, jqXHR, responses );
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Convert no matter what (that way responseXXX fields are always set)</p></div></div><div class="code"><div class="wrapper">			response = ajaxConvert( s, response, jqXHR, isSuccess );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If successful, handle type chaining</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( isSuccess ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the If-Modified-Since and/or If-None-Match header, if in ifModified mode.</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( s.ifModified ) {
+					modified = jqXHR.getResponseHeader(<span class="hljs-string">"Last-Modified"</span>);
+					<span class="hljs-keyword">if</span> ( modified ) {
+						jQuery.lastModified[ cacheURL ] = modified;
+					}
+					modified = jqXHR.getResponseHeader(<span class="hljs-string">"etag"</span>);
+					<span class="hljs-keyword">if</span> ( modified ) {
+						jQuery.etag[ cacheURL ] = modified;
+					}
+				}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>if no content</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( status === <span class="hljs-number">204</span> || s.type === <span class="hljs-string">"HEAD"</span> ) {
+					statusText = <span class="hljs-string">"nocontent"</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>if not modified</p></div></div><div class="code"><div class="wrapper">				} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> ( status === <span class="hljs-number">304</span> ) {
+					statusText = <span class="hljs-string">"notmodified"</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If we have data, let&#39;s convert it</p></div></div><div class="code"><div class="wrapper">				} <span class="hljs-keyword">else</span> {
+					statusText = response.state;
+					success = response.data;
+					error = response.error;
+					isSuccess = !error;
+				}
+			} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Extract error from statusText and normalize for non-aborts</p></div></div><div class="code"><div class="wrapper">				error = statusText;
+				<span class="hljs-keyword">if</span> ( status || !statusText ) {
+					statusText = <span class="hljs-string">"error"</span>;
+					<span class="hljs-keyword">if</span> ( status &lt; <span class="hljs-number">0</span> ) {
+						status = <span class="hljs-number">0</span>;
+					}
+				}
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set data for the fake xhr object</p></div></div><div class="code"><div class="wrapper">			jqXHR.status = status;
+			jqXHR.statusText = ( nativeStatusText || statusText ) + <span class="hljs-string">""</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Success/Error</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span> ( isSuccess ) {
+				deferred.resolveWith( callbackContext, [ success, statusText, jqXHR ] );
+			} <span class="hljs-keyword">else</span> {
+				deferred.rejectWith( callbackContext, [ jqXHR, statusText, error ] );
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Status-dependent callbacks</p></div></div><div class="code"><div class="wrapper">			jqXHR.statusCode( statusCode );
+			statusCode = <span class="hljs-literal">undefined</span>;
+
+			<span class="hljs-keyword">if</span> ( fireGlobals ) {
+				globalEventContext.trigger( isSuccess ? <span class="hljs-string">"ajaxSuccess"</span> : <span class="hljs-string">"ajaxError"</span>,
+					[ jqXHR, s, isSuccess ? success : error ] );
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Complete</p></div></div><div class="code"><div class="wrapper">			completeDeferred.fireWith( callbackContext, [ jqXHR, statusText ] );
+
+			<span class="hljs-keyword">if</span> ( fireGlobals ) {
+				globalEventContext.trigger( <span class="hljs-string">"ajaxComplete"</span>, [ jqXHR, s ] );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle the global AJAX counter</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span> ( !( --jQuery.active ) ) {
+					jQuery.event.trigger(<span class="hljs-string">"ajaxStop"</span>);
+				}
+			}
+		}
+
+		<span class="hljs-keyword">return</span> jqXHR;
+	},
+
+	getJSON: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> url, data, callback </span>) </span>{
+		<span class="hljs-keyword">return</span> jQuery.get( url, data, callback, <span class="hljs-string">"json"</span> );
+	},
+
+	getScript: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> url, callback </span>) </span>{
+		<span class="hljs-keyword">return</span> jQuery.get( url, <span class="hljs-literal">undefined</span>, callback, <span class="hljs-string">"script"</span> );
+	}
+});
+
+jQuery.each( [ <span class="hljs-string">"get"</span>, <span class="hljs-string">"post"</span> ], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> i, method </span>) </span>{
+	jQuery[ method ] = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> url, data, callback, type </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Shift arguments if data argument was omitted</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( jQuery.isFunction( data ) ) {
+			type = type || callback;
+			callback = data;
+			data = <span class="hljs-literal">undefined</span>;
+		}
+
+		<span class="hljs-keyword">return</span> jQuery.ajax({
+			url: url,
+			type: method,
+			dataType: type,
+			data: data,
+			success: callback
+		});
+	};
+});
+
+<span class="hljs-keyword">return</span> jQuery;
+});</div></div></div></div></body></html>

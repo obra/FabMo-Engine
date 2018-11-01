@@ -1,0 +1,140 @@
+<!DOCTYPE html><html lang="en"><head><title>config/index</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../"><meta name="groc-document-path" content="config/index"><meta name="groc-project-path" content="config/index.js"><link rel="stylesheet" type="text/css" media="all" href="../assets/style.css"><script type="text/javascript" src="../assets/behavior.js"></script><body><div id="meta"><div class="file-path">config/index.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>config/index.js</p>
+<p>Configuration module definitions.  This file defines the main API of the FabMo configuration module.</p>
+<p>Mainly, this exports the functions and objects that are important to system configuration.
+It is also the container for the actual instance of the configuration tree and all its branches,
+which are setup using the configureXXX functions (configureEngine, configureDriver, etc..)</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> <span class="hljs-keyword">async</span> = <span class="hljs-built_in">require</span>(<span class="hljs-string">'async'</span>);
+<span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs'</span>);
+<span class="hljs-keyword">var</span> path = <span class="hljs-built_in">require</span>(<span class="hljs-string">'path'</span>);
+
+<span class="hljs-keyword">var</span> Config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./config'</span>).Config;
+<span class="hljs-keyword">var</span> EngineConfig = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./engine_config'</span>).EngineConfig;
+<span class="hljs-keyword">var</span> UserConfig = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./user_config'</span>).UserConfig;
+<span class="hljs-keyword">var</span> G2Config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./g2_config'</span>).G2Config;
+<span class="hljs-keyword">var</span> OpenSBPConfig = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./opensbp_config'</span>).OpenSBPConfig;
+<span class="hljs-keyword">var</span> MachineConfig = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./machine_config'</span>).MachineConfig;
+<span class="hljs-keyword">var</span> DashboardCofnig = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./dashboard_config'</span>).DashboardConfig;
+<span class="hljs-keyword">var</span> InstanceConfig = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./instance_config'</span>).InstanceConfig;
+<span class="hljs-keyword">var</span> ProfileConfig = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./profile_config'</span>).ProfileConfig;
+
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../log'</span>).logger(<span class="hljs-string">'config'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Provide the exported functions for managing application configuration</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Configure the engine by loading the configuration from disk, and performing
+configuration of the application based on the values loaded.</p>
+<p>Also, create <code>exports.engine</code> which is an EngineConfig object</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">configureEngine</span>(<span class="hljs-params">callback</span>) </span>{
+	exports.engine = <span class="hljs-keyword">new</span> EngineConfig();
+	exports.engine.init(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		callback();
+	});
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>These functions initialize the various branches of the configuration tree.
+Generally, this means loading the configuration from disk, applying it, and 
+assigning it as an export of this package (config.driver, config.opensbp, etc.)</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">configureOpenSBP</span>(<span class="hljs-params">callback</span>) </span>{
+	exports.opensbp = <span class="hljs-keyword">new</span> OpenSBPConfig();
+	exports.opensbp.init(callback);
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">configureDashboard</span>(<span class="hljs-params">callback</span>) </span>{
+	exports.dashboard = <span class="hljs-keyword">new</span> DashboardConfig(driver);
+	exports.dashboard.init(callback);
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">configureInstance</span>(<span class="hljs-params">driver, callback</span>) </span>{
+	exports.instance = <span class="hljs-keyword">new</span> InstanceConfig(driver);
+	exports.instance.init(callback);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The machine configuration was instantiated when this module was initialized
+TODO why is that the case for config.machine but not the others (config.opensbp, etc.)</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">configureMachine</span>(<span class="hljs-params">machine, callback</span>) </span>{
+	exports.machine.init(machine, callback);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Configure the user data
+If no user data exists, set up the first (admin) user</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">configureUser</span>(<span class="hljs-params">callback</span>)</span>{
+	exports.user = <span class="hljs-keyword">new</span> UserConfig();
+	<span class="hljs-keyword">var</span> userFile = exports.user.getConfigFile();
+	exports.user.load(userFile, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) {
+			<span class="hljs-keyword">if</span>(err.code === <span class="hljs-string">"ENOENT"</span>) {
+				log.warn(<span class="hljs-string">'Configuration file '</span> + userFile + <span class="hljs-string">' not found. Setting up first user'</span>);
+				exports.user.setUpFile(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>)</span>{
+					<span class="hljs-keyword">if</span>(err) {
+						<span class="hljs-built_in">console</span>.log(err);
+					} <span class="hljs-keyword">else</span> {
+						configureUser(callback);
+					}
+				});
+			} <span class="hljs-keyword">else</span> {
+				log.warn(<span class="hljs-string">'Problem loading the user configuration file "'</span> + userFile + <span class="hljs-string">'": '</span> + err.message);
+			}
+		} <span class="hljs-keyword">else</span> {
+			exports.user.initUsers(data, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">msg</span>)</span>{
+				log.info(msg);
+				callback();
+			});	
+		}
+	});
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Configure the driver by loading the configuration from disk and synchronizing
+it with the configuration of the actual physical driver.
+Also, create <code>exports.driver</code> which is a G2Config object
+  driver - An instance of the driver, which will be used to synchronize configuration</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">configureDriver</span>(<span class="hljs-params">driver, callback</span>) </span>{
+    <span class="hljs-keyword">if</span>(driver) {
+    	log.info(<span class="hljs-string">"Configuring G2 Driver..."</span>);
+    	<span class="hljs-comment">//exports.driver = new G2Config(driver);</span>
+		<span class="hljs-keyword">async</span>.series([
+		<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{ exports.driver.init(driver, callback); },
+		<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{ exports.driver.configureStatusReports(callback); }
+		],
+		<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">finished</span>(<span class="hljs-params">err, result</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { callback(err); }
+			<span class="hljs-keyword">else</span> {
+				callback(<span class="hljs-literal">null</span>, exports.driver);
+			}
+		});
+    } <span class="hljs-keyword">else</span> {
+    	log.info(<span class="hljs-string">"Creating dummy driver configuration..."</span>);
+    	exports.driver = <span class="hljs-keyword">new</span> Config();
+    }
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check a directory to see if it is writable
+(do this by writing a file there)
+  dirname - The pathname of the directory to check</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">canWriteTo</span>(<span class="hljs-params">dirname</span>) </span>{
+	<span class="hljs-keyword">try</span> {
+		test_path = path.join(dirname,<span class="hljs-string">'/.fabmoenginetest'</span>)
+		fs.writeFileSync(test_path, <span class="hljs-string">''</span>);
+		fs.unlink(test_path);
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+	} <span class="hljs-keyword">catch</span>(e) {
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get a &quot;lockfile&quot;
+The idea behind the lock file is that a running instance creates it, but it is 
+destroyed when the instance exits.  You can check for a lockfile on startup
+and refuse to start if there&#39;s an already running instance of the engine.
+On POSIX systems this lives in /var/run like you would expect,
+but on windows, it goes in the configuration data directory
+TODO - This appears no longer to be used, can probably be culled.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">getLockFile</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">var</span> lockfile_name = <span class="hljs-string">'fabmo-engine.lock'</span>;
+	<span class="hljs-keyword">switch</span>(process.platform) {
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'win32'</span>:
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'win64'</span>:
+			<span class="hljs-keyword">return</span> path.join(Config.getDataDir(), lockfile_name);
+			<span class="hljs-keyword">break</span>;
+		<span class="hljs-keyword">default</span>:
+			lockfile_dir =  <span class="hljs-string">'/var/run'</span>;
+			<span class="hljs-keyword">if</span>(canWriteTo(lockfile_dir)) {
+				<span class="hljs-keyword">return</span> path.join(lockfile_dir, lockfile_name);
+			} <span class="hljs-keyword">else</span> {
+				log.warn(<span class="hljs-string">'Lockfile not in /var/run on POSIX platform'</span>)
+				<span class="hljs-keyword">return</span> path.join(Config.getDataDir(), lockfile_name);
+			}
+			<span class="hljs-keyword">break</span>;
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Delete the approot directory
+This is the directory where apps are hosted from 
+having been copied out of app and system app storage)</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">clearAppRoot</span>(<span class="hljs-params">callback</span>) </span>{
+    util.doshell(<span class="hljs-string">'rm -rf '</span> + Config.getDataDir(<span class="hljs-string">'approot'</span>), callback);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>These are created on module initialization
+TODO: Why?  Why not create them above like the others?  (Or why not creat them down here?)</p></div></div><div class="code"><div class="wrapper">exports.machine = <span class="hljs-keyword">new</span> MachineConfig();
+exports.driver = <span class="hljs-keyword">new</span> G2Config();
+exports.profiles = <span class="hljs-keyword">new</span> ProfileConfig();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Individual startup configuration commands</p></div></div><div class="code"><div class="wrapper">exports.configureEngine = configureEngine;
+exports.configureDriver = configureDriver;
+exports.configureOpenSBP = configureOpenSBP;
+exports.configureMachine = configureMachine;
+exports.configureInstance = configureInstance;
+exports.configureUser = configureUser;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Util type functions</p></div></div><div class="code"><div class="wrapper">exports.createDataDirectories = Config.createDataDirectories;
+exports.getDataDir = Config.getDataDir;
+exports.getProfileDir = Config.getProfileDir;
+exports.getLockFile = getLockFile;
+exports.clearAppRoot = clearAppRoot</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO Silly?</p></div></div><div class="code"><div class="wrapper">exports.platform = <span class="hljs-built_in">require</span>(<span class="hljs-string">'process'</span>).platform;</div></div></div></div></body></html>

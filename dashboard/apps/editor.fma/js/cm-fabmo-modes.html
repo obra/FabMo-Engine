@@ -1,0 +1,259 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/editor.fma/js/cm-fabmo-modes</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../"><meta name="groc-document-path" content="dashboard/apps/editor.fma/js/cm-fabmo-modes"><meta name="groc-project-path" content="dashboard/apps/editor.fma/js/cm-fabmo-modes.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../assets/style.css"><script type="text/javascript" src="../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/editor.fma/js/cm-fabmo-modes.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>Example definition of a simple mode that understands a subset of
+JavaScript:</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> CodeMirror = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./codemirror.js'</span>);
+
+CodeMirror.defineSimpleMode(<span class="hljs-string">"gcode"</span>, {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The start state contains the rules that are intially used</p></div></div><div class="code"><div class="wrapper">  start: [
+    {regex: <span class="hljs-regexp">/\([^\)]*\)/i</span>, token: <span class="hljs-string">"comment"</span>},
+    {regex: <span class="hljs-regexp">/[GM]\d+/i</span>, token: <span class="hljs-string">"keyword"</span>},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>You can match multiple tokens at once. Note that the captured
+groups must span the whole string in this case</p></div></div><div class="code"><div class="wrapper">    {regex: <span class="hljs-regexp">/([A-FH-LN-Z])([+\-]?[0-9]+(?:\.[0-9]+)?)/i</span>,
+     token: [<span class="hljs-string">"variable"</span>, <span class="hljs-string">"number"</span>]},
+    {regex: <span class="hljs-regexp">/\?.*/</span>, token: <span class="hljs-string">"comment"</span>},
+    {regex: <span class="hljs-regexp">/[^\w\s]/</span>, token: <span class="hljs-string">"error"</span>}
+  ],</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The meta property contains global information about the mode. It
+can contain properties like lineComment, which are supported by
+all modes, and also directives like dontIndentStates, which are
+specific to simple modes.</p></div></div><div class="code"><div class="wrapper">  meta: {
+    dontIndentStates: [<span class="hljs-string">"comment"</span>],
+    lineComment: <span class="hljs-string">"?"</span>
+  }
+});
+
+<span class="hljs-keyword">var</span> CMD_REGEX = <span class="hljs-regexp">/^[A-Z](?:[A-Z]|[0-9]+|C\#)\b/i</span>
+<span class="hljs-keyword">var</span> LINENO_REGEX = <span class="hljs-regexp">/^N[0-9]+\b/i</span>
+<span class="hljs-keyword">var</span> LABEL_REGEX = <span class="hljs-regexp">/^[A-Z_][A-Z0-9_]*\:/i</span>
+<span class="hljs-keyword">var</span> WORD_REGEX = <span class="hljs-regexp">/^[A-Z_][A-Z0-9_]*/i</span>
+<span class="hljs-keyword">var</span> STRING_REGEX = <span class="hljs-regexp">/^"(?:[^\\]|\\.)*?"/</span>
+<span class="hljs-keyword">var</span> NUMBER_REGEX = <span class="hljs-regexp">/^0x[a-f\d]+|[-+]?(?:\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/i</span>
+<span class="hljs-keyword">var</span> SYS_VAR_REGEX = <span class="hljs-regexp">/^\%\([ \t]*[0-9]+[ \t]*\)/i</span>
+<span class="hljs-keyword">var</span> USR_VAR_REGEX = <span class="hljs-regexp">/^\&amp;[A-Z_][A-Z0-9_]*/i</span>
+<span class="hljs-keyword">var</span> PERSIST_VAR_REGEX = <span class="hljs-regexp">/^\$[A-Z_][A-Z0-9_]*/i</span>
+
+<span class="hljs-keyword">var</span> BARE_REGEX = <span class="hljs-regexp">/^[IOT]/i</span>
+<span class="hljs-keyword">var</span> COMMENT_REGEX = <span class="hljs-regexp">/^'.*/i</span>
+<span class="hljs-keyword">var</span> OPERATOR_REGEX = <span class="hljs-regexp">/^[\+\-\*\/\^\!\(\)\=\&gt;\&lt;|\=\:]/i</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">matchExpression</span>(<span class="hljs-params">stream</span>) </span>{
+  <span class="hljs-keyword">if</span>(stream.match(SYS_VAR_REGEX)) {
+    <span class="hljs-keyword">return</span> <span class="hljs-string">"variable"</span>;
+  }
+  <span class="hljs-keyword">if</span>(stream.match(USR_VAR_REGEX)) {
+    <span class="hljs-keyword">return</span> <span class="hljs-string">"variable-2"</span>;
+  }
+  <span class="hljs-keyword">if</span>(stream.match(PERSIST_VAR_REGEX)) {
+    <span class="hljs-keyword">return</span> <span class="hljs-string">"variable-3"</span>;
+  } 
+  <span class="hljs-keyword">if</span>(stream.match(NUMBER_REGEX)) {
+    <span class="hljs-keyword">return</span> <span class="hljs-string">"number"</span>;
+  }
+  <span class="hljs-keyword">if</span>(stream.match(STRING_REGEX)) {
+    <span class="hljs-keyword">return</span> <span class="hljs-string">"string"</span>;
+  }
+  <span class="hljs-keyword">if</span>(stream.match(OPERATOR_REGEX)) {
+    <span class="hljs-keyword">return</span> <span class="hljs-string">"operator"</span>;
+  }
+  <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">matchArgument</span>(<span class="hljs-params">stream</span>) </span>{
+  <span class="hljs-keyword">var</span> match = matchExpression(stream);
+  <span class="hljs-keyword">if</span>(match) { <span class="hljs-keyword">return</span> match; }
+  <span class="hljs-keyword">if</span>(stream.match(BARE_REGEX)) { <span class="hljs-keyword">return</span> <span class="hljs-string">"atom"</span>; }
+  <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+}
+
+CodeMirror.defineMode(<span class="hljs-string">"opensbp"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  <span class="hljs-keyword">return</span> {
+    startState: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+      <span class="hljs-keyword">return</span> {
+        name : <span class="hljs-string">"sol"</span>,
+      }
+    },
+
+    token: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stream, state</span>) </span>{
+      <span class="hljs-keyword">if</span>(stream.sol()) {
+        state.name = <span class="hljs-string">"sol"</span>;
+      }
+
+      <span class="hljs-keyword">if</span>(stream.eatSpace()) {
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+      }
+      <span class="hljs-keyword">if</span>(stream.eat(<span class="hljs-string">"'"</span>)) {
+        stream.skipToEnd();
+        <span class="hljs-keyword">return</span> <span class="hljs-string">'comment'</span>;
+      }
+      <span class="hljs-keyword">switch</span>(state.name) {
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"sol"</span>:
+          <span class="hljs-keyword">if</span>(stream.eatSpace()) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+          }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Line Comment</p></div></div><div class="code"><div class="wrapper">          <span class="hljs-keyword">if</span>(stream.match(COMMENT_REGEX)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"comment"</span>;
+          }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>ON INPUT statement</p></div></div><div class="code"><div class="wrapper">          <span class="hljs-keyword">if</span>(stream.match(<span class="hljs-string">"ON"</span>)) {
+            state.name = <span class="hljs-string">"on"</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"keyword"</span>;
+          } </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>LHS of an assignment</p></div></div><div class="code"><div class="wrapper">          <span class="hljs-keyword">if</span>(stream.match(SYS_VAR_REGEX)) {
+            state.name = <span class="hljs-string">"assign"</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"variable"</span>;
+          } 
+
+          <span class="hljs-keyword">if</span>(stream.match(USR_VAR_REGEX)) {
+            state.name = <span class="hljs-string">"assign"</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"variable-2"</span>;
+          } 
+
+          <span class="hljs-keyword">if</span>(stream.match(PERSIST_VAR_REGEX)) {
+            state.name = <span class="hljs-string">"assign"</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"variable-3"</span>;
+          } </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Label (for GOTOs)</p></div></div><div class="code"><div class="wrapper">          <span class="hljs-keyword">if</span>(stream.match(LABEL_REGEX)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"property"</span>;
+          }
+
+          <span class="hljs-keyword">if</span>(stream.match(<span class="hljs-regexp">/^IF/i</span>)) {
+            state.name = <span class="hljs-string">"test"</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"keyword"</span>
+          }
+
+          <span class="hljs-keyword">if</span>(stream.match(LINENO_REGEX)) {
+          	state.name = <span class="hljs-string">"gcode"</span>;
+          	<span class="hljs-keyword">return</span> <span class="hljs-string">"property"</span>;
+          }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Command mnemonic</p></div></div><div class="code"><div class="wrapper">          <span class="hljs-keyword">if</span>(stream.match(CMD_REGEX)) {
+            state.name = <span class="hljs-string">"args"</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"keyword"</span>;
+          } </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Pause command</p></div></div><div class="code"><div class="wrapper">          <span class="hljs-keyword">if</span>(stream.match(<span class="hljs-regexp">/^PAUSE\s*,?\s*/i</span>)) {
+            state.name = <span class="hljs-string">"pause"</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"keyword"</span>
+          }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Pause command</p></div></div><div class="code"><div class="wrapper">          <span class="hljs-keyword">if</span>(stream.match(<span class="hljs-regexp">/^FAIL/i</span>)) {
+            state.name = <span class="hljs-string">"fail"</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"keyword"</span>
+          }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Goto commands</p></div></div><div class="code"><div class="wrapper">          <span class="hljs-keyword">if</span>(stream.match(<span class="hljs-regexp">/^GOTO|GOSUB/i</span>)) {
+            state.name = <span class="hljs-string">"goto"</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"keyword"</span>
+          }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Singles</p></div></div><div class="code"><div class="wrapper">          <span class="hljs-keyword">if</span>(stream.match(<span class="hljs-regexp">/^RETURN|END/i</span>)) {
+            state.name = <span class="hljs-string">"single"</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"keyword"</span>;
+          }
+          stream.skipToEnd();
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"single"</span>:
+
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"args"</span>:
+          <span class="hljs-keyword">if</span>(stream.eat(<span class="hljs-string">','</span>)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>
+          }
+          <span class="hljs-keyword">var</span> match = matchArgument(stream);
+          <span class="hljs-keyword">if</span>(match) { <span class="hljs-keyword">return</span> match; }
+
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"assign"</span>:
+          <span class="hljs-keyword">var</span> match = matchExpression(stream);
+          <span class="hljs-keyword">if</span>(match) { <span class="hljs-keyword">return</span> match;}
+          stream.skipToEnd();
+          <span class="hljs-keyword">return</span> <span class="hljs-string">'string'</span>;
+
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"test"</span>:
+          <span class="hljs-keyword">var</span> match = matchExpression(stream);
+          <span class="hljs-keyword">if</span>(match) { <span class="hljs-keyword">return</span> match;}
+          <span class="hljs-keyword">if</span>(stream.match(<span class="hljs-regexp">/^THEN/i</span>)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"keyword"</span>;
+          }        
+          <span class="hljs-keyword">if</span>(stream.match(<span class="hljs-regexp">/^GOTO|GOSUB/i</span>)) {
+            state.name = <span class="hljs-string">"goto"</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"keyword"</span>;
+          }        
+          <span class="hljs-keyword">if</span>(stream.match(LABEL_REGEX)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"property"</span>;
+          }
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"goto"</span>:
+          <span class="hljs-keyword">if</span>(stream.match(WORD_REGEX)) {
+            state.name = <span class="hljs-string">"sol"</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"property"</span>            
+          }                
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"on"</span>:
+          <span class="hljs-keyword">if</span>(stream.eat(<span class="hljs-string">','</span>)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+          }          
+          <span class="hljs-keyword">if</span>(stream.match(<span class="hljs-regexp">/INP(?:UT)?/i</span>)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"keyword"</span>;
+          }   
+          <span class="hljs-keyword">if</span>(stream.match(<span class="hljs-regexp">/(?:GOTO)|(?:GOSUB)/i</span>)) {
+            state.name = <span class="hljs-string">"goto"</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"keyword"</span>;
+          }   
+          <span class="hljs-keyword">if</span>(stream.match(<span class="hljs-regexp">/\(|\)/</span>)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"operator"</span>;
+          }
+          <span class="hljs-keyword">if</span>(stream.match(<span class="hljs-regexp">/\d+/</span>)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"number"</span>;
+          }
+          <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"pause"</span>:
+          <span class="hljs-keyword">if</span>(stream.eatSpace()) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+          }
+
+          <span class="hljs-keyword">var</span> match = matchExpression(stream);
+          <span class="hljs-keyword">if</span>(match) { <span class="hljs-keyword">return</span> match; }
+          
+          <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"fail"</span>:
+          <span class="hljs-keyword">if</span>(stream.eatSpace()) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+          }
+
+          <span class="hljs-keyword">var</span> match = matchExpression(stream);
+          <span class="hljs-keyword">if</span>(match) { <span class="hljs-keyword">return</span> match; }
+          
+          <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">default</span>:
+          <span class="hljs-built_in">console</span>.error(<span class="hljs-string">"Unknown state: "</span>, state)
+        <span class="hljs-keyword">break</span>;
+
+        <span class="hljs-keyword">case</span> <span class="hljs-string">"gcode"</span>:
+        	stream.skipToEnd();
+        	<span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+        <span class="hljs-keyword">break</span>;
+      }
+
+      stream.next();
+      <span class="hljs-keyword">return</span> <span class="hljs-string">"error"</span>;
+
+    }
+  }
+});
+CodeMirror.defineMIME(<span class="hljs-string">"text/x-opensbp"</span>,<span class="hljs-string">"opensbp"</span>)</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>CodeMirror.defineSimpleMode(&quot;opensbp&quot;, {
+  // The start state contains the rules that are intially used
+  start: [
+    {regex: /\s*<a href="?:[A-Z]|[0-9]+|\#">A-Z</a>\b/i, token: &quot;keyword&quot;, next:&quot;args&quot;, sol: true},
+    {regex: /PAUSE/i, token: &quot;keyword&quot;, next:&quot;args&quot;},</p>
+<pre><code>// You can match multiple tokens at once. Note that the captured
+// groups must span the whole string in this case
+//{regex: /([A-FH-LN-Z])([+\-]?[0-9]+(?:\.[0-9]+)?)/i,
+// token: [&quot;variable&quot;, &quot;number&quot;]},
+{regex: /\&#39;., token: &quot;comment&quot;},</code></pre>
+<p>  ],</p>
+<p>  args: [
+    {regex: /,/i, token: &quot;operator&quot;},
+    {regex: /&quot;(?:[^\]|\.)*?&quot;/, token: &quot;string&quot;},
+    {regex: /[+-]?[0-9]+(?:.[0-9]+)?/i, token: &quot;number&quot;},
+    {regex: /[^\t ,]/, next: &quot;start&quot;}
+  ],
+  // The meta property contains global information about the mode. It
+  // can contain properties like lineComment, which are supported by
+  // all modes, and also directives like dontIndentStates, which are
+  // specific to simple modes.
+  meta: {
+    dontIndentStates: [&quot;comment&quot;],
+    lineComment: &quot;&#39;&quot;
+  }
+});</p></div></div></div></div></body></html>

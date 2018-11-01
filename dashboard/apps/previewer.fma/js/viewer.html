@@ -1,0 +1,387 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/js/viewer</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/js/viewer"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/js/viewer.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../assets/style.css"><script type="text/javascript" src="../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/js/viewer.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-comment">/*jslint todo: true, browser: true, continue: true, white: true*/</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Written by Alex Canales for ShopBotTools, Inc.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> THREE = <span class="hljs-built_in">require</span>(<span class="hljs-string">"three"</span>);
+<span class="hljs-built_in">require</span>(<span class="hljs-string">"./helvetiker_regular.typeface"</span>);  <span class="hljs-comment">// It has to modify THREE</span>
+<span class="hljs-keyword">var</span> gcodetogeometry = <span class="hljs-built_in">require</span>(<span class="hljs-string">"gcodetogeometry"</span>);
+<span class="hljs-keyword">var</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">"./util"</span>);
+<span class="hljs-keyword">var</span> Path = <span class="hljs-built_in">require</span>(<span class="hljs-string">"./path"</span>).Path;
+<span class="hljs-keyword">var</span> TotalSize = <span class="hljs-built_in">require</span>(<span class="hljs-string">"./path"</span>).TotalSize;
+<span class="hljs-keyword">var</span> Helpers = <span class="hljs-built_in">require</span>(<span class="hljs-string">"./helpers"</span>).Helpers;
+<span class="hljs-keyword">var</span> Gui = <span class="hljs-built_in">require</span>(<span class="hljs-string">"./gui"</span>).Gui;
+<span class="hljs-keyword">var</span> Animation = <span class="hljs-built_in">require</span>(<span class="hljs-string">"./animation"</span>).Animation;
+<span class="hljs-keyword">var</span> CombinedCamera = <span class="hljs-built_in">require</span>(<span class="hljs-string">"./CombinedCamera"</span>).CombinedCamera;
+<span class="hljs-keyword">var</span> OrbitControls = <span class="hljs-built_in">require</span>(<span class="hljs-string">"./OrbitControls"</span>).OrbitControls;</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> class</span></p>
+<p>Defines the viewer class. This is the class that the user will instantiate.
+This is the main class.</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>container must be a DomElement.</strong><br/>(- The container of the viewer. Warning: style of the container: the position must be set as <code>absolute</code> or <code>relative</code>, else the position is automatically set to relative (this is needed for the GUI).)</p>
+</li>
+<li><p><strong>widthCanvas must be a number.</strong><br/>(- The width of the viewer.)</p>
+</li>
+<li><p><strong>heightCanvas must be a number.</strong><br/>(- The height of the viewer.)</p>
+</li>
+<li><p><strong>callbackError is optional and must be a function.</strong><br/>(- The callback function if an error occurs, should have one parameter: a string which will contain the error message.)</p>
+</li>
+<li><p><strong>configuration is optional and must be an object.</strong><br/>(- The configuration of the machine. If the board is set, a box representing the board will be displayed, the dimensions of the board are in inches.)</p>
+<ul>
+<li><p><strong>configuration.board is optional and must be an object.</strong><br/>(- The dimension of the cut board.)</p>
+</li>
+<li><p><strong>configuration.board.width must be a number.</strong><br/>(- The width in inches.)</p>
+</li>
+<li><p><strong>configuration.board.height must be a number.</strong><br/>(- The height in inches.)</p>
+</li>
+<li><p><strong>configuration.board.length must be a number.</strong><br/>(- The length in inches.)</p>
+</li>
+<li><p><strong>configuration.initialPosition is optional and must be an object.</strong><br/>(- The initial position of the job. If not set, it will be consider as (0; 0; 0).)</p>
+</li>
+<li><p><strong>configuration.initialPosition.x must be a number.</strong><br/>(- The x position in inches.)</p>
+</li>
+<li><p><strong>configuration.initialPosition.y must be a number.</strong><br/>(- The y position in inches.)</p>
+</li>
+<li><p><strong>configuration.initialPosition.z must be a number.</strong><br/>(- The z position in inches.)</p>
+</li>
+</ul>
+</li>
+<li><p><strong>liveMode is optional, must be a boolean, and has a default value of false.</strong><br/>(- The viewer mode. If set true, the viewer will be in live mode (this mode is explain below), else it is in normal mode.)</p>
+</li>
+<li><p><strong>inInch is optional and must be a boolean.</strong><br/>(- How the unit is displayed. If set true, the unit will be displayed in inch. If set false, the unit will be displayed in millimeters. If not set (undefined), the unit will automatically be displayed according to the G-Code commands.)</p>
+</li>
+</ul></div></div><div class="code"><div class="wrapper">exports.Viewer = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">container, widthCanvas, heightCanvas,
+        callbackError, configuration, liveMode, inInch</span>) </span>{
+<span class="hljs-pi">    "use strict"</span>;
+    <span class="hljs-keyword">var</span> that = <span class="hljs-keyword">this</span>;
+
+    <span class="hljs-comment">//Updates the control and the possible animation</span>
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">animate</span>(<span class="hljs-params"></span>) </span>{
+        <span class="hljs-built_in">window</span>.requestAnimationFrame(animate);
+        that.controls.update();
+    }
+
+    <span class="hljs-comment">//Renders the screen</span>
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">render</span>(<span class="hljs-params"></span>) </span>{
+        that.renderer.render(that.scene, that.camera);
+    }</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> instance, function refreshDisplay, and memberof GCodeViewer.Viewer</span></p>
+<p>Refreshes the screen. To call each time something is change and should be
+displayed.</p></div></div><div class="code"><div class="wrapper">    that.refreshDisplay = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        render();
+        animate();
+    };
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">displayError</span>(<span class="hljs-params">message</span>) </span>{
+        <span class="hljs-keyword">if</span>(that.callbackError !== <span class="hljs-literal">undefined</span>) {
+            that.callbackError(message);
+        }
+    }</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> instance, function resize, and memberof GCodeViewer.Viewer</span></p>
+<p>To call when the canvas or container has resized.</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>width must be a number.</strong><br/>(- The width of the dom element renderer in px.)</p>
+</li>
+<li><p><strong>height must be a number.</strong><br/>(- The height of the dom element renderer in px.)</p>
+</li>
+</ul></div></div><div class="code"><div class="wrapper">    that.resize = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">width, height</span>) </span>{
+        that.renderer.setSize(width, height);
+        that.camera.setSize(width, height);
+        that.camera.updateProjectionMatrix();
+        that.refreshDisplay();
+
+        that.gui.resized(width, height);
+    };</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> instance, function setPerspectiveCamera, and memberof GCodeViewer.Viewer</span></p>
+<p>Changes the type of camera to a perspective camera.</p></div></div><div class="code"><div class="wrapper">    that.setPerspectiveCamera = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        that.camera.toPerspective();
+        that.showZ();
+    };</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> instance, function setOrthographicCamera, and memberof GCodeViewer.Viewer</span></p>
+<p>Changes the type of camera to an orthographic camera.</p></div></div><div class="code"><div class="wrapper">    that.setOrthographicCamera = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        that.camera.toOrthographic();
+        that.showZ();
+    };
+
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">setCombinedCamera</span>(<span class="hljs-params"></span>) </span>{
+        <span class="hljs-keyword">var</span> width = that.renderer.domElement.width/<span class="hljs-number">2</span>; <span class="hljs-comment">// Camera frustum width.</span>
+        <span class="hljs-keyword">var</span> height = that.renderer.domElement.height/<span class="hljs-number">2</span>; <span class="hljs-comment">// Camera frustum height.</span>
+        <span class="hljs-keyword">var</span> fov = <span class="hljs-number">75</span>; <span class="hljs-comment">// Camera frustum vertical field of view in perspective view.</span>
+        <span class="hljs-keyword">var</span> near = <span class="hljs-number">0.1</span>; <span class="hljs-comment">// Camera frustum near plane in perspective view.</span>
+        <span class="hljs-keyword">var</span> far = <span class="hljs-number">1000</span>; <span class="hljs-comment">// Camera frustum far plane in perspective view.</span>
+        <span class="hljs-keyword">var</span> orthoNear = -<span class="hljs-number">100</span>; <span class="hljs-comment">// Camera frustum near plane in orthographic view.</span>
+        <span class="hljs-keyword">var</span> orthoFar = <span class="hljs-number">100</span>; <span class="hljs-comment">// Camera frustum far plane in orthographic view.</span>
+        that.camera = <span class="hljs-keyword">new</span> CombinedCamera(width, height, fov, near,
+                far, orthoNear, orthoFar);
+        that.camera.up.set(<span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">1</span>);
+
+        that.controls = <span class="hljs-keyword">new</span> OrbitControls(that.camera,
+                that.renderer.domElement);
+        that.controls.damping = <span class="hljs-number">0.2</span>;
+        that.controls.addEventListener(<span class="hljs-string">'change'</span>, render);
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Returns the center of the path (according to the setting of the initial
+position). If there is no path, return (0; 0; 0).</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">centerPath</span>(<span class="hljs-params"></span>) </span>{
+        <span class="hljs-keyword">var</span> center = { x : <span class="hljs-number">0</span>, y : <span class="hljs-number">0</span>, z : <span class="hljs-number">0</span> };
+
+        <span class="hljs-comment">//If no GCode given yet</span>
+        <span class="hljs-keyword">if</span>(that.gcode.size === <span class="hljs-literal">undefined</span>) {
+            <span class="hljs-keyword">return</span> center;
+        }
+        <span class="hljs-keyword">var</span> size = that.gcode.size;
+        center.x = size.min.x + <span class="hljs-built_in">Math</span>.abs(size.max.x - size.min.x) / <span class="hljs-number">2</span>;
+        center.y = size.min.y + <span class="hljs-built_in">Math</span>.abs(size.max.y - size.min.y) / <span class="hljs-number">2</span>;
+        center.z = size.min.z + <span class="hljs-built_in">Math</span>.abs(size.max.z - size.min.z) / <span class="hljs-number">2</span>;
+
+        <span class="hljs-keyword">if</span>(that.cncConfiguration.initialPosition !== <span class="hljs-literal">undefined</span>) {
+            center.x += that.cncConfiguration.initialPosition.x;
+            center.y += that.cncConfiguration.initialPosition.y;
+            center.z += that.cncConfiguration.initialPosition.z;
+        }
+        <span class="hljs-keyword">return</span> center;
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Makes the camera look at a point.
+camPosition is the new position of the camera (the axe for (un)zoomming
+  sould be be equal to 1)
+dollyIn is the zoom value</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">lookAtPoint</span>(<span class="hljs-params">point, camPosition, dollyIn</span>) </span>{
+        <span class="hljs-keyword">var</span> pos = that.controls.object.position;
+        that.controls.reset();
+        pos.set(camPosition.x, camPosition.y, camPosition.z);
+        that.controls.target.set(point.x, point.y, point.z);
+        that.controls.dollyIn(dollyIn);
+        that.refreshDisplay();
+    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Shows the plane, crossAxe (string) is the axe normal to this plan
+  (ex: &quot;Z&quot; for XY plan)</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">showPlane</span>(<span class="hljs-params">crossAxe</span>) </span>{
+        <span class="hljs-keyword">var</span> zoom = <span class="hljs-number">1</span>;
+        <span class="hljs-keyword">var</span> center = centerPath();
+        <span class="hljs-keyword">var</span> cameraPosition = { x : center.x, y : center.y, z : center.z };
+        <span class="hljs-keyword">if</span>(crossAxe === <span class="hljs-string">"y"</span>) {
+            cameraPosition[crossAxe] = center[crossAxe] - <span class="hljs-number">1</span>;
+        } <span class="hljs-keyword">else</span> {
+            cameraPosition[crossAxe] = center[crossAxe] + <span class="hljs-number">1</span>;
+        }
+
+        <span class="hljs-comment">//<span class="hljs-doctag">NOTE:</span> using a magic number because a lot of issue trying to</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>calculate well the dollyIn. Someday, maybe, it will be done correctly</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">if</span>(that.camera.inPerspectiveMode === <span class="hljs-literal">true</span>) {
+            zoom =  <span class="hljs-number">0.25</span>;
+        } <span class="hljs-keyword">else</span> {
+            zoom = <span class="hljs-number">20</span>;
+        }
+        lookAtPoint(center, cameraPosition, zoom);
+    }</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> instance, function showX, and memberof GCodeViewer.Viewer</span></p>
+<p>Shows the plan YZ from the axe X perspective.</p></div></div><div class="code"><div class="wrapper">    that.showX = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        showPlane(<span class="hljs-string">"x"</span>);
+    };</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> instance, function showY, and memberof GCodeViewer.Viewer</span></p>
+<p>Shows the plan XZ from the axe Y perspective.</p></div></div><div class="code"><div class="wrapper">    that.showY = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        showPlane(<span class="hljs-string">"y"</span>);
+    };</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> instance, function showZ, and memberof GCodeViewer.Viewer</span></p>
+<p>Shows the plan XY from the axe Z perspective.</p></div></div><div class="code"><div class="wrapper">    that.showZ = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        showPlane(<span class="hljs-string">"z"</span>);
+    };</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> instance, function showBoard, and memberof GCodeViewer.Viewer</span></p>
+<p>Shows the ghost of the board (if it was set in the configuration).</p></div></div><div class="code"><div class="wrapper">    that.showBoard = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        <span class="hljs-keyword">if</span>(that.cncConfiguration.board === <span class="hljs-literal">undefined</span>) {
+            <span class="hljs-keyword">return</span>;
+        }
+        <span class="hljs-keyword">var</span> geometry = <span class="hljs-keyword">new</span> THREE.BoxGeometry(
+                that.cncConfiguration.board.width,
+                that.cncConfiguration.board.length,
+                that.cncConfiguration.board.height
+                );
+
+        <span class="hljs-keyword">var</span> material = <span class="hljs-keyword">new</span> THREE.MeshBasicMaterial(<span class="hljs-number">0xff0000</span>);
+        material.transparent = <span class="hljs-literal">true</span>;
+        material.opacity = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">var</span> object = <span class="hljs-keyword">new</span> THREE.Mesh(geometry, material);
+        object.position.x = that.cncConfiguration.board.width / <span class="hljs-number">2</span>;
+        object.position.y = that.cncConfiguration.board.length / <span class="hljs-number">2</span>;
+        object.position.z = that.cncConfiguration.board.height / <span class="hljs-number">2</span>;
+        <span class="hljs-keyword">var</span> box = <span class="hljs-keyword">new</span> THREE.BoxHelper(object);
+        that.scene.add(object);
+        that.scene.add(box);
+        that.boardObject = object;
+        that.boardHelper = box;
+      
+    };</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> instance, function hideBoard, and memberof GCodeViewer.Viewer</span></p>
+<p>Hides the ghost of the board.</p></div></div><div class="code"><div class="wrapper">    that.hideBoard = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        that.scene.remove(that.boardObject);
+        that.scene.remove(that.boardBox);
+    };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Function created because web front end ecosystem is so awesome that we
+cannot display an HTML element if the function is not over, during a
+loop or whatever other reason</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">reallySetGCode</span>(<span class="hljs-params">string</span>) </span>{
+        <span class="hljs-keyword">var</span> lx = <span class="hljs-number">0</span>, ly = <span class="hljs-number">0</span>, lz = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">var</span> message = <span class="hljs-string">""</span>;
+        <span class="hljs-keyword">var</span> gridSize;
+        that.gcode = gcodetogeometry.parse(string);
+        <span class="hljs-keyword">if</span>(that.gcode.errorList.length &gt; <span class="hljs-number">0</span>) {
+            message = <span class="hljs-string">"Be careful, some issues appear in this file."</span>;
+            message += <span class="hljs-string">"\nThe machine may not do as displayed here."</span>;
+            displayError(message);
+            that.gui.hideLoadingMessage();
+        }
+
+        that.path.setMeshes(that.gcode.lines,
+                that.cncConfiguration.initialPosition);
+        that.totalSize.setMeshes(that.gcode.size,
+                that.gcode.displayInInch === <span class="hljs-literal">false</span>,
+                that.cncConfiguration.initialPosition);
+
+        that.helpers.resize(that.gcode.size);
+        that.gui.setGCode(that.gcode.gcode);
+        that.gui.hideLoadingMessage();
+        <span class="hljs-keyword">if</span>(liveMode === <span class="hljs-literal">false</span>) {
+            that.animation.reset();
+        }
+
+        lx = ((that.gcode.size.max.x - that.gcode.size.min.x) / <span class="hljs-number">2.0</span> ) || <span class="hljs-number">0.0</span>;
+        ly = ((that.gcode.size.max.y - that.gcode.size.min.y) / <span class="hljs-number">2.0</span> ) || <span class="hljs-number">0.0</span>;
+        lz = ((that.gcode.size.max.z - that.gcode.size.min.z) / <span class="hljs-number">2.0</span> ) || <span class="hljs-number">0.0</span>;
+
+        that.light1.position.set(lx,ly,lz-<span class="hljs-number">10</span>);
+        that.light2.position.set(lx,ly,lz+<span class="hljs-number">10</span>);
+          <span class="hljs-built_in">console</span>.log(that.gcode);
+        <span class="hljs-keyword">if</span> (lx !== <span class="hljs-number">0</span> ){
+            <span class="hljs-keyword">if</span> (lx &gt; ly){
+                    gridSize = <span class="hljs-built_in">Math</span>.ceil(lx*<span class="hljs-number">3</span>);
+            } <span class="hljs-keyword">else</span> {
+                gridSize = <span class="hljs-built_in">Math</span>.ceil(ly*<span class="hljs-number">3</span>);
+            }
+        } <span class="hljs-keyword">else</span> {
+            gridSize = <span class="hljs-number">10</span>;
+        }
+        that.helper = <span class="hljs-keyword">new</span> THREE.GridHelper( gridSize, <span class="hljs-number">1</span>, <span class="hljs-number">0xf2f2f2</span>, <span class="hljs-number">0xffffff</span> );
+        that.helper.rotation.x = <span class="hljs-built_in">Math</span>.PI / <span class="hljs-number">2</span>;
+        that.scene.add(that.helper);
+
+        that.showZ();
+        that.refreshDisplay();
+
+        <span class="hljs-keyword">if</span>(inInch === <span class="hljs-literal">true</span>) {
+            that.displayInInch();
+        } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(inInch === <span class="hljs-literal">false</span>) {
+            that.displayInMm();
+        }
+    }</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> instance, function setGCode, and memberof GCodeViewer.Viewer</span></p>
+<p>Sets the GCode and displays the result.</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>The must be a string.</strong><br/>(GCode.)</p>
+</li>
+<li><p><strong>callback is optional and must be a function.</strong><br/>(Callback function called when the meshes are created (in case want to do something fancy).)</p>
+</li>
+</ul></div></div><div class="code"><div class="wrapper">    that.setGCode = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">string, callback</span>) </span>{
+        that.gui.displayLoadingMessage();
+        <span class="hljs-keyword">var</span> cb;
+        <span class="hljs-keyword">if</span>(callback === <span class="hljs-literal">undefined</span>) {
+            cb = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+                reallySetGCode(string);
+            };
+        } <span class="hljs-keyword">else</span> {
+            cb = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+                reallySetGCode(string);
+                callback();
+            };
+        }
+        setTimeout(cb, <span class="hljs-number">100</span>);
+    };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Show the size in inch (if false) or millimeter (if true)</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">changeDisplay</span>(<span class="hljs-params">inMm</span>) </span>{
+        <span class="hljs-keyword">if</span>(that.gcode.size !== <span class="hljs-literal">undefined</span>) {
+            that.totalSize.setMeshes(that.gcode.size, inMm,
+                that.cncConfiguration.initialPosition);
+        }
+        that.refreshDisplay();
+    }</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> instance, function displayInMm, and memberof GCodeViewer.Viewer</span></p>
+<p>Shows the size in millimiters.</p></div></div><div class="code"><div class="wrapper">    that.displayInMm = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        changeDisplay(<span class="hljs-literal">true</span>);
+    };</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> instance, function displayInInch, and memberof GCodeViewer.Viewer</span></p>
+<p>Shows the size in inches.</p></div></div><div class="code"><div class="wrapper">    that.displayInInch = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+        changeDisplay(<span class="hljs-literal">false</span>);
+    };</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p><span class='doc-section-header'> instance, function updateLiveViewer, and memberof GCodeViewer.Viewer</span></p>
+<p>Sets the currently executed line command.</p>
+<p>Parameters:</p>
+<ul>
+<li><strong>lineNumber must be a number.</strong><br/>(- The line number of the command.)</li>
+</ul>
+<p><strong>Returns a boolean</strong><br/>(True if the command is displayed.)</p></div></div><div class="code"><div class="wrapper">    that.updateLiveViewer = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">lineNumber</span>) </span>{
+        <span class="hljs-keyword">if</span>(
+            liveMode === <span class="hljs-literal">true</span> &amp;&amp;
+            that.path.highlightCommand(lineNumber) === <span class="hljs-literal">true</span>
+        ) {
+            that.gui.highlight(lineNumber);
+            that.refreshDisplay();
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+        }
+
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+    };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>initialize</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-comment">//Members declaration</span>
+    that.renderer = {};
+    that.camera = {};
+    that.scene = {};
+    that.controls = {};
+    that.cncConfiguration = configuration || {};
+    that.gcode = {};
+
+    that.callbackError = callbackError;
+
+    <span class="hljs-keyword">if</span>(util.webGLEnabled() === <span class="hljs-literal">false</span>) {
+        displayError(<span class="hljs-string">"WebGL is not enable. Impossible to preview."</span>);
+        <span class="hljs-keyword">return</span>;
+    }
+
+    <span class="hljs-keyword">if</span>(container === <span class="hljs-literal">undefined</span> || container === <span class="hljs-literal">null</span>) {
+        displayError(<span class="hljs-string">"No container set."</span>);
+        <span class="hljs-keyword">return</span>;
+    }
+
+    <span class="hljs-keyword">if</span>(liveMode === <span class="hljs-literal">undefined</span>) {
+        liveMode = <span class="hljs-literal">false</span>;
+    }
+
+    <span class="hljs-keyword">if</span>(liveMode === <span class="hljs-literal">true</span>) {
+        <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"Live mode"</span>);
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"Viewer mode"</span>);
+    }
+
+    that.renderer = <span class="hljs-keyword">new</span> THREE.WebGLRenderer({antialias: <span class="hljs-literal">true</span>});
+    that.renderer.setSize(widthCanvas, heightCanvas);
+    that.renderer.domElement.style.zIndex = <span class="hljs-number">1</span>;
+    container.appendChild(that.renderer.domElement);
+
+    that.renderer.setClearColor( <span class="hljs-number">0xebebeb</span> );
+    that.renderer.setPixelRatio( <span class="hljs-built_in">window</span>.devicePixelRatio );
+
+    that.scene = <span class="hljs-keyword">new</span> THREE.Scene();
+    setCombinedCamera();
+    that.showZ();
+
+    that.light1 = <span class="hljs-keyword">new</span> THREE.PointLight( <span class="hljs-number">0xffffff</span>, <span class="hljs-number">1</span>, <span class="hljs-number">100</span> );
+    that.light1.position.set( <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, -<span class="hljs-number">10</span> );
+    that.scene.add( that.light1 );
+
+    that.light2 = <span class="hljs-keyword">new</span> THREE.PointLight( <span class="hljs-number">0xffffff</span>, <span class="hljs-number">1</span>, <span class="hljs-number">100</span> );
+    that.light2.position.set( <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">10</span> );
+   
+    
+   
+    that.scene.add( that.light2 );
+
+    that.path = <span class="hljs-keyword">new</span> Path(that.scene);
+    that.totalSize = <span class="hljs-keyword">new</span> TotalSize(that.scene);
+    that.helpers = <span class="hljs-keyword">new</span> Helpers(that.scene);
+    that.showBoard();
+ 
+    that.refreshDisplay();
+
+    <span class="hljs-comment">//Add the UI</span>
+    <span class="hljs-keyword">var</span> callbacks = {
+        showX : that.showX,
+        showY : that.showY,
+        showZ : that.showZ,
+        displayInMm : that.displayInMm ,
+        displayInIn : that.displayInInch ,
+        perspective : that.setPerspectiveCamera,
+        orthographic : that.setOrthographicCamera,
+        resume : <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{ that.animation.resume(); },
+        pause : <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{ that.animation.pause(); },
+        reset : <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{ that.animation.reset(); },
+        goToLine : <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">lineNumber</span>) </span>{ that.animation.goToLine(lineNumber); }
+
+    };
+    that.gui = <span class="hljs-keyword">new</span> Gui(that.renderer, widthCanvas, heightCanvas,
+            that.cncConfiguration, callbacks, liveMode);
+
+    <span class="hljs-comment">//Add animation</span>
+    <span class="hljs-keyword">if</span>(liveMode === <span class="hljs-literal">false</span>) {
+        that.animation = <span class="hljs-keyword">new</span> Animation(that.scene,
+                that.refreshDisplay, that.gui, that.path, <span class="hljs-number">24</span>,
+                that.cncConfiguration.initialPosition);
+    }
+};</div></div></div></div></body></html>

@@ -1,0 +1,290 @@
+<!DOCTYPE html><html lang="en"><head><title>runtime/manual/driver</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../"><meta name="groc-document-path" content="runtime/manual/driver"><meta name="groc-project-path" content="runtime/manual/driver.js"><link rel="stylesheet" type="text/css" media="all" href="../../assets/style.css"><script type="text/javascript" src="../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">runtime/manual/driver.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>runtime/manual/driver.js</p>
+<p>This module defines ManualDriver, which is a helper object that manages
+manual control of the machine.  It is the real implementation for the ManualRuntime
+but exists as a helper so that it can be used inside of other runtimes that need to use the
+manual state, and want to do it in the same way that the manual runtime does.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../log'</span>).logger(<span class="hljs-string">'manual'</span>);
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../../config'</span>);
+<span class="hljs-keyword">var</span> stream = <span class="hljs-built_in">require</span>(<span class="hljs-string">'stream'</span>);
+<span class="hljs-keyword">var</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'util'</span>);
+<span class="hljs-keyword">var</span> events = <span class="hljs-built_in">require</span>(<span class="hljs-string">'events'</span>)
+<span class="hljs-keyword">var</span> Q = <span class="hljs-built_in">require</span>(<span class="hljs-string">'q'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Parameters related to filling the queue, motion, etc.
+These are fussy.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> T_RENEW = <span class="hljs-number">300</span>;
+<span class="hljs-keyword">var</span> SAFETY_FACTOR = <span class="hljs-number">4.0</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO should be in the ManualDriver instance?!</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> count;
+<span class="hljs-keyword">var</span> RENEW_SEGMENTS = <span class="hljs-number">10</span>;
+<span class="hljs-keyword">var</span> FIXED_MOVES_QUEUE_SIZE = <span class="hljs-number">3</span>;
+<span class="hljs-keyword">var</span> count = <span class="hljs-number">0</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>ManualDriver constructor
+The manual driver provides functions for managing the state of the G2 driver while &quot;manually&quot;
+streaming commands to it, as is done when in &quot;pendant&quot; mode or similar
+  drv - The driver instance to manage
+   st - An open stream feeding into an active machining cycle on that driver</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">ManualDriver</span>(<span class="hljs-params">drv, st</span>) </span>{
+	<span class="hljs-keyword">this</span>.stream = st;
+	<span class="hljs-keyword">this</span>.driver = drv;
+	<span class="hljs-keyword">this</span>.renew_timer = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.fixedQueue = [];
+
+	<span class="hljs-keyword">this</span>.exited = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>True while the tool is known to be in motion</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.moving = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>True while the user intends (as far as we know) for the tool to continue moving</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.keep_moving = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set to true to exit the manual state once the current operation is completed</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.exit_pending = <span class="hljs-literal">false</span>;
+
+	<span class="hljs-keyword">this</span>.stop_pending = <span class="hljs-literal">false</span>;
+
+	<span class="hljs-keyword">this</span>.omg_stop = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Current trajectory</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.current_axis = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.current_speed = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.completeCallback = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.status_handler = <span class="hljs-keyword">this</span>._onG2Status.bind(<span class="hljs-keyword">this</span>);
+	<span class="hljs-keyword">this</span>.driver.on(<span class="hljs-string">'status'</span>,<span class="hljs-keyword">this</span>.status_handler);
+}
+util.inherits(ManualDriver, events.EventEmitter);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Enter the machining cycle
+This does a little setup too (sets manual state jerk values, etc)
+TODO: Pass the setup stuff in?  (In case runtimes want to do things differently?)
+Returns a promise that resolves on exit</p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype.enter = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">var</span> jerkXY = config.machine._cache.manual.xy_jerk || <span class="hljs-number">250</span>;
+	<span class="hljs-keyword">var</span> jerkZ = config.machine._cache.manual.z_jerk || <span class="hljs-number">250</span>;
+    <span class="hljs-keyword">this</span>.stream.write(<span class="hljs-string">'M100.1 ({xjm:'</span>+jerkXY+<span class="hljs-string">'})\n'</span>);
+    <span class="hljs-keyword">this</span>.stream.write(<span class="hljs-string">'M100.1 ({yjm:'</span>+jerkXY+<span class="hljs-string">'})\n'</span>);
+    <span class="hljs-keyword">this</span>.stream.write(<span class="hljs-string">'M100.1 ({zjm:'</span>+jerkZ+<span class="hljs-string">'})\n'</span>);	
+	<span class="hljs-comment">//this.stream.write('M100.1 ({zl:0})\nM0\n G4 P0.1\n');	</span>
+	<span class="hljs-keyword">this</span>.stream.write(<span class="hljs-string">'M100.1 ({zl:0})\nM0\n G91\n G0 X0 Y0 Z0\n'</span>);	
+	<span class="hljs-keyword">this</span>.driver.prime();
+	<span class="hljs-keyword">this</span>.deferred = Q.defer();
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.deferred.promise;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Exit the machining cycle
+This stops motion if it is in progress, and restores the settings changed in enter()</p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype.exit = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.isMoving()) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Don&#39;t exit yet - just pend.</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">this</span>.exit_pending = <span class="hljs-literal">true</span>;
+		<span class="hljs-keyword">this</span>.stopMotion();
+
+	} <span class="hljs-keyword">else</span> {
+		config.driver.restoreSome([<span class="hljs-string">'xjm'</span>,<span class="hljs-string">'yjm'</span>,<span class="hljs-string">'zjm'</span>, <span class="hljs-string">'zl'</span>], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		    <span class="hljs-comment">//log.info("Finished running stream: " + stat);</span>
+		    <span class="hljs-keyword">this</span>._done();
+        }.bind(<span class="hljs-keyword">this</span>));
+		<span class="hljs-keyword">this</span>.driver.removeListener(<span class="hljs-string">'status'</span>, <span class="hljs-keyword">this</span>.status_handler);
+		<span class="hljs-keyword">this</span>.exited = <span class="hljs-literal">true</span>;
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Start motion on the specified axis (and optional second axis) at the specified speed
+TODO - This function should really just take an arbitrary vector
+          axis - The first axis to move (eg &quot;X&quot;)
+         speed - The speed in current units
+   second_axis - The second axis to move
+  second_speed - The second axis speed</p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype.startMotion = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">axis,  speed, second_axis, second_speed</span>) </span>{
+	<span class="hljs-keyword">var</span> dir = speed &lt; <span class="hljs-number">0</span> ? -<span class="hljs-number">1.0</span> : <span class="hljs-number">1.0</span>;
+	<span class="hljs-keyword">var</span> second_dir = second_speed &lt; <span class="hljs-number">0</span> ? -<span class="hljs-number">1.0</span> : <span class="hljs-number">1.0</span>;
+	speed = <span class="hljs-built_in">Math</span>.abs(speed);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Don&#39;t start motion if we&#39;re in the middle of stopping (can do it from stopped, though)</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.stop_pending || <span class="hljs-keyword">this</span>.omg_stop) {
+		<span class="hljs-keyword">return</span>;
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If we&#39;re moving already, maintain motion</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.moving) {
+		<span class="hljs-keyword">if</span>(axis === <span class="hljs-keyword">this</span>.currentAxis &amp;&amp; speed === <span class="hljs-keyword">this</span>.currentSpeed) {
+			<span class="hljs-keyword">this</span>.maintainMotion();
+		} <span class="hljs-keyword">else</span> {
+			<span class="hljs-keyword">this</span>.stopMotion();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO Deal with direction changes here</p></div></div><div class="code"><div class="wrapper">		}
+	} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deal with one axis vs 2 (See TODO above)</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> (second_axis){
+			<span class="hljs-keyword">this</span>.second_axis = second_axis;
+			<span class="hljs-keyword">this</span>.second_currentDirection = second_dir;
+		} <span class="hljs-keyword">else</span> {
+			<span class="hljs-keyword">this</span>.second_axis = <span class="hljs-literal">null</span>;
+			<span class="hljs-keyword">this</span>.second_currentDirection = <span class="hljs-literal">null</span>;
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set Heading</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">this</span>.currentAxis = axis;
+		<span class="hljs-keyword">this</span>.currentSpeed = speed;
+		<span class="hljs-keyword">this</span>.currentDirection = dir;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Flag that we&#39;re kicking off a move</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">this</span>.moving = <span class="hljs-keyword">this</span>.keep_moving = <span class="hljs-literal">true</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Length of the moves we pump the queue with, based on speed vector</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">this</span>.renewDistance = speed*(T_RENEW/<span class="hljs-number">60000</span>)*SAFETY_FACTOR;                
+		</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Make sure we&#39;re in relative moves and the speed is set</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">this</span>.stream.write(<span class="hljs-string">'G91 F'</span> + <span class="hljs-keyword">this</span>.currentSpeed.toFixed(<span class="hljs-number">3</span>) + <span class="hljs-string">'\n'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Start pumping moves</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">this</span>._renewMoves(<span class="hljs-string">"start"</span>);
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the flag that indicates to this driver that motion is still requested along the current heading
+This function only has any effect if the machine is already moving</p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype.maintainMotion = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.moving) {
+		<span class="hljs-keyword">this</span>.keep_moving = <span class="hljs-literal">true</span>;
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Stop all movement </p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype.stopMotion = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._limit()) { <span class="hljs-keyword">return</span>; }
+	<span class="hljs-keyword">this</span>.keep_moving = <span class="hljs-literal">false</span>;
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.renew_timer) {
+		clearTimeout(<span class="hljs-keyword">this</span>.renew_timer);
+	}
+	<span class="hljs-keyword">this</span>.omg_stop = <span class="hljs-literal">true</span>
+	<span class="hljs-keyword">this</span>.stop_pending = <span class="hljs-literal">true</span>;
+	<span class="hljs-comment">//this.driver.feedHold();</span>
+	<span class="hljs-comment">//this.driver.queueFlush(function() {</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>this.driver.resume();        </p></div></div><div class="code"><div class="wrapper">	<span class="hljs-comment">//}.bind(this));</span>
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Stop all movement (also? TODO: What&#39;s this all about?)</p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype.quitMove = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>)</span>{
+	
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._limit()) { <span class="hljs-keyword">return</span>; }
+	<span class="hljs-keyword">this</span>.keep_moving = <span class="hljs-literal">false</span>;
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.moving) {
+		<span class="hljs-keyword">this</span>.stop_pending = <span class="hljs-literal">true</span>;
+		<span class="hljs-keyword">this</span>.driver.quit();
+		<span class="hljs-keyword">this</span>.driver.queueFlush(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">this</span>.driver.resume();		
+		}.bind(<span class="hljs-keyword">this</span>));
+	} <span class="hljs-keyword">else</span> {
+		<span class="hljs-keyword">this</span>.stop_pending = <span class="hljs-literal">false</span>;
+	}
+
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Go to a specified absolute position
+  pos - Position vector as an object, eg: {&quot;X&quot;:10, &quot;Y&quot;:5}</p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype.goto = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">pos</span>) </span>{
+	<span class="hljs-keyword">var</span> move = <span class="hljs-string">"G90\nG0 "</span>;
+
+	<span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> key <span class="hljs-keyword">in</span> pos) {
+		<span class="hljs-keyword">if</span> (pos.hasOwnProperty(key)) {
+			move += key + pos[key] + <span class="hljs-string">" "</span>;
+		}
+	}
+	move += <span class="hljs-string">"\nM0\nG91\n"</span>;
+	<span class="hljs-keyword">this</span>.driver.prime();
+	<span class="hljs-keyword">this</span>.stream.write(move);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the machine position to the specified vector
+  pos - New position vector as an object,  eg: {&quot;X&quot;:10, &quot;Y&quot;:5}</p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype.set = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">pos</span>) </span>{
+	
+	<span class="hljs-keyword">var</span> gc = <span class="hljs-string">'G10 L20 P2 '</span>;
+
+	<span class="hljs-built_in">Object</span>.keys(pos).forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key</span>) </span>{
+		gc += key + pos[key].toFixed(<span class="hljs-number">5</span>);
+	}.bind(<span class="hljs-keyword">this</span>));
+	
+		<span class="hljs-keyword">this</span>.stream.write(gc + <span class="hljs-string">"\nM0\nG91\n"</span>);
+		<span class="hljs-keyword">this</span>.driver.prime();
+		setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			config.driver.reverseUpdate([<span class="hljs-string">'g55x'</span>,<span class="hljs-string">'g55y'</span>,<span class="hljs-string">'g55z'</span>,<span class="hljs-string">'g55a'</span>,<span class="hljs-string">'g55b'</span>], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{});
+		}.bind(<span class="hljs-keyword">this</span>), <span class="hljs-number">500</span>);
+
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Internal function for handling nudges.
+Nudges are little fixed incremental moves that are usually initiated by a short tap on one of the
+direction keys on a pendant display, or by pressing the direction keys in a specified &quot;fixed&quot; mode
+If the machine is currently in the middle of a nudge or is moving in a long move, the nudge is queued,
+and executed at the end of the current move.  This is the function that dequeues and executes them.
+TODO: Like start above, nudges should be arbritrary vectors rather than axis, second_axis
+Returns the number of nudges</p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype._handleNudges = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	count = <span class="hljs-keyword">this</span>.fixedQueue.length;
+
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.fixedQueue.length &gt; <span class="hljs-number">0</span>) {
+		<span class="hljs-keyword">while</span>(<span class="hljs-keyword">this</span>.fixedQueue.length &gt; <span class="hljs-number">0</span>) {
+			<span class="hljs-keyword">var</span> move = <span class="hljs-keyword">this</span>.fixedQueue.shift();
+			<span class="hljs-keyword">this</span>.moving = <span class="hljs-literal">true</span>;
+			<span class="hljs-keyword">this</span>.keep_moving = <span class="hljs-literal">false</span>;
+			<span class="hljs-keyword">var</span> axis = move.axis.toUpperCase();
+
+			<span class="hljs-keyword">if</span>(<span class="hljs-string">'XYZABCUVW'</span>.indexOf(axis) &gt;= <span class="hljs-number">0</span>) {
+				<span class="hljs-keyword">var</span> moves = [<span class="hljs-string">'G91'</span>];
+				<span class="hljs-keyword">if</span>(move.second_axis) {
+					<span class="hljs-keyword">var</span> second_axis = move.second_axis.toUpperCase();
+					<span class="hljs-keyword">if</span>(move.speed) {
+						moves.push(<span class="hljs-string">'G1 '</span> + axis + move.distance.toFixed(<span class="hljs-number">5</span>) +<span class="hljs-string">' '</span>+ second_axis + move.second_distance.toFixed(<span class="hljs-number">5</span>) + <span class="hljs-string">' F'</span> + move.speed.toFixed(<span class="hljs-number">3</span>))
+					} <span class="hljs-keyword">else</span> {
+						moves.push(<span class="hljs-string">'G0 '</span> + axis + move.distance.toFixed(<span class="hljs-number">5</span>)  +<span class="hljs-string">' '</span>+ move.second_axis.toUpperCase + move.second_distance.toFixed(<span class="hljs-number">5</span>) + <span class="hljs-string">' F'</span> + move.speed.toFixed(<span class="hljs-number">3</span>))
+					}
+				} <span class="hljs-keyword">else</span> {
+					<span class="hljs-keyword">if</span>(move.speed) {
+						moves.push(<span class="hljs-string">'G1 '</span> + axis + move.distance.toFixed(<span class="hljs-number">5</span>) + <span class="hljs-string">' F'</span> + move.speed.toFixed(<span class="hljs-number">3</span>))
+					} <span class="hljs-keyword">else</span> {
+						moves.push(<span class="hljs-string">'G0 '</span> + axis + move.distance.toFixed(<span class="hljs-number">5</span>) + <span class="hljs-string">' F'</span> + move.speed.toFixed(<span class="hljs-number">3</span>))
+					}
+				}
+				</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>You can&#39;t put an M0 or a G4 in here to break up the nudges.
+Don&#39;t do it. Doooon&#39;t do it.</p></div></div><div class="code"><div class="wrapper">				moves.forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">move</span>) </span>{
+					<span class="hljs-keyword">this</span>.stream.write(move + <span class="hljs-string">'\n'</span>);
+				}.bind(<span class="hljs-keyword">this</span>));
+			}
+		}
+		<span class="hljs-keyword">this</span>.driver.prime();
+	} <span class="hljs-keyword">else</span> {
+		<span class="hljs-keyword">this</span>.moving = <span class="hljs-keyword">this</span>.keep_moving = <span class="hljs-literal">false</span>;
+	}
+	<span class="hljs-keyword">return</span> count;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Issue a nudge (small fixed move)  If the machine is already moving, queue up the nudge.
+Don&#39;t queue more than FIXED_MOVES_QUEUE_SIZE, though, to keep the machines behavior from running away.
+ie: You shoudln&#39;t be allowed to queue 50 nudges during a long slow move, and see them execute at the end.
+             axis - The first axis to move (eg &quot;X&quot;)
+            speed - The speed in current units
+         distance - The length of the nudge
+      second_axis - The second axis to move
+  second_distance - The second axis speed</p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype.nudge = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">axis, speed, distance, second_axis, second_distance</span>) </span>{
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.fixedQueue.length &gt;= FIXED_MOVES_QUEUE_SIZE) {
+	log.warn(<span class="hljs-string">'fixedMove(): Move queue is already full!'</span>);
+    	    <span class="hljs-keyword">return</span>;
+	}
+	<span class="hljs-keyword">if</span>(second_axis) {
+		<span class="hljs-keyword">this</span>.fixedQueue.push({axis: axis, speed: speed, distance: distance, second_axis : second_axis, second_distance: second_distance});
+	} <span class="hljs-keyword">else</span> {
+		<span class="hljs-keyword">this</span>.fixedQueue.push({axis: axis, speed: speed, distance: distance});
+	}
+
+    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.moving) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>this.fixedQueue.push({axis: axis, speed: speed, distance: distance});</p></div></div><div class="code"><div class="wrapper">		log.warn(<span class="hljs-string">"fixedMove(): Queueing move, due to already moving."</span>);
+	} <span class="hljs-keyword">else</span> {
+		<span class="hljs-keyword">this</span>._handleNudges();
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return true if the machine is moving</p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype.isMoving = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.moving;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Internal function called to &quot;pump&quot; moves into the queue
+This function is called periodically until a stop is requested, or the users intent to continue moving evaporates.
+The idea behind this function is that it is called at an interval that outpaces the </p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype._renewMoves = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">reason</span>) </span>{
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.moving &amp;&amp; <span class="hljs-keyword">this</span>.keep_moving) {
+		<span class="hljs-keyword">this</span>.keep_moving = <span class="hljs-literal">false</span>;
+		<span class="hljs-keyword">var</span> segment = <span class="hljs-keyword">this</span>.currentDirection*(<span class="hljs-keyword">this</span>.renewDistance / RENEW_SEGMENTS);
+		<span class="hljs-keyword">var</span> second_segment = <span class="hljs-keyword">this</span>.second_currentDirection*(<span class="hljs-keyword">this</span>.renewDistance / RENEW_SEGMENTS);
+		<span class="hljs-keyword">var</span> moves = []
+		<span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>.second_axis){
+			<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;RENEW_SEGMENTS; i++) {
+				<span class="hljs-keyword">var</span> move = <span class="hljs-string">'G1'</span> + <span class="hljs-keyword">this</span>.currentAxis + segment.toFixed(<span class="hljs-number">4</span>) + <span class="hljs-keyword">this</span>.second_axis + second_segment.toFixed(<span class="hljs-number">4</span>) + <span class="hljs-string">'\n'</span>
+				moves.push(move);
+			}
+
+		} <span class="hljs-keyword">else</span> {
+			<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;RENEW_SEGMENTS; i++) {
+				<span class="hljs-keyword">var</span> move = <span class="hljs-string">'G1'</span> + <span class="hljs-keyword">this</span>.currentAxis + segment.toFixed(<span class="hljs-number">4</span>)+<span class="hljs-string">'\n'</span>
+				moves.push(move);
+			}
+		}
+		<span class="hljs-keyword">this</span>.stream.write(moves.join(<span class="hljs-string">''</span>));	
+		<span class="hljs-keyword">this</span>.driver.prime();
+		<span class="hljs-keyword">this</span>.renew_timer = setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">this</span>._renewMoves(<span class="hljs-string">"timeout"</span>)
+		}.bind(<span class="hljs-keyword">this</span>), T_RENEW)
+	} <span class="hljs-keyword">else</span> {
+		<span class="hljs-keyword">this</span>.stopMotion();
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Status handler</p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype._onG2Status = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">status</span>) </span>{
+	<span class="hljs-keyword">switch</span>(status.stat) {
+		<span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_INTERLOCK:
+		<span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_SHUTDOWN:
+		<span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_PANIC:
+			<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'crash'</span>);
+			<span class="hljs-keyword">break</span>;
+		<span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_ALARM:
+			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._limit()) { <span class="hljs-keyword">return</span>; }
+			<span class="hljs-keyword">break</span>;
+		<span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_RUNNING:
+			<span class="hljs-keyword">this</span>.moving = <span class="hljs-literal">true</span>;
+			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.omg_stop) {
+				<span class="hljs-keyword">this</span>.stop_pending = <span class="hljs-literal">true</span>;
+				<span class="hljs-keyword">this</span>.driver.feedHold();
+				<span class="hljs-keyword">this</span>.driver.queueFlush(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+					<span class="hljs-keyword">this</span>.driver.resume();		
+				}.bind(<span class="hljs-keyword">this</span>));
+			}
+			<span class="hljs-keyword">break</span>;
+		<span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_STOP:
+		<span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_END:
+		<span class="hljs-keyword">case</span> <span class="hljs-keyword">this</span>.driver.STAT_HOLDING:</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle nudges once we&#39;ve come to a stop</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._handleNudges()) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Nudges got handled</p></div></div><div class="code"><div class="wrapper">			} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>No nudges</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.exit_pending) {
+					<span class="hljs-keyword">this</span>.exit();
+				}
+				<span class="hljs-keyword">this</span>.omg_stop = <span class="hljs-literal">false</span>
+				<span class="hljs-keyword">this</span>.stop_pending = <span class="hljs-literal">false</span>;
+			}
+			<span class="hljs-keyword">break</span>;
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Boilerplate limit handler
+TODO needs work</p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype._limit = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">var</span> er = <span class="hljs-keyword">this</span>.driver.getLastException();
+	<span class="hljs-keyword">if</span>(er &amp;&amp; er.st == <span class="hljs-number">203</span>) {
+		<span class="hljs-keyword">var</span> msg = er.msg.replace(<span class="hljs-regexp">/\[[^\[\]]*\]/</span>,<span class="hljs-string">''</span>);
+		<span class="hljs-keyword">this</span>.keep_moving = <span class="hljs-literal">false</span>;
+		<span class="hljs-keyword">this</span>.moving = <span class="hljs-literal">false</span>;
+		<span class="hljs-keyword">this</span>.driver.clearLastException();
+		<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'crash'</span>, {error : msg});
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+	}
+	<span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Internal call that is issued when manual mode is done
+Resolves the promise created by the enter() function and resets internal state</p></div></div><div class="code"><div class="wrapper">ManualDriver.prototype._done = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">this</span>.moving = <span class="hljs-literal">false</span>;
+    <span class="hljs-keyword">this</span>.keep_moving = <span class="hljs-literal">false</span>;
+    <span class="hljs-keyword">this</span>.stream = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.deferred.resolve();
+}
+
+
+<span class="hljs-built_in">module</span>.exports = ManualDriver;</div></div></div></div></body></html>

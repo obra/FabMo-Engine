@@ -1,0 +1,43 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/css/defaultDisplay</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/css/defaultDisplay"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/css/defaultDisplay.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/css/defaultDisplay.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"../core"</span>,
+	<span class="hljs-string">"../manipulation"</span> <span class="hljs-comment">// appendTo</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery </span>) </span>{
+
+<span class="hljs-keyword">var</span> iframe,
+	elemdisplay = {};</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Retrieve the actual display of a element</p>
+<p>Parameters:</p>
+<ul>
+<li><p><strong>name must be a String.</strong><br/>(nodeName of the element)</p>
+</li>
+<li><p><strong>doc must be an Object.</strong><br/>(Document object Called only from within defaultDisplay)</p>
+</li>
+</ul></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">actualDisplay</span>(<span class="hljs-params"> name, doc </span>) </span>{
+	<span class="hljs-keyword">var</span> style,
+		elem = jQuery( doc.createElement( name ) ).appendTo( doc.body ),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>getDefaultComputedStyle might be reliably used only on attached element</p></div></div><div class="code"><div class="wrapper">		display = <span class="hljs-built_in">window</span>.getDefaultComputedStyle &amp;&amp; ( style = <span class="hljs-built_in">window</span>.getDefaultComputedStyle( elem[ <span class="hljs-number">0</span> ] ) ) ?</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Use of this method is a temporary fix (more like optimization) until something better comes along,
+since it was removed from specification and supported only in FF</p></div></div><div class="code"><div class="wrapper">			style.display : jQuery.css( elem[ <span class="hljs-number">0</span> ], <span class="hljs-string">"display"</span> );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>We don&#39;t have any data stored on the element,
+so use &quot;detach&quot; method as fast way to get rid of the element</p></div></div><div class="code"><div class="wrapper">	elem.detach();
+
+	<span class="hljs-keyword">return</span> display;
+}</div></div></div><div class="segment"><div class="comments doc-section"><div class="wrapper"><p>Try to determine the default display value of an element</p>
+<p>Parameters:</p>
+<ul>
+<li><strong>nodeName must be a String.</strong></li>
+</ul></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">defaultDisplay</span>(<span class="hljs-params"> nodeName </span>) </span>{
+	<span class="hljs-keyword">var</span> doc = <span class="hljs-built_in">document</span>,
+		display = elemdisplay[ nodeName ];
+
+	<span class="hljs-keyword">if</span> ( !display ) {
+		display = actualDisplay( nodeName, doc );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If the simple way fails, read from inside an iframe</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( display === <span class="hljs-string">"none"</span> || !display ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Use the already-created iframe if possible</p></div></div><div class="code"><div class="wrapper">			iframe = (iframe || jQuery( <span class="hljs-string">"&lt;iframe frameborder='0' width='0' height='0'/&gt;"</span> )).appendTo( doc.documentElement );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Always write a new HTML skeleton so Webkit and Firefox don&#39;t choke on reuse</p></div></div><div class="code"><div class="wrapper">			doc = iframe[ <span class="hljs-number">0</span> ].contentDocument;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Support: IE</p></div></div><div class="code"><div class="wrapper">			doc.write();
+			doc.close();
+
+			display = actualDisplay( nodeName, doc );
+			iframe.detach();
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Store the correct default display</p></div></div><div class="code"><div class="wrapper">		elemdisplay[ nodeName ] = display;
+	}
+
+	<span class="hljs-keyword">return</span> display;
+}
+
+<span class="hljs-keyword">return</span> defaultDisplay;
+
+});</div></div></div></div></body></html>

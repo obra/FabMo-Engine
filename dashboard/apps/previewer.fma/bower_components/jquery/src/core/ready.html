@@ -1,0 +1,47 @@
+<!DOCTYPE html><html lang="en"><head><title>dashboard/apps/previewer.fma/bower_components/jquery/src/core/ready</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../../../../../../../"><meta name="groc-document-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/core/ready"><meta name="groc-project-path" content="dashboard/apps/previewer.fma/bower_components/jquery/src/core/ready.js"><link rel="stylesheet" type="text/css" media="all" href="../../../../../../../assets/style.css"><script type="text/javascript" src="../../../../../../../assets/behavior.js"></script><body><div id="meta"><div class="file-path">dashboard/apps/previewer.fma/bower_components/jquery/src/core/ready.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper">define([
+	<span class="hljs-string">"../core"</span>,
+	<span class="hljs-string">"../core/init"</span>,
+	<span class="hljs-string">"../deferred"</span>
+], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> jQuery </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The deferred used on DOM ready</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> readyList;
+
+jQuery.fn.ready = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> fn </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Add the callback</p></div></div><div class="code"><div class="wrapper">	jQuery.ready.promise().done( fn );
+
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+};
+
+jQuery.extend({</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Is the DOM ready to be used? Set to true once it occurs.</p></div></div><div class="code"><div class="wrapper">	isReady: <span class="hljs-literal">false</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A counter to track how many items to wait for before
+the ready event fires. See #6781</p></div></div><div class="code"><div class="wrapper">	readyWait: <span class="hljs-number">1</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Hold (or release) the ready event</p></div></div><div class="code"><div class="wrapper">	holdReady: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> hold </span>) </span>{
+		<span class="hljs-keyword">if</span> ( hold ) {
+			jQuery.readyWait++;
+		} <span class="hljs-keyword">else</span> {
+			jQuery.ready( <span class="hljs-literal">true</span> );
+		}
+	},</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle when the DOM is ready</p></div></div><div class="code"><div class="wrapper">	ready: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> wait </span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Abort if there are pending holds or we&#39;re already ready</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( wait === <span class="hljs-literal">true</span> ? --jQuery.readyWait : jQuery.isReady ) {
+			<span class="hljs-keyword">return</span>;
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Remember that the DOM is ready</p></div></div><div class="code"><div class="wrapper">		jQuery.isReady = <span class="hljs-literal">true</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If a normal DOM Ready event fired, decrement, and wait if need be</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( wait !== <span class="hljs-literal">true</span> &amp;&amp; --jQuery.readyWait &gt; <span class="hljs-number">0</span> ) {
+			<span class="hljs-keyword">return</span>;
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If there are functions bound, to execute</p></div></div><div class="code"><div class="wrapper">		readyList.resolveWith( <span class="hljs-built_in">document</span>, [ jQuery ] );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Trigger any bound ready events</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( jQuery.fn.triggerHandler ) {
+			jQuery( <span class="hljs-built_in">document</span> ).triggerHandler( <span class="hljs-string">"ready"</span> );
+			jQuery( <span class="hljs-built_in">document</span> ).off( <span class="hljs-string">"ready"</span> );
+		}
+	}
+});</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The ready event handler and self cleanup method</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">completed</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-built_in">document</span>.removeEventListener( <span class="hljs-string">"DOMContentLoaded"</span>, completed, <span class="hljs-literal">false</span> );
+	<span class="hljs-built_in">window</span>.removeEventListener( <span class="hljs-string">"load"</span>, completed, <span class="hljs-literal">false</span> );
+	jQuery.ready();
+}
+
+jQuery.ready.promise = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> obj </span>) </span>{
+	<span class="hljs-keyword">if</span> ( !readyList ) {
+
+		readyList = jQuery.Deferred();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Catch cases where $(document).ready() is called after the browser event has already occurred.
+We once tried to use readyState &quot;interactive&quot; here, but it caused issues like the one
+discovered by ChrisS here: <a href="http://bugs.jquery.com/ticket/12282#comment:15">http://bugs.jquery.com/ticket/12282#comment:15</a></p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span> ( <span class="hljs-built_in">document</span>.readyState === <span class="hljs-string">"complete"</span> ) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle it asynchronously to allow scripts the opportunity to delay ready</p></div></div><div class="code"><div class="wrapper">			setTimeout( jQuery.ready );
+
+		} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Use the handy event callback</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-built_in">document</span>.addEventListener( <span class="hljs-string">"DOMContentLoaded"</span>, completed, <span class="hljs-literal">false</span> );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A fallback to window.onload, that will always work</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-built_in">window</span>.addEventListener( <span class="hljs-string">"load"</span>, completed, <span class="hljs-literal">false</span> );
+		}
+	}
+	<span class="hljs-keyword">return</span> readyList.promise( obj );
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Kick off the DOM ready check even if the user does not</p></div></div><div class="code"><div class="wrapper">jQuery.ready.promise();
+
+});</div></div></div></div></body></html>

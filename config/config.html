@@ -1,0 +1,267 @@
+<!DOCTYPE html><html lang="en"><head><title>config/config</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content="../"><meta name="groc-document-path" content="config/config"><meta name="groc-project-path" content="config/config.js"><link rel="stylesheet" type="text/css" media="all" href="../assets/style.css"><script type="text/javascript" src="../assets/behavior.js"></script><body><div id="meta"><div class="file-path">config/config.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>config.js</p>
+<p>Defines the superclass for all configuration objects, along with a number of 
+functions that support configuration in the FabMo system.</p>
+<p>A Config object is essentially a JSON object wrapped up with some functions for saving and loading.
+Methods are provided for updating keys/values in the object easily, in such a way that configuration changes
+coming from a client or from files on disk can be easily merged into an active configuration.</p>
+<p>Subclasses of the Config object are topic-specific configuration implementations.  In addition to keeping
+track of the data that is their charge, they are responsible for applying those configurations to the 
+systems they manage.  One example of this is g2_config.js, which keeps its config values synchronized with
+the G2 motion systems, updating them when they change.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> <span class="hljs-keyword">async</span> = <span class="hljs-built_in">require</span>(<span class="hljs-string">'async'</span>);
+<span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs-extra'</span>);
+<span class="hljs-keyword">var</span> path = <span class="hljs-built_in">require</span>(<span class="hljs-string">'path'</span>);
+<span class="hljs-keyword">var</span> PLATFORM = <span class="hljs-built_in">require</span>(<span class="hljs-string">'process'</span>).platform;
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'../log'</span>).logger(<span class="hljs-string">'config'</span>);
+<span class="hljs-keyword">var</span> EventEmitter = <span class="hljs-built_in">require</span>(<span class="hljs-string">'events'</span>).EventEmitter;
+<span class="hljs-keyword">var</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'util'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Config is the superclass from which all configuration objects descend
+  config_name - All configuration objects have a name, which among other things,
+                determines the filename for the stored configuration.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> Config = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">config_name</span>) </span>{
+	<span class="hljs-keyword">this</span>._cache = {};
+	<span class="hljs-keyword">this</span>.config_name = config_name;
+	<span class="hljs-keyword">this</span>._loaded = <span class="hljs-literal">false</span>;
+	<span class="hljs-keyword">this</span>.userConfigLoaded = <span class="hljs-literal">false</span>;
+	EventEmitter.call(<span class="hljs-keyword">this</span>);
+};
+util.inherits(Config,EventEmitter);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get a named value
+  k - The key for which to retrieve a value</p></div></div><div class="code"><div class="wrapper">Config.prototype.get = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">k</span>) </span>{
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._cache[k];
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return true if this configuration object has the provided value
+  k - key to check</p></div></div><div class="code"><div class="wrapper">Config.prototype.has = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">k</span>) </span>{
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._cache.hasOwnProperty(k);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get the values for the provided array of keys.
+Returns an object mapping keys to values.
+  arr - list of keys</p></div></div><div class="code"><div class="wrapper">Config.prototype.getMany = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">arr</span>) </span>{
+	retval = {};
+	<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i <span class="hljs-keyword">in</span> arr) {
+		key = arr[i];
+		retval[key] = <span class="hljs-keyword">this</span>._cache[key];
+	}
+	<span class="hljs-keyword">return</span> retval;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the configuration value for the provided key.
+This causes the configuration to be saved to disk
+This function calls <code>update()</code> internally, which is provided by subclasses
+         k - The key value
+         v - The new values
+  callback - Called once the config is updated (which might take some time)</p></div></div><div class="code"><div class="wrapper">Config.prototype.set = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">k,v, callback</span>) </span>{
+	<span class="hljs-keyword">var</span> u = {}
+	u[k] = v;
+	<span class="hljs-keyword">this</span>.setMany(u, callback);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the key value pairs supplied by <code>data</code> on this config object
+This causes the configuration to be saved to disk.
+      data - Object containing the keys/values to update
+  callback - Called with updated values on success or with error if error</p></div></div><div class="code"><div class="wrapper">Config.prototype.setMany = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.update(data, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+		<span class="hljs-keyword">if</span>(callback &amp;&amp; <span class="hljs-keyword">typeof</span> callback === <span class="hljs-string">'function'</span>) {
+			callback(err, result);
+		} <span class="hljs-keyword">else</span> {
+			log.warn(<span class="hljs-string">"No callback passed to setMany"</span>);
+		}
+		<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'change'</span>, data);
+	}.bind(<span class="hljs-keyword">this</span>));
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Delete all of the provided keys from this configuration object
+  keys - List of keys to remove</p></div></div><div class="code"><div class="wrapper">Config.prototype.deleteMany = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">keys, callback</span>) </span>{
+	keys.forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">k</span>) </span>{
+		<span class="hljs-keyword">if</span>(k <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>._cache) {
+			<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>._cache[k]
+		}
+	}.bind(<span class="hljs-keyword">this</span>));
+	<span class="hljs-keyword">this</span>.save(callback);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Delete the provided key from this configuration object
+  key - The key to delete</p></div></div><div class="code"><div class="wrapper">Config.prototype.delete = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">k, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.deleteMany([k], callback);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get an object that represents the entirety of this coniguration object
+Careful, this returns the actual cache (TODO maybe do a deep clone of this data)</p></div></div><div class="code"><div class="wrapper">Config.prototype.getData = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._cache;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The load function retreives a configuration from disk and loads it into the configuration object
+ filename - Full path to the file to load (JSON)
+ callback - called when complete with the loaded data (or error)</p></div></div><div class="code"><div class="wrapper">Config.prototype.load = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">filename, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>._filename = filename;
+	fs.readFile(filename, <span class="hljs-string">'utf8'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">err, data</span>) </span>{
+		<span class="hljs-keyword">if</span> (err) { <span class="hljs-keyword">return</span> callback(err); }
+		<span class="hljs-keyword">try</span> {
+			data = <span class="hljs-built_in">JSON</span>.parse(data);
+		} <span class="hljs-keyword">catch</span> (e) {
+			log.error(e);
+			<span class="hljs-keyword">return</span> callback(e);
+		}
+		<span class="hljs-keyword">this</span>.update(data, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, d</span>) </span>{
+			callback(err, data);
+		}, <span class="hljs-literal">true</span>);
+	}.bind(<span class="hljs-keyword">this</span>));
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Write this configuration object to disk
+  callback - Called with null once the configuration is saved (or with error if error)</p></div></div><div class="code"><div class="wrapper">Config.prototype.save = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	<span class="hljs-keyword">var</span> config_file = <span class="hljs-keyword">this</span>.getConfigFile();
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._loaded &amp;&amp; config_file) {
+		log.debug(<span class="hljs-string">"Saving config to "</span> + config_file);
+		fs.open(config_file, <span class="hljs-string">'w'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, fd</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) {
+				log.error(err);
+				callback(err);
+			} <span class="hljs-keyword">else</span> {
+				<span class="hljs-keyword">var</span> cfg = <span class="hljs-keyword">new</span> Buffer(<span class="hljs-built_in">JSON</span>.stringify(<span class="hljs-keyword">this</span>._cache, <span class="hljs-literal">null</span>, <span class="hljs-number">4</span>));
+				fs.write(fd, cfg, <span class="hljs-number">0</span>, cfg.length, <span class="hljs-number">0</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, written, string</span>) </span>{
+					<span class="hljs-keyword">if</span>(err) {
+						log.error(err);
+						callback(err);
+					} <span class="hljs-keyword">else</span> {
+						fs.fsync(fd, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+							<span class="hljs-keyword">if</span>(err) {
+								log.error(err);
+							}
+							fs.closeSync(fd);
+							log.debug(<span class="hljs-string">'fsync()ed '</span> + config_file);
+							callback(err);
+						}.bind(<span class="hljs-keyword">this</span>));
+					}
+				}.bind(<span class="hljs-keyword">this</span>));
+			}
+		}.bind(<span class="hljs-keyword">this</span>));
+	} <span class="hljs-keyword">else</span> {
+		setImmediate(callback);
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The init function performs an initial load() from the configuration&#39;s settings files.
+For this to work, the Config object has to have a default_config_file and config_file member</p></div></div><div class="code"><div class="wrapper">Config.prototype.init = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+		<span class="hljs-keyword">var</span> default_count;
+        <span class="hljs-keyword">var</span> user_count;
+        <span class="hljs-keyword">var</span> default_config_file = <span class="hljs-keyword">this</span>.getDefaultConfigFile();
+        <span class="hljs-keyword">var</span> profile_config_file = <span class="hljs-keyword">this</span>.getProfileConfigFile();
+        <span class="hljs-keyword">var</span> config_file = <span class="hljs-keyword">this</span>.getConfigFile();
+        <span class="hljs-keyword">async</span>.series(
+		[
+			<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">loadDefault</span>(<span class="hljs-params">callback</span>) </span>{ <span class="hljs-keyword">this</span>.load(default_config_file, callback); }.bind(<span class="hljs-keyword">this</span>),
+			<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">saveDefaultCount</span>(<span class="hljs-params">callback</span>) </span>{
+				default_count = <span class="hljs-built_in">Object</span>.keys(<span class="hljs-keyword">this</span>._cache).length;
+				callback();
+			}.bind(<span class="hljs-keyword">this</span>),
+			<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">loadUserConfig</span>(<span class="hljs-params">callback</span>) </span>{
+				<span class="hljs-keyword">this</span>.load(config_file, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+					<span class="hljs-keyword">if</span>(err) {
+						<span class="hljs-keyword">if</span>(err.code === <span class="hljs-string">"ENOENT"</span>) {
+							log.warn(<span class="hljs-string">'Configuration file '</span> + config_file + <span class="hljs-string">' not found.'</span>);
+                            <span class="hljs-keyword">this</span>._loaded = <span class="hljs-literal">true</span>;
+							<span class="hljs-keyword">this</span>.save(callback, <span class="hljs-literal">true</span>);
+						} <span class="hljs-keyword">else</span> {
+							log.warn(<span class="hljs-string">'Problem loading the user configuration file "'</span> + config_file + <span class="hljs-string">'": '</span> + err.message);
+							<span class="hljs-keyword">this</span>._loaded = <span class="hljs-literal">true</span>;
+							<span class="hljs-keyword">this</span>.userConfigLoaded = <span class="hljs-literal">true</span>;
+							<span class="hljs-keyword">this</span>.save(callback);
+						}
+					} <span class="hljs-keyword">else</span> {
+						<span class="hljs-keyword">this</span>._loaded = <span class="hljs-literal">true</span>;
+						<span class="hljs-keyword">this</span>.userConfigLoaded = <span class="hljs-literal">true</span>;
+						user_count = <span class="hljs-built_in">Object</span>.keys(data).length;
+						callback(<span class="hljs-literal">null</span>, <span class="hljs-keyword">this</span>);
+					}
+				}.bind(<span class="hljs-keyword">this</span>));
+			}.bind(<span class="hljs-keyword">this</span>),
+			<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">saveIfNeeded</span>(<span class="hljs-params">callback</span>) </span>{
+				<span class="hljs-keyword">if</span>(default_count != user_count) {
+					<span class="hljs-keyword">this</span>.save(callback);
+				} <span class="hljs-keyword">else</span> {
+					callback();
+				}
+			}.bind(<span class="hljs-keyword">this</span>)
+		],
+		<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, results</span>) </span>{
+			<span class="hljs-keyword">if</span>(err) { callback(err); }
+			<span class="hljs-keyword">else</span> { callback(<span class="hljs-literal">null</span>, <span class="hljs-keyword">this</span>); }
+		}.bind(<span class="hljs-keyword">this</span>)
+	);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return the path to the file containing the default values for this configuration</p></div></div><div class="code"><div class="wrapper">Config.prototype.getDefaultConfigFile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">return</span> Config.getDefaultProfileDir(<span class="hljs-string">'config'</span>) + <span class="hljs-keyword">this</span>.config_name + <span class="hljs-string">'.json'</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO I think this function is a relic from an earlier version of profiles.</p></div></div><div class="code"><div class="wrapper">Config.prototype.getProfileConfigFile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">return</span> Config.getProfileDir(<span class="hljs-string">'config'</span>) + <span class="hljs-keyword">this</span>.config_name + <span class="hljs-string">'.json'</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return the path to the file where this configuration stores its data</p></div></div><div class="code"><div class="wrapper">Config.prototype.getConfigFile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">return</span> Config.getDataDir(<span class="hljs-string">'config'</span>) + <span class="hljs-string">'/'</span> + <span class="hljs-keyword">this</span>.config_name + <span class="hljs-string">'.json'</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>&quot;Static Methods&quot;</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - Probably factor out, old profile</p></div></div><div class="code"><div class="wrapper">Config.getProfileDir = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">d</span>) </span>{
+	<span class="hljs-keyword">var</span> profile = Config.getCurrentProfile() || <span class="hljs-string">'default'</span>;
+	<span class="hljs-keyword">return</span> __dirname + <span class="hljs-string">'/../profiles/'</span> + profile + <span class="hljs-string">'/'</span> + (d ? (d + <span class="hljs-string">'/'</span>) : <span class="hljs-string">''</span>);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - Probably factor out, old profile stuff</p></div></div><div class="code"><div class="wrapper">Config.getDefaultProfileDir = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">d</span>) </span>{
+	<span class="hljs-keyword">return</span> __dirname + <span class="hljs-string">'/../profiles/default/'</span> + (d ? (d + <span class="hljs-string">'/'</span>) : <span class="hljs-string">''</span>);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get the mutable data directory for FabMo
+On unix-like systems, this is /opt/fabmo</p></div></div><div class="code"><div class="wrapper">Config.getDataDir = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">name</span>) </span>{
+	<span class="hljs-keyword">switch</span>(PLATFORM) {
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'win32'</span>:
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'win64'</span>:
+			base = <span class="hljs-string">'c:\\fabmo'</span>;
+			<span class="hljs-keyword">break</span>;
+		<span class="hljs-keyword">default</span>:
+			base = <span class="hljs-string">'/opt/fabmo'</span>;
+	}
+	<span class="hljs-keyword">if</span>(name) {
+		dir = base + path.sep + name;
+	} <span class="hljs-keyword">else</span> {
+		dir = base;
+	}
+	<span class="hljs-keyword">return</span> dir;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO probably not needed anymore</p></div></div><div class="code"><div class="wrapper">Config.getCurrentProfile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">var</span> cfg = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./index'</span>);
+	<span class="hljs-keyword">return</span> cfg.engine.get(<span class="hljs-string">'profile'</span>);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Delete all macros
+TODO - Should this just be in the macros module?
+TODO this removeSync pattern is bad, should we do this with proper asynchronous calls?</p></div></div><div class="code"><div class="wrapper">Config.deleteUserMacros = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	<span class="hljs-keyword">var</span> installedMacrosDir = Config.getDataDir(<span class="hljs-string">'macros'</span>);
+	fs.readdir(installedMacrosDir, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, files</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+	  	<span class="hljs-keyword">try</span> {  		
+		  	files.forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">file</span>) </span>{
+		  		<span class="hljs-keyword">var</span> to_delete = path.join(installedMacrosDir, file);
+		  		fs.removeSync(to_delete);
+		  	});
+	  		callback();
+	  	} <span class="hljs-keyword">catch</span>(e) {
+	  		log.error(e);
+	  		callback(e);
+	  	}
+	})
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Delete all user configuration files, except for auth_secret and engine/updater.json
+TODO this removeSync pattern is bad, should we do this with proper asynchronous calls?</p></div></div><div class="code"><div class="wrapper">Config.deleteUserConfig = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	<span class="hljs-keyword">var</span> config_dir = Config.getDataDir(<span class="hljs-string">'config'</span>);
+	fs.readdir(config_dir, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, files</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { <span class="hljs-keyword">return</span> callback(err); }
+	  	<span class="hljs-keyword">try</span> {  		
+		  	files.forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">file</span>) </span>{
+		  		<span class="hljs-keyword">if</span>(file.search(<span class="hljs-regexp">/auth_secret|engine\.json|updater\.json$/i</span>) === -<span class="hljs-number">1</span>) { 
+					<span class="hljs-keyword">var</span> p = path.join(config_dir, file);
+			  		fs.removeSync(p);
+		  		}
+		  	});
+	  		callback();
+	  	} <span class="hljs-keyword">catch</span>(e) {
+	  		log.error(e);
+	  		callback(e);
+	  	}
+	})
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Clear configura</p></div></div><div class="code"><div class="wrapper">Config.deleteProfileData = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	Config.deleteUserConfig(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+		<span class="hljs-keyword">if</span>(err) { log.error(err); }
+		Config.deleteUserMacros(callback);
+	});
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Creates the data directory and subdirectories if they do not already exist</p></div></div><div class="code"><div class="wrapper">Config.createDataDirectories = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	<span class="hljs-keyword">var</span> create_directory = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">dir, callback</span>) </span>{
+		dir = Config.getDataDir(dir);
+		isDirectory(dir, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">isdir</span>) </span>{
+			<span class="hljs-keyword">if</span>(!isdir) {
+				log.warn(<span class="hljs-string">'Directory "'</span> + dir + <span class="hljs-string">'" does not exist.  Creating a new one.'</span>);
+				fs.mkdir(dir, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+					<span class="hljs-keyword">if</span>(!err) {
+						log.info(<span class="hljs-string">'Successfully created directory "'</span> + dir + <span class="hljs-string">'"'</span>);
+					}
+					callback(err);
+				});
+			} <span class="hljs-keyword">else</span> {
+				callback(<span class="hljs-literal">null</span>);
+			}
+		});
+	}.bind(<span class="hljs-keyword">this</span>);
+	dirs = [<span class="hljs-literal">null</span>, <span class="hljs-string">'debug'</span>, <span class="hljs-string">'backup'</span>, <span class="hljs-string">'db'</span>, <span class="hljs-string">'log'</span>, <span class="hljs-string">'files'</span>, <span class="hljs-string">'config'</span>, <span class="hljs-string">'apps'</span>, <span class="hljs-string">'macros'</span>, <span class="hljs-string">'profiles'</span>, <span class="hljs-string">'approot'</span>, path.join(<span class="hljs-string">'approot'</span>,<span class="hljs-string">'approot'</span>)];
+	<span class="hljs-keyword">async</span>.eachSeries(dirs, create_directory, callback);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Convenience function for determining if path is a directory
+TODO - util.js?  Necessary?</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">isDirectory</span>(<span class="hljs-params">path, callback</span>)</span>{
+	fs.stat(path,<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err,stats</span>)</span>{
+		<span class="hljs-keyword">if</span>(err) callback(<span class="hljs-literal">undefined</span>);
+		<span class="hljs-keyword">else</span> callback(stats.isDirectory());
+	});
+}
+
+exports.Config = Config;</div></div></div></div></body></html>
