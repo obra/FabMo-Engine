@@ -1,9 +1,16 @@
-<!DOCTYPE html><html lang="en"><head><title>log</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content=""><meta name="groc-document-path" content="log"><meta name="groc-project-path" content="log.js"><link rel="stylesheet" type="text/css" media="all" href="assets/style.css"><script type="text/javascript" src="assets/behavior.js"></script><body><div id="meta"><div class="file-path">log.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>log.js is a &quot;Poor man&#39;s&quot; logging module.  It provides basic colorized logging using named 
-loggers with selectable log levels.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> process = <span class="hljs-built_in">require</span>(<span class="hljs-string">'process'</span>);
+<!DOCTYPE html><html lang="en"><head><title>log</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content=""><meta name="groc-document-path" content="log"><meta name="groc-project-path" content="log.js"><link rel="stylesheet" type="text/css" media="all" href="assets/style.css"><script type="text/javascript" src="assets/behavior.js"></script><body><div id="meta"><div class="file-path">log.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>log.js</p>
+<p>Logging module. It provides basic colorized logging using named loggers with selectable log levels.<br>Written basically to provide only the logging functionality needed without needing to buy
+into an elaborate logging system.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> process = <span class="hljs-built_in">require</span>(<span class="hljs-string">'process'</span>);
 <span class="hljs-keyword">try</span> { <span class="hljs-keyword">var</span> colors = <span class="hljs-built_in">require</span>(<span class="hljs-string">'colors'</span>); } <span class="hljs-keyword">catch</span>(e) {<span class="hljs-keyword">var</span> colors = <span class="hljs-literal">false</span>;}
+<span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs'</span>);
+<span class="hljs-keyword">var</span> path = <span class="hljs-built_in">require</span>(<span class="hljs-string">'path'</span>);
+<span class="hljs-keyword">var</span> jsesc = <span class="hljs-built_in">require</span>(<span class="hljs-string">'jsesc'</span>);
 <span class="hljs-keyword">var</span> _suppress = <span class="hljs-literal">false</span>;
 <span class="hljs-keyword">var</span> log_buffer = [];
-<span class="hljs-keyword">var</span> LOG_BUFFER_SIZE = <span class="hljs-number">5000</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>String versions of the allowable log levels</p></div></div><div class="code"><div class="wrapper">LEVELS = {
+<span class="hljs-keyword">var</span> LOG_BUFFER_SIZE = <span class="hljs-number">5000</span>;
+<span class="hljs-keyword">var</span> PERSISTENT_LOG_COUNT = <span class="hljs-number">20</span>;
+<span class="hljs-keyword">var</span> flightRecorder = <span class="hljs-literal">null</span>;
+<span class="hljs-keyword">var</span> tickTime = <span class="hljs-literal">null</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>String versions of the allowable log levels</p></div></div><div class="code"><div class="wrapper">LEVELS = {
 	<span class="hljs-string">'g2'</span> : <span class="hljs-number">0</span>,
 	<span class="hljs-string">'debug'</span> : <span class="hljs-number">1</span>,
 	<span class="hljs-string">'info'</span> : <span class="hljs-number">2</span>,
@@ -20,38 +27,99 @@ loggers with selectable log levels.</p></div></div><div class="code"><div class=
 	<span class="hljs-string">'config_loader'</span> : <span class="hljs-string">'debug'</span>,
 	<span class="hljs-string">'settings'</span> : <span class="hljs-string">'debug'</span>,
 	<span class="hljs-string">'log'</span>:<span class="hljs-string">'debug'</span>
-};
-
-<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">setGlobalLevel</span>(<span class="hljs-params">lvl</span>)</span>{
-	<span class="hljs-keyword">if</span> (lvl)
-	{
-		<span class="hljs-keyword">if</span> (lvl &gt;= <span class="hljs-number">0</span> &amp;&amp; lvl &lt;= <span class="hljs-number">3</span>)
-		{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>assign the log level to the string equivalent of the integer </p></div></div><div class="code"><div class="wrapper">			<span class="hljs-built_in">Object</span>.keys(LOG_LEVELS).forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The flight recorder records the timestamp and content of every message sent to 
+or recieved from G2.  It is memory intensive and degrades system performance.
+The advantage of using is that you can take the JSON file it produces and
+&quot;replay&quot; a session into a G2 instance later.  This is invaluable for catching bugs
+that depend on timing to reproduce.  The replayer honors the timestamp values stored in
+the flight recording, so that the actual times of all messages are reproduced as closely as possible.</p>
+<p>The flight replayer can be found here, and has documentation of its own:
+<a href="https://github.com/FabMo/g2-flight-replayer">https://github.com/FabMo/g2-flight-replayer</a></p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> FlightRecorder = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+  <span class="hljs-keyword">this</span>.records = []
+  <span class="hljs-keyword">this</span>.firstTime = <span class="hljs-number">0</span>
+  <span class="hljs-keyword">this</span>.info = {
+    <span class="hljs-string">'startTime'</span> : <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().toISOString(),
+    <span class="hljs-string">'arch'</span> : process.arch,
+    <span class="hljs-string">'platform'</span> : process.platform
+  }
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Record the provided data at the current time
+channel - Just a name - mainly for older systems with multiple serial channels.
+dir - &#39;out&#39; (host-&gt;g2) or &#39;in&#39; (g2-&gt;host)
+data - The actual data sent or received</p></div></div><div class="code"><div class="wrapper">FlightRecorder.prototype.record = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">channel, dir, data</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get the current time</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">var</span> t = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Add the current message to the record</p></div></div><div class="code"><div class="wrapper">  <span class="hljs-keyword">this</span>.records.push({
+    <span class="hljs-string">'time'</span> : t,
+    <span class="hljs-string">'data'</span> : data,
+		<span class="hljs-string">'dir'</span> : dir,
+    <span class="hljs-string">'channel'</span> : channel
+  })
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return the most recently recorded record.</p></div></div><div class="code"><div class="wrapper">FlightRecorder.prototype.getLatest = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.records.length === <span class="hljs-number">0</span>) { <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>; }
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.records[<span class="hljs-keyword">this</span>.records.length-<span class="hljs-number">1</span>];
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return a flight log which includes the list of recorded messages, plus some summary information.</p></div></div><div class="code"><div class="wrapper">FlightRecorder.prototype.getFlightLog = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+<span class="hljs-keyword">var</span> newRecords = []
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.records.length &gt; <span class="hljs-number">0</span>) {
+		<span class="hljs-keyword">var</span> startTime = <span class="hljs-keyword">this</span>.records[<span class="hljs-number">0</span>].time;
+		<span class="hljs-keyword">this</span>.records.forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">record</span>) </span>{
+			newRecords.push({
+				<span class="hljs-string">'t'</span> : record.time-startTime,
+				<span class="hljs-string">'ch'</span> : record.channel,
+				<span class="hljs-string">'dir'</span> : record.dir,
+				<span class="hljs-string">'data'</span> : record.data, <span class="hljs-comment">/*new Buffer(record.data).toString('base64')*/</span>
+			});
+		}.bind(<span class="hljs-keyword">this</span>));
+	}
+  <span class="hljs-keyword">this</span>.info.endTime = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().toISOString();
+	<span class="hljs-keyword">var</span> flight = {
+		records : newRecords,
+	    info : <span class="hljs-keyword">this</span>.info
+    }
+    <span class="hljs-keyword">return</span> flight;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Save this flight recording to a JSON file</p></div></div><div class="code"><div class="wrapper">FlightRecorder.prototype.save = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">filename, callback</span>) </span>{
+  fs.writeFile(filename, <span class="hljs-built_in">JSON</span>.stringify(<span class="hljs-keyword">this</span>.getFlightLog(), <span class="hljs-literal">null</span>, <span class="hljs-number">2</span>), callback);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the global logging level to the provided value.  This supersedes the default log level for individual loggers.
+lvl - can be a name such as g2,debug,etc or can be a numeric level</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">setGlobalLevel</span>(<span class="hljs-params">lvl</span>)</span>{
+	<span class="hljs-keyword">if</span> (lvl) {
+		<span class="hljs-keyword">if</span> (lvl &gt;= <span class="hljs-number">0</span> &amp;&amp; lvl &lt;= <span class="hljs-number">3</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>assign the log level to the string equivalent of the integer</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-built_in">Object</span>.keys(LOG_LEVELS).forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key</span>) </span>{
 	  			LOG_LEVELS[key] = <span class="hljs-built_in">Object</span>.keys(LEVELS).filter(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key</span>) </span>{<span class="hljs-keyword">return</span> (LEVELS[key] === lvl);})[<span class="hljs-number">0</span>];
 	  		});
 		}
-		<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (<span class="hljs-built_in">Object</span>.keys(LEVELS).indexOf(lvl) &gt;= <span class="hljs-number">0</span>) <span class="hljs-comment">// if a string</span>
-		{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p> assign the log level to the string that is given </p></div></div><div class="code"><div class="wrapper">			<span class="hljs-built_in">Object</span>.keys(LOG_LEVELS).forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key</span>) </span>{
+		<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (<span class="hljs-built_in">Object</span>.keys(LEVELS).indexOf(lvl) &gt;= <span class="hljs-number">0</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p> assign the log level to the string that is given</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-built_in">Object</span>.keys(LOG_LEVELS).forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key</span>) </span>{
 	  			LOG_LEVELS[key] = lvl;
 	  		});
 		}
-		<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (lvl === <span class="hljs-string">"none"</span>)
-		{
+		<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (lvl === <span class="hljs-string">"none"</span>) {
 			<span class="hljs-keyword">return</span>;
 		}
-		<span class="hljs-keyword">else</span>
-		{
+		<span class="hljs-keyword">else</span> {
 			logger(<span class="hljs-string">'log'</span>).warn(<span class="hljs-string">'Invalid log level: '</span> + lvl);
+		}
+		<span class="hljs-keyword">if</span>(lvl === <span class="hljs-string">"g2"</span>) {
+			_log.info(<span class="hljs-string">"Creating flight recorder..."</span>)
+			flightRecorder = <span class="hljs-keyword">new</span> FlightRecorder();
+		} <span class="hljs-keyword">else</span> {
+			<span class="hljs-keyword">if</span>(flightRecorder) {
+				_log.info(<span class="hljs-string">"Destroying flight recorder..."</span>)				
+			}
+			flightRecorder = <span class="hljs-literal">null</span>;
 		}
 	}
 }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The Logger object is what is created and used by modules to log to the console.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> Logger = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">name</span>) </span>{
 	<span class="hljs-keyword">this</span>.name = name;
-};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Index of all the Logger objects that have been created.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> logs = {};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Output the provided message with colorized output (if available) and the logger name</p></div></div><div class="code"><div class="wrapper">Logger.prototype.write = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">level, msg</span>) </span>{
-	<span class="hljs-keyword">if</span>(_suppress) {
-		<span class="hljs-keyword">return</span>;
-	}
-
-	my_level = LOG_LEVELS[<span class="hljs-keyword">this</span>.name] || <span class="hljs-string">'debug'</span>;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Index of all the Logger objects that have been created.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> logs = {};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>These are convenience methods for timing operations.
+Call tick() before starting a task and then tock() after finishing. 
+The elapsed time will be printed to the console.
+You can call tock repeatedly, and it will tell you the time since the last tock.</p></div></div><div class="code"><div class="wrapper">Logger.prototype.tick = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{ 
+	tickTime = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime()
+	<span class="hljs-keyword">this</span>.debug(<span class="hljs-string">'TICK'</span>);
+}
+Logger.prototype.tock = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">name</span>) </span>{ 
+	<span class="hljs-keyword">var</span> d = tickTime ? <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime() - tickTime  + <span class="hljs-string">'ms'</span> : <span class="hljs-string">'no tick!'</span>;
+	<span class="hljs-keyword">var</span> name = name ? <span class="hljs-string">' ('</span> + name + <span class="hljs-string">') '</span> : <span class="hljs-string">''</span>;
+	<span class="hljs-keyword">this</span>.debug(<span class="hljs-string">'TOCK'</span> + name + d)
+	tickTime = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime()
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Output the provided message with colorized output (if available) and the logger name</p></div></div><div class="code"><div class="wrapper">Logger.prototype.write = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">level, msg</span>) </span>{
+	<span class="hljs-keyword">if</span>(_suppress) { <span class="hljs-keyword">return</span>; }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - I&#39;ve read that the modules that overload the builtin string object to provide functionality
+       (as seen below) are falling out of favor because of weirdo side effects they have.  Might want
+       to re-think how colorization is done here.</p></div></div><div class="code"><div class="wrapper">	my_level = LOG_LEVELS[<span class="hljs-keyword">this</span>.name] || <span class="hljs-string">'debug'</span>;
 	<span class="hljs-keyword">if</span>((LEVELS[level] || <span class="hljs-number">0</span>) &gt;= (LEVELS[my_level] || <span class="hljs-number">0</span>)) {
 		buffer_msg = level + <span class="hljs-string">': '</span> + msg + <span class="hljs-string">' ['</span>+<span class="hljs-keyword">this</span>.name+<span class="hljs-string">']'</span>;
 		<span class="hljs-keyword">if</span>(colors) {
@@ -74,33 +142,58 @@ loggers with selectable log levels.</p></div></div><div class="code"><div class=
 			}
 		} <span class="hljs-keyword">else</span> {
 			<span class="hljs-built_in">console</span>.log(level + <span class="hljs-string">': '</span> + msg+<span class="hljs-string">' ['</span>+<span class="hljs-keyword">this</span>.name+<span class="hljs-string">']'</span>);
-		}
-		log_buffer.push(buffer_msg);
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Circular log buffer that maintains the last LOG_BUFFER_SIZE messages</p></div></div><div class="code"><div class="wrapper">		log_buffer.push(buffer_msg);
 		<span class="hljs-keyword">while</span>(log_buffer.length &gt; LOG_BUFFER_SIZE) {
 			log_buffer.shift();
 		}
 	}
 };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>These functions provide a shorthand alternative to specifying the log level every time</p></div></div><div class="code"><div class="wrapper">Logger.prototype.debug = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">msg</span>) </span>{ <span class="hljs-keyword">this</span>.write(<span class="hljs-string">'debug'</span>, msg);};
 Logger.prototype.info = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">msg</span>) </span>{ <span class="hljs-keyword">this</span>.write(<span class="hljs-string">'info'</span>, msg);};
-Logger.prototype.warn = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">msg</span>) </span>{ <span class="hljs-keyword">this</span>.write(<span class="hljs-string">'warn'</span>, msg);};
-Logger.prototype.error = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">msg</span>) </span>{
+Logger.prototype.warn = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">msg</span>) </span>{ <span class="hljs-keyword">this</span>.write(<span class="hljs-string">'warn'</span>, msg);};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>error() is a little special - if you call it with an actual error object that has a stack
+it will print out the stack as well, for debugging.</p></div></div><div class="code"><div class="wrapper">Logger.prototype.error = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">msg</span>) </span>{
 	<span class="hljs-keyword">if</span>(msg &amp;&amp; msg.stack) {
 		<span class="hljs-keyword">this</span>.write(<span class="hljs-string">'error'</span>, msg.stack);
 	} <span class="hljs-keyword">else</span> {
 		<span class="hljs-keyword">this</span>.write(<span class="hljs-string">'error'</span>, msg);
 	}
-};
-
-Logger.prototype.g2 = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">msg</span>) </span>{<span class="hljs-keyword">this</span>.write(<span class="hljs-string">'g2'</span>, msg);};
-Logger.prototype.uncaught = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>stack() prints out a backtrace wherever it is called. It prints at the &#39;debug&#39; log level</p></div></div><div class="code"><div class="wrapper">Logger.prototype.stack = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">msg</span>) </span>{
+	<span class="hljs-keyword">var</span> stackTrace = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>().stack;
+	stackTrace = stackTrace.split(<span class="hljs-string">'\n'</span>);
+	stackTrace = stackTrace.slice(<span class="hljs-number">2</span>).join(<span class="hljs-string">'\n'</span>);
+	<span class="hljs-keyword">this</span>.write(<span class="hljs-string">'debug'</span>, <span class="hljs-string">'Stack Trace:\n'</span> + stackTrace);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This function is for data sent to and from the serial channel ONLY.  Calling it with any other
+input can lead to trouble if you&#39;re trying to debug.  This log level prints special output that
+includes timestamps and escaped special characters so it&#39;s easy to diagnose communication issues</p></div></div><div class="code"><div class="wrapper">Logger.prototype.g2 = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">channel, dir, o</span>) </span>{
+  <span class="hljs-keyword">var</span> msg = {}
+	<span class="hljs-keyword">if</span>(flightRecorder) {
+		flightRecorder.record(channel, dir, o);
+		msg = flightRecorder.getLatest();
+	} <span class="hljs-keyword">else</span> {
+		msg.channel = channel;
+		msg.data = o;
+		msg.time = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime();
+	}
+	<span class="hljs-keyword">switch</span>(dir) {
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'out'</span>:
+			<span class="hljs-keyword">this</span>.write(<span class="hljs-string">'g2'</span>, <span class="hljs-string">'--'</span> + msg.channel + <span class="hljs-string">'-'</span> + msg.time + <span class="hljs-string">'----&gt; '</span> + jsesc(msg.data.trim()));
+			<span class="hljs-keyword">break</span>;
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'in'</span>:
+			<span class="hljs-keyword">this</span>.write(<span class="hljs-string">'g2'</span>, <span class="hljs-string">'&lt;-'</span> + msg.channel + <span class="hljs-string">'-'</span> + msg.time + <span class="hljs-string">'----- '</span> + jsesc(msg.data.trim()));
+			<span class="hljs-keyword">break</span>;
+	}
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Printout for uncaught exceptions.
+This is nice for debugging, but in production, handling an otherwise uncaught exception and allowing the
+program to continue execution is almost always a bad idea.</p></div></div><div class="code"><div class="wrapper">Logger.prototype.uncaught = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
 	<span class="hljs-keyword">if</span>(colors) {
 		<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"UNCAUGHT EXCEPTION"</span>.red.underline);
 		<span class="hljs-built_in">console</span>.log((<span class="hljs-string">''</span> + err.stack).red)
 	} <span class="hljs-keyword">else</span> {
 		<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"UNCAUGHT EXCEPTION"</span>);
 		<span class="hljs-built_in">console</span>.log(err.stack);
-	}	
-}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Factory function for producing a new, named logger object</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> logger = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">name</span>) </span>{
+	}
+	log_buffer.push(<span class="hljs-string">"UNCAUGHT EXCEPTION"</span>);
+	log_buffer.push(err.stack);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - Not sure what this is, probably should be removed</p></div></div><div class="code"><div class="wrapper">Logger.prototype.startProfile</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Factory function for producing a new, named logger object</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> logger = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">name</span>) </span>{
 	<span class="hljs-keyword">if</span>(name <span class="hljs-keyword">in</span> logs) {
 		<span class="hljs-keyword">return</span> logs[name];
 	} <span class="hljs-keyword">else</span> {
@@ -108,23 +201,114 @@ Logger.prototype.uncaught = <span class="hljs-function"><span class="hljs-keywor
 		logs[name] = l;
 		<span class="hljs-keyword">return</span> l;
 	}
-};
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Logging internal to the logging module - the logger log logger log</p>
+<p>.... log log logger log.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> _log = logger(<span class="hljs-string">'log'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Cleanup operations that happen on program exit.
+Mainly:</p>
+<ul>
+<li>Write to the current log file so we don&#39;t miss anything if the engine crashed</li>
+<li>Write out the contents of the current flight recording</li>
+<li>Rotate the logs</li>
+</ul>
+<p>options:
+   exit - If true: exit, instead of simply intercepting the handler
+savelog - If true: save and rotate logs/flight data.  Don&#39;t if false or unspecified.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">exitHandler</span>(<span class="hljs-params">options, err</span>) </span>{
+    options = options || {};
+    <span class="hljs-keyword">if</span> (err) {
+    	_log.uncaught(err);
+    }
+    <span class="hljs-keyword">var</span> dir = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./config'</span>).getDataDir(<span class="hljs-string">'log'</span>)
+    <span class="hljs-keyword">var</span> fn = <span class="hljs-string">'fabmo-'</span> + <span class="hljs-built_in">Date</span>.now() + <span class="hljs-string">'-log.txt'</span>
+    <span class="hljs-keyword">var</span> flight_fn = path.join(dir, <span class="hljs-string">'g2-flight-log.json'</span>);
 
-process.on(<span class="hljs-string">'uncaughtException'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{ Logger.prototype.uncaught(err); });
-
-<span class="hljs-keyword">var</span> suppress = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">v</span>) </span>{_suppress = <span class="hljs-literal">true</span>;};
-<span class="hljs-keyword">var</span> unsuppress = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">v</span>) </span>{_suppress = <span class="hljs-literal">false</span>;};
-
-<span class="hljs-keyword">var</span> getLogBuffer = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+    filename = path.join(dir, fn)
+    <span class="hljs-keyword">if</span>(options.savelog) {
+    	_log.info(<span class="hljs-string">"Saving log..."</span>)
+    	<span class="hljs-keyword">try</span> {
+	    	saveLogBuffer(filename);
+	    	_log.info(<span class="hljs-string">"Log saved to "</span> + filename);
+		<span class="hljs-keyword">if</span>(flightRecorder) {
+			flightRecorder.save(flight_fn, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+			rotateLogs(PERSISTENT_LOG_COUNT, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+				<span class="hljs-keyword">if</span>(options.exit) {
+					_log.info(<span class="hljs-string">"Exiting via process.exit()..."</span>);
+					process.exit();
+				}
+			});
+			});
+		} <span class="hljs-keyword">else</span> {
+			<span class="hljs-keyword">if</span>(options.exit) {
+				_log.info(<span class="hljs-string">"Exiting via process.exit()..."</span>);
+				process.exit();
+			}
+		}
+	    	<span class="hljs-keyword">return</span>;
+    	} <span class="hljs-keyword">catch</span>(e) {
+	    	_log.error(<span class="hljs-string">"Could not save log to "</span> + filename);
+	    	_log.error(e);
+    	}
+	    <span class="hljs-keyword">if</span> (options.exit) {
+		_log.info(<span class="hljs-string">"Exiting via process.exit()..."</span>);
+	    	process.exit();
+	    }
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Bind handlers for the badtimes (tm)
+See documentation on the process module (nodejs docs) for information about these events</p></div></div><div class="code"><div class="wrapper">process.on(<span class="hljs-string">'exit'</span>, exitHandler.bind(<span class="hljs-literal">null</span>));
+process.on(<span class="hljs-string">'SIGINT'</span>, exitHandler.bind(<span class="hljs-literal">null</span>, {savelog:<span class="hljs-literal">true</span>, exit:<span class="hljs-literal">true</span>}));
+process.on(<span class="hljs-string">'uncaughtException'</span>, exitHandler.bind(<span class="hljs-literal">null</span>, {savelog:<span class="hljs-literal">true</span>, exit:<span class="hljs-literal">false</span>}));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - why do these have an argument?  They don&#39;t use it.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> suppress = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">v</span>) </span>{_suppress = <span class="hljs-literal">true</span>;};
+<span class="hljs-keyword">var</span> unsuppress = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">v</span>) </span>{_suppress = <span class="hljs-literal">false</span>;};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return the circular log buffer as a big string</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> getLogBuffer = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
 	<span class="hljs-keyword">return</span> log_buffer.join(<span class="hljs-string">'\n'</span>);
 };
 
 <span class="hljs-keyword">var</span> clearLogBuffer = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
 	log_buffer = [];
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Save the current contents of the log buffer to a file. SYNCHRONOUS.
+filename - The filename to write to</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> saveLogBuffer = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">filename</span>) </span>{
+	fs.writeFileSync(filename, getLogBuffer());
 }
 
+<span class="hljs-keyword">var</span> getFlightLog = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">if</span>(flightRecorder) {
+		<span class="hljs-keyword">return</span> flightRecorder.getFlightLog();
+	} <span class="hljs-keyword">else</span> {
+		<span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"No available flight recording."</span>)
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Rotate the log files
+count - The number of log files to keep.  If there are 10 logfiles in the log directory, and 
+        this function is called with count=5, the 5 oldest ones are deleted.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> rotateLogs = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">count,callback</span>) </span>{
+	<span class="hljs-keyword">var</span> logdir = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./config'</span>).getDataDir(<span class="hljs-string">'log'</span>);
+	callback = callback || <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{};
+	<span class="hljs-keyword">try</span> {
+		fs.readdir(logdir, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, files</span>) </span>{
+			files.sort();
+			<span class="hljs-keyword">if</span>(files.length &lt;= count) {
+				<span class="hljs-keyword">return</span> callback();
+			}
+			<span class="hljs-keyword">var</span> filesToDelete = files.slice(<span class="hljs-number">0</span>, files.length-count);
+			<span class="hljs-keyword">async</span>.each(
+				filesToDelete,
+				<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">file, callback</span>) </span>{
+					fs.unlink(path.join(logdir, file), callback)
+				},
+				<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+					<span class="hljs-keyword">if</span>(err) {
+						_log.error(err);
+					} <span class="hljs-keyword">else</span> {
+			    		_log.info(filesToDelete.length + <span class="hljs-string">" old logfile removed."</span>);
+					}
+					callback(<span class="hljs-literal">null</span>)
+				});
+			});
+	} <span class="hljs-keyword">catch</span>(e) {
+		_log.error(e);
+		callback(e);
+	}
+}
+
+exports.getFlightLog = getFlightLog;
+exports.FlightRecorder = FlightRecorder;
 exports.suppress = suppress;
 exports.logger = logger;
 exports.setGlobalLevel = setGlobalLevel;
-exports.getLogBuffer = getLogBuffer; 
-exports.clearLogBuffer = clearLogBuffer();</div></div></div></div></body></html>
+exports.getLogBuffer = getLogBuffer;
+exports.clearLogBuffer = clearLogBuffer;
+exports.rotateLogs = rotateLogs;</div></div></div></div></body></html>

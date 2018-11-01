@@ -3,10 +3,14 @@ define([
     './locales/de.js',
     './locales/es.js',
     './locales/fr.js',
+    './locales/it.js',
     './locales/nl.js',
     './locales/pl.js',
     './locales/pt_br.js',
+    './locales/ro.js',
     './locales/ru.js',
+    './locales/tr.js',
+    './locales/vi.js',
     './locales/zh.js',
     './locales/zh_cn.js'
 ], function() {

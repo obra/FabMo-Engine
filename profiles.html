@@ -1,0 +1,175 @@
+<!DOCTYPE html><html lang="en"><head><title>profiles</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content=""><meta name="groc-document-path" content="profiles"><meta name="groc-project-path" content="profiles.js"><link rel="stylesheet" type="text/css" media="all" href="assets/style.css"><script type="text/javascript" src="assets/behavior.js"></script><body><div id="meta"><div class="file-path">profiles.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>profiles.js</p>
+<p>This module defines functions that implement the concept of profiles</p>
+<p>A machine profile is a collection of settings, macros, and apps that can be loaded
+to realize a sensible default machine state. </p>
+<p>System profiles are packaged with the engine - they live in the /profiles directory
+at the top level.  Like other mutable parts of the engine, profiles are copied to the
+/opt/fabmo directory on startup, and hosted from there, ultimately.  The expectation is
+that in the future, profiles will be editable, and modified profiles could be saved,
+downloaded, etc.</p>
+<p>When a profile is selected, the machine&#39;s macros, settings, and apps are obliterated, 
+and subsequently replaced with the profile contents.  When this is done, the engine
+is restarted so the configurations are loaded &quot;fresh&quot;</p>
+<p>Profiles are identified by their package.json, which includes (minimally) a name and description
+Configuration files that are included with a profile are merged with default configurations
+when profile data is copied over.  (If a profile specifies a config value it is used, but if
+not, the default is used instead.)</p>
+<p>The &#39;default&#39; profile comes with the engine source - it is the fallback if no other profile is selected.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./config'</span>)
+<span class="hljs-keyword">var</span> <span class="hljs-keyword">async</span> = <span class="hljs-built_in">require</span>(<span class="hljs-string">'async'</span>)
+<span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs-extra'</span>)
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./log'</span>).logger(<span class="hljs-string">'profiles'</span>)
+<span class="hljs-keyword">var</span> ncp = <span class="hljs-built_in">require</span>(<span class="hljs-string">'ncp'</span>).ncp
+<span class="hljs-keyword">var</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./util'</span>)</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Directories affected by profiles</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> PROFILE_DIRS = [<span class="hljs-string">'config'</span>,<span class="hljs-string">'macros'</span>,<span class="hljs-string">'apps'</span>]</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Singleton collection of profiles</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> profiles = {}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load all profiles from disk
+callback - gets a collection of profiles (name -&gt; profile) or error</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> load = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	log.debug(<span class="hljs-string">'Loading profiles...'</span>)
+	<span class="hljs-keyword">var</span> profileDir = config.getDataDir(<span class="hljs-string">'profiles'</span>)</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Copy profiles from ./profiles to the /opt/fabmo directory if they don&#39;t exist already</p></div></div><div class="code"><div class="wrapper">	fs.readdir( profileDir, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"> err, files </span>) </span>{
+        <span class="hljs-keyword">if</span>(err) {
+        	<span class="hljs-keyword">return</span> callback(err);
+		}
+		fs.readdir(<span class="hljs-string">'./profiles'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, localfiles</span>)</span>{
+			<span class="hljs-keyword">if</span>(err) {
+				log.error(err);
+			} <span class="hljs-keyword">else</span> {
+				localfiles = localfiles.filter(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">item</span>)</span>{
+					<span class="hljs-keyword">return</span> !(<span class="hljs-regexp">/(^|\/)\.[^\/\.]/g</span>).test(item)
+				});
+				<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i =  <span class="hljs-number">0</span>; i &lt; localfiles.length; i++){
+					<span class="hljs-keyword">if</span>(files.indexOf(localfiles[i]) === -<span class="hljs-number">1</span>){
+							<span class="hljs-keyword">try</span> {
+								fs.copySync(<span class="hljs-string">'./profiles/'</span>+localfiles[i] , profileDir+<span class="hljs-string">'/'</span>+localfiles[i]);
+								files.push(localfiles[i]);
+								log.info(<span class="hljs-string">'Copied '</span> + localfiles[i]+ <span class="hljs-string">'into opt'</span>);
+							} <span class="hljs-keyword">catch</span>(err){
+								log.error(err);
+							} 
+							
+					}
+				}
+			}
+			util.diskSync(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+				<span class="hljs-keyword">async</span>.each(files, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">file, callback</span>) </span>{
+					<span class="hljs-keyword">try</span> {
+					<span class="hljs-keyword">var</span> profilePath = path.join(profileDir, file);
+					fs.stat(profilePath,<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err,stats</span>)</span>{
+						<span class="hljs-keyword">if</span>(err) callback(err);
+						<span class="hljs-keyword">if</span>(stats.isDirectory()) {
+							readProfileInfo(profilePath, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, profile</span>) </span>{
+								<span class="hljs-keyword">try</span> {
+								<span class="hljs-keyword">if</span>(err) {
+									log.error(err);
+								} <span class="hljs-keyword">else</span> {
+									log.debug(<span class="hljs-string">'Read profile '</span> + profile.name);
+									profiles[profile.name] = profile;
+								}} <span class="hljs-keyword">catch</span>(e) {
+									log.error(e)
+								}
+								callback(<span class="hljs-literal">null</span>);
+							});
+						} <span class="hljs-keyword">else</span> {
+							callback(<span class="hljs-literal">null</span>);
+						}
+					});
+				} <span class="hljs-keyword">catch</span>(e) {
+					log.error(e);
+				}
+				}, 
+				<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">allDone</span>(<span class="hljs-params"></span>) </span>{
+					callback(<span class="hljs-literal">null</span>, profiles);
+				});
+			});
+		});
+    });
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Read the package.json from the provided profile directory and return an info object that
+includes the profile info included in the json file, plus the profile directory
+profileDir - full path of a profile directory
+callback - Gets the profile info object, or error:
+           eg: {name :&#39;Desktop MAX&#39;, description : &#39;A 24x18&quot; supertool&#39;, dir:&#39;/opt/fabmo/profiles/Desktop MAX&#39;}</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> readProfileInfo = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">profileDir, callback</span>) </span>{
+	fs.readFile(path.join(profileDir, <span class="hljs-string">'package.json'</span>), <span class="hljs-string">'utf8'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">err, data</span>) </span>{
+    	<span class="hljs-keyword">if</span> (err) <span class="hljs-keyword">return</span> callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'Could not read profile package.json: '</span> + err))
+    	<span class="hljs-keyword">try</span> {
+    		<span class="hljs-keyword">var</span> obj = <span class="hljs-built_in">JSON</span>.parse(data);    		
+    	} <span class="hljs-keyword">catch</span>(e) {
+    		<span class="hljs-keyword">return</span> callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'Profile '</span> + profileDir + <span class="hljs-string">' does not have a valid package.json'</span>));
+    	}
+    	<span class="hljs-keyword">if</span>(!obj[<span class="hljs-string">'name'</span>]) <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'Profile package.json does not have a name'</span>);
+		callback(<span class="hljs-literal">null</span>, {
+			name : obj[<span class="hljs-string">'name'</span>],
+			description : obj[<span class="hljs-string">'description'</span>] || <span class="hljs-string">''</span>,
+			dir : profileDir
+		});	
+	});
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Apply the named profile
+This obliterates all of the configuration, apps, and macro information for the current installation
+and replaces it with the information found in the named profile.
+  profileName - The name of the profile to apply.  Must be one of the loaded profiles
+     callback - Gets an error if there was a problem.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> apply = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">profileName, callback</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Make sure this is a profile that actually occurs in the list</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(profileName <span class="hljs-keyword">in</span> profiles) {
+		log.debug(<span class="hljs-string">'Switching profiles to '</span> + profileName)</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get the profile data</p></div></div><div class="code"><div class="wrapper">		profile = profiles[profileName];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>For every directory affected by profiles...</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">async</span>.each(PROFILE_DIRS, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">dir, callback</span>) </span>{
+			<span class="hljs-keyword">var</span> configDir = config.getDataDir(dir)
+			<span class="hljs-keyword">var</span> profileConfigDir = path.join(profile.dir, dir)
+			<span class="hljs-keyword">var</span> authSecretExists = <span class="hljs-literal">false</span>;
+			<span class="hljs-keyword">var</span> authPath = configDir+<span class="hljs-string">'/auth_secret'</span>;
+
+			log.debug(<span class="hljs-string">'Removing config directory '</span> + configDir);
+			<span class="hljs-comment">//if auth_secret file exists lets copy it to a tmp directory</span>
+			<span class="hljs-keyword">if</span> (fs.existsSync(authPath)) {
+				authSecretExists = <span class="hljs-literal">true</span>;
+				<span class="hljs-keyword">try</span> {
+					fs.ensureDirSync(<span class="hljs-string">'/opt/fabmo/tmp'</span>);
+					fs.copySync(authPath, <span class="hljs-string">'/opt/fabmo/tmp/auth_secret'</span>);
+				} <span class="hljs-keyword">catch</span>(e) {
+					log.warn(e);
+				}
+			} <span class="hljs-keyword">else</span> {
+				log.debug(<span class="hljs-string">'Auth secret doesnt already exist'</span>);
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Trash the directory in the data directory</p></div></div><div class="code"><div class="wrapper">			fs.remove(configDir, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+				<span class="hljs-keyword">if</span>(err) {
+					<span class="hljs-keyword">return</span> callback(err);
+				}
+	</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>...and replace it with the configuration provided by the profile</p></div></div><div class="code"><div class="wrapper">				log.debug(<span class="hljs-string">'Copying profile configuration directory '</span> + profileConfigDir);
+				ncp(profileConfigDir, onfig.getDataDir(dir), <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">err</span>) </span>{
+					<span class="hljs-keyword">if</span> (err) {
+						<span class="hljs-keyword">return</span> callback(err);
+					} <span class="hljs-keyword">else</span> {
+						log.debug(<span class="hljs-string">'...done copying.'</span>)</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Copy auth secret back if we moved it.</p></div></div><div class="code"><div class="wrapper">						<span class="hljs-keyword">if</span>(authSecretExists) {
+							fs.copySync(<span class="hljs-string">'/opt/fabmo/tmp/auth_secret'</span>, authPath);
+							fs.remove(<span class="hljs-string">'/opt/fabmo/tmp'</span> , <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+								<span class="hljs-keyword">if</span>(err){
+									log.error(err);
+								} <span class="hljs-keyword">else</span> {
+									log.debug(<span class="hljs-string">'copied auth_secret and removed tmp dir'</span>)
+								}
+
+							})
+						}
+						callback();
+					}
+				});
+			});
+		},
+		<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">allDone</span>(<span class="hljs-params">err</span>) </span>{
+			config.clearAppRoot(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+				appsDir = config.getDataDir(<span class="hljs-string">'apps'</span>)
+				fs.readdir(appsDir, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, files</span>) </span>{
+					<span class="hljs-keyword">if</span>(files) {
+						files.forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">file</span>) </span>{
+							fs.renameSync(path.join(appsDir, file), path.join(appsDir, util.createUniqueFilename(file)));
+						});
+						util.diskSync(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+							callback(<span class="hljs-literal">null</span>);
+						});
+					} <span class="hljs-keyword">else</span> {
+						util.diskSync(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+							callback(<span class="hljs-literal">null</span>, <span class="hljs-string">'no apps'</span>); <span class="hljs-comment">// TODO : What is this 'no apps' thing?</span>
+						});
+					}
+				});
+			});
+		});		
+	} <span class="hljs-keyword">else</span> {
+		callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(profiles + <span class="hljs-string">' is not a valid profile.'</span>))
+	}
+}
+
+<span class="hljs-built_in">module</span>.exports.load = load
+<span class="hljs-built_in">module</span>.exports.apply = apply
+<span class="hljs-built_in">module</span>.exports.getProfiles = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{<span class="hljs-keyword">return</span> profiles;}</div></div></div></div></body></html>

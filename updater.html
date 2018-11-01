@@ -1,0 +1,26 @@
+<!DOCTYPE html><html lang="en"><head><title>updater</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content=""><meta name="groc-document-path" content="updater"><meta name="groc-project-path" content="updater.js"><link rel="stylesheet" type="text/css" media="all" href="assets/style.css"><script type="text/javascript" src="assets/behavior.js"></script><body><div id="meta"><div class="file-path">updater.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>updater.js</p>
+<p>Handle functions of the updater that need to be called from the engine.</p>
+<p>Currently, this is just the AP collapse.  All other functions are handled through the router.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> request = <span class="hljs-built_in">require</span>(<span class="hljs-string">'request'</span>);
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./config'</span>);
+<span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./log'</span>).logger(<span class="hljs-string">'updater'</span>);
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">postJSON</span>(<span class="hljs-params">url, obj</span>) </span>{
+    request({
+            url: url,
+            method: <span class="hljs-string">"POST"</span>,
+            json: <span class="hljs-literal">true</span>,
+            body: obj
+        }, 
+        <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, response, body</span>) </span>{
+            <span class="hljs-keyword">if</span>(err) {
+                log.error(err);
+            }
+        }
+    );
+}
+
+exports.APModeCollapse = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">var</span> port = config.engine.get(<span class="hljs-string">'server_port'</span>)+<span class="hljs-number">1</span>;
+	<span class="hljs-keyword">var</span> url = <span class="hljs-string">'http://localhost:'</span> + port + <span class="hljs-string">'/network/hotspot/state'</span>;
+	postJSON(url, {enabled : <span class="hljs-literal">true</span>});
+}</div></div></div></div></body></html>

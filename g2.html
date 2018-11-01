@@ -1,4 +1,7 @@
-<!DOCTYPE html><html lang="en"><head><title>g2</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content=""><meta name="groc-document-path" content="g2"><meta name="groc-project-path" content="g2.js"><link rel="stylesheet" type="text/css" media="all" href="assets/style.css"><script type="text/javascript" src="assets/behavior.js"></script><body><div id="meta"><div class="file-path">g2.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> serialport = <span class="hljs-built_in">require</span>(<span class="hljs-string">"serialport"</span>);
+<!DOCTYPE html><html lang="en"><head><title>g2</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content=""><meta name="groc-document-path" content="g2"><meta name="groc-project-path" content="g2.js"><link rel="stylesheet" type="text/css" media="all" href="assets/style.css"><script type="text/javascript" src="assets/behavior.js"></script><body><div id="meta"><div class="file-path">g2.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>g2.js</p>
+<p>This module defines the G2 driver, which is responsible for managing communication
+between the host and a tinyg2 motion conroller.  Other objects and functions are
+defined here as well to support this capability.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> SerialPort = <span class="hljs-built_in">require</span>(<span class="hljs-string">"serialport"</span>);
 <span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">"fs"</span>);
 <span class="hljs-keyword">var</span> events = <span class="hljs-built_in">require</span>(<span class="hljs-string">'events'</span>);
 <span class="hljs-keyword">var</span> <span class="hljs-keyword">async</span> = <span class="hljs-built_in">require</span>(<span class="hljs-string">'async'</span>);
@@ -6,7 +9,11 @@
 <span class="hljs-keyword">var</span> Queue = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./util'</span>).Queue;
 <span class="hljs-keyword">var</span> Watchdog = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./util'</span>).Watchdog;
 <span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./log'</span>).logger(<span class="hljs-string">'g2'</span>);
-<span class="hljs-keyword">var</span> process = <span class="hljs-built_in">require</span>(<span class="hljs-string">'process'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Values of the <strong>stat</strong> field that is returned from G2 status reports</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> STAT_INIT = <span class="hljs-number">0</span>;
+<span class="hljs-keyword">var</span> process = <span class="hljs-built_in">require</span>(<span class="hljs-string">'process'</span>);
+<span class="hljs-keyword">var</span> jsesc = <span class="hljs-built_in">require</span>(<span class="hljs-string">'jsesc'</span>);
+<span class="hljs-keyword">var</span> stream = <span class="hljs-built_in">require</span>(<span class="hljs-string">'stream'</span>);
+<span class="hljs-keyword">var</span> Q = <span class="hljs-built_in">require</span>(<span class="hljs-string">'q'</span>);
+<span class="hljs-keyword">var</span> LineNumberer = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./util'</span>).LineNumberer</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Values of the <strong>stat</strong> field that is returned from G2 status reports</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> STAT_INIT = <span class="hljs-number">0</span>;
 <span class="hljs-keyword">var</span> STAT_READY = <span class="hljs-number">1</span>;
 <span class="hljs-keyword">var</span> STAT_ALARM = <span class="hljs-number">2</span>;
 <span class="hljs-keyword">var</span> STAT_STOP = <span class="hljs-number">3</span>;
@@ -19,290 +26,252 @@
 <span class="hljs-keyword">var</span> STAT_INTERLOCK = <span class="hljs-number">11</span>;
 <span class="hljs-keyword">var</span> STAT_SHUTDOWN = <span class="hljs-number">12</span>;
 <span class="hljs-keyword">var</span> STAT_PANIC = <span class="hljs-number">13</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Should take no longer than CMD_TIMEOUT to do a get or a set operation</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> CMD_TIMEOUT = <span class="hljs-number">10000</span>;
-<span class="hljs-keyword">var</span> EXPECT_TIMEOUT = <span class="hljs-number">300000</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>When jogging, &quot;keepalive&quot; jog commands must arrive faster than this interval (ms)
-This can be slowed down if necessary for spotty connections, but a slow timeout means
-the machine has more time to run away before stopping.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> JOG_TIMEOUT = <span class="hljs-number">500</span>;
+<span class="hljs-keyword">var</span> EXPECT_TIMEOUT = <span class="hljs-number">300000</span>;
 
-<span class="hljs-keyword">var</span> GCODE_BLOCK_SEND_SIZE = <span class="hljs-number">1000</span>;
-<span class="hljs-keyword">var</span> GCODE_MIN_LINE_THRESH = <span class="hljs-number">250</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Map used by the jog command to turn incoming direction specifiers to g-code</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> JOG_AXES = {<span class="hljs-string">'x'</span>:<span class="hljs-string">'X'</span>, 
-				<span class="hljs-string">'-x'</span>:<span class="hljs-string">'X-'</span>, 
-				<span class="hljs-string">'y'</span>:<span class="hljs-string">'Y'</span>,
-				<span class="hljs-string">'-y'</span>:<span class="hljs-string">'Y-'</span>,
-				<span class="hljs-string">'z'</span>:<span class="hljs-string">'Z'</span>,
-				<span class="hljs-string">'-z'</span>:<span class="hljs-string">'Z-'</span>,
-				<span class="hljs-string">'a'</span>:<span class="hljs-string">'A'</span>,
-				<span class="hljs-string">'-a'</span>:<span class="hljs-string">'A-'</span>,
-				<span class="hljs-string">'b'</span>:<span class="hljs-string">'B'</span>,
-				<span class="hljs-string">'-b'</span>:<span class="hljs-string">'B-'</span>,
-				<span class="hljs-string">'c'</span>:<span class="hljs-string">'C'</span>,
-				<span class="hljs-string">'-c'</span>:<span class="hljs-string">'C-'</span>};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Error codes defined by G2
+<span class="hljs-keyword">var</span> _promiseCounter = <span class="hljs-number">1</span>;
+<span class="hljs-keyword">var</span> resumePending = <span class="hljs-literal">false</span>;
+<span class="hljs-keyword">var</span> THRESH = <span class="hljs-number">1</span>
+
+<span class="hljs-keyword">var</span> pat = <span class="hljs-regexp">/s*(G(28|38)\.\d|G2(0|1))/g</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Error codes defined by G2
 See <a href="https://github.com/synthetos/g2/blob/edge/TinyG2/tinyg2.h">https://github.com/synthetos/g2/blob/edge/TinyG2/tinyg2.h</a> for the latest error codes and messages</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">try</span> {
 	<span class="hljs-keyword">var</span> G2_ERRORS = <span class="hljs-built_in">JSON</span>.parse(fs.readFileSync(<span class="hljs-string">'./data/g2_errors.json'</span>,<span class="hljs-string">'utf8'</span>));
 } <span class="hljs-keyword">catch</span>(e) {
 	<span class="hljs-keyword">var</span> G2_ERRORS = {};
-}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>G2 Constructor</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">G2</span>(<span class="hljs-params"></span>) </span>{
-	<span class="hljs-keyword">this</span>.current_data = [];
-	<span class="hljs-keyword">this</span>.current_gcode_data = [];
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A cycle context is created when you run a stream, and is a way to access driver events in the context of the current run
+It is a sort of token that you can recieve events from while the machining cycle is active, 
+and that will resolve like a promise when the machining cycle is done.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">CycleContext</span>(<span class="hljs-params">driver, st, promise</span>) </span>{
+		<span class="hljs-keyword">this</span>.done = <span class="hljs-literal">false</span>;
+		<span class="hljs-keyword">this</span>._firmed = <span class="hljs-literal">false</span>;
+		<span class="hljs-keyword">this</span>._driver = driver;
+		<span class="hljs-keyword">this</span>._stream = st;
+		<span class="hljs-keyword">this</span>._paused = <span class="hljs-literal">false</span>;
+		<span class="hljs-keyword">this</span>._promise = promise.then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">value</span>) </span>{
+			<span class="hljs-keyword">this</span>.firm(); <span class="hljs-comment">// Firm the tool</span>
+			<span class="hljs-keyword">this</span>.finish();
+		}.bind(<span class="hljs-keyword">this</span>));
+		<span class="hljs-keyword">this</span>.eventHandlers = {}; <span class="hljs-comment">// eventname -&gt; [listener]</span>
+		<span class="hljs-keyword">this</span>.eventQueue = {}; <span class="hljs-comment">// eventname -&gt; {f : listener, data : data to pass to listener}</span>
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A cycle context is &quot;firmed&quot; when it has turned over itself as a promise through the then() call, or when the
+run finishes, whichever comes first.</p></div></div><div class="code"><div class="wrapper">CycleContext.prototype.firm = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.firmed) { <span class="hljs-keyword">return</span>; }
+		log.debug(<span class="hljs-string">"Firming the cycle context."</span>)
+		<span class="hljs-keyword">try</span> {
+			<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> event <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.eventQueue) {
+				<span class="hljs-keyword">var</span> handlers = <span class="hljs-keyword">this</span>.eventQueue[event];
+				<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;handlers.length; i++) {
+					handlers[i].f(handlers[i].data);
+				}
+			}
+			<span class="hljs-keyword">this</span>.firmed = <span class="hljs-literal">true</span>;
+		} <span class="hljs-keyword">catch</span>(e) {
+			<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.eventQueue;
+			<span class="hljs-keyword">throw</span> e;
+		}
+		<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.eventQueue;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Bind the listener to the provided event name.
+Events bound in this way are queued, so if any have occurred between the beginning of the run and when
+the binding occurs, they will be triggered when the cycle is firmed</p></div></div><div class="code"><div class="wrapper">CycleContext.prototype.on = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">event, f</span>) </span>{
+	log.debug(<span class="hljs-string">"Binding to the "</span> + event + <span class="hljs-string">" event in the cycle context: "</span> + f);
+	<span class="hljs-keyword">if</span>(event <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.eventHandlers) {
+		<span class="hljs-keyword">this</span>.eventHandlers[event].push(f);
+	} <span class="hljs-keyword">else</span> {
+		<span class="hljs-keyword">this</span>.eventHandlers[event] = [f];
+	}
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return a promise that resolves when the cycle is complete (Q Promises)</p></div></div><div class="code"><div class="wrapper">CycleContext.prototype.then = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">f</span>) </span>{
+	<span class="hljs-keyword">this</span>.firm();
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._promise.then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		<span class="hljs-keyword">return</span> f();
+	});
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Sort of a do-nothing, for now</p></div></div><div class="code"><div class="wrapper">CycleContext.prototype.finish = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	log.debug(<span class="hljs-string">"Finishing up the cycle context."</span>)
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Emit the provided data to all the listeners to the subscribed event</p></div></div><div class="code"><div class="wrapper">CycleContext.prototype.emit = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">event, data</span>) </span>{
+		<span class="hljs-keyword">var</span> handlers = <span class="hljs-keyword">this</span>.eventHandlers[event];
+
+		<span class="hljs-keyword">if</span>(handlers) {
+			<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;handlers.length; i++) {
+				handlers[i](data);
+			}
+		}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Pause the run by pausing the stream that is piping data into this context</p></div></div><div class="code"><div class="wrapper">CycleContext.prototype.pause = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">this</span>._paused = <span class="hljs-literal">true</span>;
+	<span class="hljs-keyword">this</span>._stream.pause();
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Resume the run by resuming the stream that is piping data into this context</p></div></div><div class="code"><div class="wrapper">CycleContext.prototype.resume = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">this</span>._paused = <span class="hljs-literal">false</span>;
+	<span class="hljs-keyword">this</span>._stream.resume();
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The G2 object represents the connection to the driver, which happens as serial over USB</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">G2</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">this</span>._currentData = [];
+	<span class="hljs-keyword">this</span>._currentGCodeData = [];
 	<span class="hljs-keyword">this</span>.g2_status = {<span class="hljs-string">'stat'</span>:<span class="hljs-literal">null</span>, <span class="hljs-string">'posx'</span>:<span class="hljs-number">0</span>, <span class="hljs-string">'posy'</span>:<span class="hljs-number">0</span>, <span class="hljs-string">'posz'</span>:<span class="hljs-number">0</span>};
 	<span class="hljs-keyword">this</span>.status = {<span class="hljs-string">'stat'</span>:<span class="hljs-string">'idle'</span>, <span class="hljs-string">'posx'</span>:<span class="hljs-number">0</span>, <span class="hljs-string">'posy'</span>:<span class="hljs-number">0</span>, <span class="hljs-string">'posz'</span>:<span class="hljs-number">0</span>};
-
+	<span class="hljs-keyword">this</span>._seen_ready = <span class="hljs-literal">false</span>;
 	<span class="hljs-keyword">this</span>.gcode_queue = <span class="hljs-keyword">new</span> Queue();
-	<span class="hljs-keyword">this</span>.watchdog = <span class="hljs-keyword">new</span> Watchdog(<span class="hljs-number">10000</span>,<span class="hljs-number">14</span>); <span class="hljs-comment">//time, exit code</span>
+	<span class="hljs-keyword">this</span>.command_queue = <span class="hljs-keyword">new</span> Queue();
+
 	<span class="hljs-keyword">this</span>.pause_flag = <span class="hljs-literal">false</span>;
-	<span class="hljs-keyword">this</span>.connected = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Jogging state</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.jog_stop_pending = <span class="hljs-literal">false</span>;
-	<span class="hljs-keyword">this</span>.jog_direction = <span class="hljs-literal">null</span>;
-	<span class="hljs-keyword">this</span>.jog_command = <span class="hljs-literal">null</span>;
-	<span class="hljs-keyword">this</span>.jog_heartbeat = <span class="hljs-literal">null</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Feedhold/flush</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.quit_pending = <span class="hljs-literal">false</span>;
+	<span class="hljs-keyword">this</span>.connected = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Feedhold/flush</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.quit_pending = <span class="hljs-literal">false</span>;
 	<span class="hljs-keyword">this</span>.stat = <span class="hljs-literal">null</span>;
 	<span class="hljs-keyword">this</span>.hold = <span class="hljs-literal">null</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Readers and callbacks</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.expectations = [];
 	<span class="hljs-keyword">this</span>.readers = {};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Members related to streaming</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.qtotal = <span class="hljs-number">0</span>;
 	<span class="hljs-keyword">this</span>.flooded = <span class="hljs-literal">false</span>;
 	<span class="hljs-keyword">this</span>.send_rate = <span class="hljs-number">1</span>;
-	<span class="hljs-keyword">this</span>.lines_sent = <span class="hljs-number">0</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Event emitter inheritance and behavior setup</p></div></div><div class="code"><div class="wrapper">	events.EventEmitter.call(<span class="hljs-keyword">this</span>);	
+	<span class="hljs-keyword">this</span>.lines_sent = <span class="hljs-number">0</span>;
+
+	<span class="hljs-keyword">this</span>.context = <span class="hljs-literal">null</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Event emitter inheritance and behavior setup</p></div></div><div class="code"><div class="wrapper">	events.EventEmitter.call(<span class="hljs-keyword">this</span>);
 	<span class="hljs-keyword">this</span>.setMaxListeners(<span class="hljs-number">50</span>);
+	<span class="hljs-keyword">this</span>.lines_to_send = <span class="hljs-number">4</span>;
+	<span class="hljs-keyword">this</span>._ignored_responses = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">this</span>._primed = <span class="hljs-literal">false</span>;
+	<span class="hljs-keyword">this</span>._streamDone = <span class="hljs-literal">false</span>;
+
+	<span class="hljs-keyword">this</span>.lineBuffer = [];
 }
-util.inherits(G2, events.EventEmitter);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Actually open the serial port and configure G2 based on stored settings</p></div></div><div class="code"><div class="wrapper">G2.prototype.connect = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">control_path, gcode_path, callback</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Store paths for safe keeping</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.control_path = control_path;
-	<span class="hljs-keyword">this</span>.gcode_path = gcode_path;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Called once BOTH ports have been opened</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.connect_callback = callback;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Open both ports</p></div></div><div class="code"><div class="wrapper">	log.info(<span class="hljs-string">'Opening control port '</span> + control_path);
-	<span class="hljs-keyword">this</span>.control_port = <span class="hljs-keyword">new</span> serialport.SerialPort(control_path, {rtscts:<span class="hljs-literal">true</span>}, <span class="hljs-literal">false</span>);
-	<span class="hljs-keyword">if</span>(control_path !== gcode_path) {
-		log.info(<span class="hljs-string">"Dual USB since control port and gcode port are different. ("</span> + <span class="hljs-keyword">this</span>.control_path + <span class="hljs-string">","</span> + <span class="hljs-keyword">this</span>.gcode_path + <span class="hljs-string">")"</span>);
-		<span class="hljs-keyword">this</span>.gcode_port = <span class="hljs-keyword">new</span> serialport.SerialPort(gcode_path, {rtscts:<span class="hljs-literal">true</span>}, <span class="hljs-literal">false</span>);
-	} <span class="hljs-keyword">else</span> {
-		log.info(<span class="hljs-string">"Single USB since control port and gcode port are the same. ("</span> + <span class="hljs-keyword">this</span>.control_path + <span class="hljs-string">")"</span>);
-		<span class="hljs-keyword">this</span>.gcode_port = <span class="hljs-keyword">this</span>.control_port;
-	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle errors</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.control_port.on(<span class="hljs-string">'error'</span>, <span class="hljs-keyword">this</span>.onSerialError.bind(<span class="hljs-keyword">this</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle closing</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.control_port.on(<span class="hljs-string">'close'</span>, <span class="hljs-keyword">this</span>.onSerialClose.bind(<span class="hljs-keyword">this</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The control port is the only one to truly handle incoming data</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.control_port.on(<span class="hljs-string">'data'</span>, <span class="hljs-keyword">this</span>.onData.bind(<span class="hljs-keyword">this</span>));
-	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.gcode_port !== <span class="hljs-keyword">this</span>.control_port) {
-		<span class="hljs-keyword">this</span>.gcode_port.on(<span class="hljs-string">'error'</span>, <span class="hljs-keyword">this</span>.onSerialError.bind(<span class="hljs-keyword">this</span>));
-		<span class="hljs-keyword">this</span>.control_port.on(<span class="hljs-string">'close'</span>, <span class="hljs-keyword">this</span>.onSerialClose.bind(<span class="hljs-keyword">this</span>));
-		<span class="hljs-keyword">this</span>.gcode_port.on(<span class="hljs-string">'data'</span>, <span class="hljs-keyword">this</span>.onWAT.bind(<span class="hljs-keyword">this</span>));
-	}
 
-	<span class="hljs-keyword">var</span> onOpen = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
-		<span class="hljs-keyword">this</span>.controlWrite(<span class="hljs-string">"\x04"</span>)
-		<span class="hljs-keyword">this</span>.gcodeWrite(<span class="hljs-string">"{clr:n}\n"</span>);
-		<span class="hljs-keyword">this</span>.command(<span class="hljs-string">"M30"</span>);
-		<span class="hljs-keyword">this</span>.requestStatusReport();
+util.inherits(G2, events.EventEmitter);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Creates a cycle context, which has a pass-through stream into which data can be piped</p></div></div><div class="code"><div class="wrapper">G2.prototype._createCycleContext = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.context) {
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Cannot create a new cycle context.  One already exists."</span>);
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create and setup the pass-through stream</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> st = <span class="hljs-keyword">new</span> stream.PassThrough();
+	st.setEncoding(<span class="hljs-string">'utf8'</span>);
+	<span class="hljs-keyword">this</span>._streamDone = <span class="hljs-literal">false</span>;
+	<span class="hljs-keyword">this</span>.lineBuffer = []</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO factor this out
+Inject a couple of G-Codes which are needed to start the machining cycle</p></div></div><div class="code"><div class="wrapper">	st.write(<span class="hljs-string">'G90\n'</span>)
+	st.write(<span class="hljs-string">'M100 ({out4:1})\n'</span>) <span class="hljs-comment">// hack to get the "permissive relay" behavior while in-cycle</span>
+	</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle data coming in on the stream</p></div></div><div class="code"><div class="wrapper">	st.on(<span class="hljs-string">'data'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">chunk</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Stream data comes in &quot;chunks&quot; which are often multiple lines</p></div></div><div class="code"><div class="wrapper">		chunk = chunk.toString();
+		<span class="hljs-keyword">var</span> newLines = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Repartition incoming &quot;chunked&quot; data as lines</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;chunk.length; i++) {
+			ch = chunk[i];
+			<span class="hljs-keyword">this</span>.lineBuffer.push(ch);
+			<span class="hljs-keyword">if</span>(ch === <span class="hljs-string">'\n'</span>) {
+				newLines = <span class="hljs-literal">true</span>;
+				<span class="hljs-keyword">var</span> s = <span class="hljs-keyword">this</span>.lineBuffer.join(<span class="hljs-string">''</span>).trim();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Enqueue individual lines in the g-code queue</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">this</span>.gcode_queue.enqueue(s);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The G2 sender doesn&#39;t actually start sending until it is &quot;primed&quot;
+Priming happens either when the number of lines to send reaches a certain threshold
+or the prime() function is called manually.
+TODO:  Factor out 10 (magic number) and put it at the top of the file so it can be changed easily.</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.gcode_queue.getLength() &gt;= <span class="hljs-number">10</span>) {
+					<span class="hljs-keyword">this</span>._primed = <span class="hljs-literal">true</span>;
+				}
+				<span class="hljs-keyword">this</span>.lineBuffer = [];
+			}
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If new lines were enqueued as a part of the re-chunkification process, send them.</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span>(newLines) {
+			<span class="hljs-keyword">this</span>.sendMore();
+		}
+	}.bind(<span class="hljs-keyword">this</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle a stream finishing or disconnecting.</p></div></div><div class="code"><div class="wrapper">	st.on(<span class="hljs-string">'end'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Send whatever is left in the queue.  (There may be stuff unsent even after the stream is over)</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">this</span>._primed = <span class="hljs-literal">true</span>;
+		<span class="hljs-keyword">this</span>._streamDone = <span class="hljs-literal">true</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO factor this out, see above</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.quit_pending) {
+			<span class="hljs-keyword">this</span>.gcode_queue.enqueue(<span class="hljs-string">'M100 ({out4:0})'</span>)
+			<span class="hljs-keyword">this</span>.gcode_queue.enqueue(<span class="hljs-string">'M30'</span>);
+		}
+		<span class="hljs-keyword">this</span>.sendMore();
+		log.debug(<span class="hljs-string">"Stream END event."</span>)
+	}.bind(<span class="hljs-keyword">this</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle a stream being piped into this context (currently do nothing)</p></div></div><div class="code"><div class="wrapper">	st.on(<span class="hljs-string">'pipe'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		log.debug(<span class="hljs-string">"Stream PIPE event"</span>);
+	})</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create the promise that resolves when the machining cycle ends.</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> promise = <span class="hljs-keyword">this</span>._createStatePromise([STAT_END]).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		<span class="hljs-keyword">this</span>.context = <span class="hljs-literal">null</span>;
+		<span class="hljs-keyword">this</span>._primed = <span class="hljs-literal">false</span>;
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>;
+	}.bind(<span class="hljs-keyword">this</span>))</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Actually create and return the context built from these configured entities </p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> ctx  = <span class="hljs-keyword">new</span> CycleContext(<span class="hljs-keyword">this</span>, st, promise);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The G2 instance keeps track of its current (singleton) cycle context.</p></div></div><div class="code"><div class="wrapper"> 	<span class="hljs-keyword">this</span>.context = ctx;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Actually open the serial port and configure G2 based on stored settings</p></div></div><div class="code"><div class="wrapper">G2.prototype.connect = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">path, callback</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Store paths for safe keeping</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>._serialPath = path;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Open the serial port.  This used to be two ports, but now is only the one.</p></div></div><div class="code"><div class="wrapper">	log.info(<span class="hljs-string">'Opening G2 port: '</span> + <span class="hljs-keyword">this</span>._serialPath);
+	<span class="hljs-keyword">this</span>._serialPort = <span class="hljs-keyword">new</span> SerialPort(<span class="hljs-keyword">this</span>._serialPath, {flowcontrol: [<span class="hljs-string">'RTSCTS'</span>], autoOpen:<span class="hljs-literal">false</span>});
+	<span class="hljs-keyword">this</span>._serialToken = <span class="hljs-string">'S'</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle errors</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>._serialPort.on(<span class="hljs-string">'error'</span>, <span class="hljs-keyword">this</span>.onSerialError.bind(<span class="hljs-keyword">this</span>));
+	<span class="hljs-keyword">this</span>._serialPort.on(<span class="hljs-string">'close'</span>, <span class="hljs-keyword">this</span>.onSerialClose.bind(<span class="hljs-keyword">this</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The control port is the only one to truly handle incoming data</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>._serialPort.on(<span class="hljs-string">'data'</span>, <span class="hljs-keyword">this</span>.onData.bind(<span class="hljs-keyword">this</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Flush and get status once the &quot;ready&quot; message has been received from the controller.
+G2 reports a &quot;SYSTEM READY&quot; message on connect that indicates that the system is prepared to
+recieve g-codes and JSON commands.  We don&#39;t want to do anything until we get that.</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.once(<span class="hljs-string">'ready'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
 		<span class="hljs-keyword">this</span>.connected = <span class="hljs-literal">true</span>;
-		callback(<span class="hljs-literal">null</span>, <span class="hljs-keyword">this</span>);
-	}.bind(<span class="hljs-keyword">this</span>);
-
-	<span class="hljs-keyword">this</span>.control_port.open(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">error</span>) </span>{
+		<span class="hljs-keyword">this</span>._write(<span class="hljs-string">'\x04\n'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">this</span>.requestStatusReport(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+				callback(<span class="hljs-literal">null</span>, <span class="hljs-keyword">this</span>);
+			}.bind(<span class="hljs-keyword">this</span>));
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Actually perform the connect, and wait for the &#39;ready&#39; event. 
+We give 3 seconds for the ready event to materialize, which is plenty of time.  Typical
+times to ready the system are on the order of tens or hundreds of milliseconds.</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>._serialPort.open(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">error</span>) </span>{
 		<span class="hljs-keyword">if</span>(error) {
 			log.error(<span class="hljs-string">"ERROR OPENING CONTROL PORT "</span> + error );
 			<span class="hljs-keyword">return</span> callback(error);
-		}
-
-		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.control_port !== <span class="hljs-keyword">this</span>.gcode_port) {
-			<span class="hljs-keyword">this</span>.gcode_port.open(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">error</span>) </span>{
-				<span class="hljs-keyword">if</span>(error) {
-					log.error(<span class="hljs-string">"ERROR OPENING GCODE PORT "</span> + error );
-					<span class="hljs-keyword">return</span> callback(error);
-				}
-				onOpen(callback);
-			}.bind(<span class="hljs-keyword">this</span>));
 		} <span class="hljs-keyword">else</span> {
-			onOpen(callback);
+			log.info(<span class="hljs-string">"G2 Port Opened."</span>)
+			setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">checkConnected</span>(<span class="hljs-params"></span>) </span>{
+				<span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.connected) {
+					<span class="hljs-keyword">return</span> callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'Never got the SYSTEM READY from g2.'</span>));
+				}
+			}.bind(<span class="hljs-keyword">this</span>), <span class="hljs-number">3000</span>);
 		}
 	}.bind(<span class="hljs-keyword">this</span>));
-};
-
-G2.prototype.disconnect = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
-	<span class="hljs-keyword">this</span>.watchdog.stop();
-	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.control_port !== <span class="hljs-keyword">this</span>.gcode_port) {
-		<span class="hljs-keyword">this</span>.control_port.close(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
-			<span class="hljs-keyword">this</span>.gcode_port.close(callback);   
-		}.bind(<span class="hljs-keyword">this</span>));
-	} <span class="hljs-keyword">else</span> {
-		<span class="hljs-keyword">this</span>.control_port.close(callback);
-	}
-
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Close the serial port - important for shutting down the application and not letting resources &quot;dangle&quot;</p></div></div><div class="code"><div class="wrapper">G2.prototype.disconnect = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+		<span class="hljs-keyword">this</span>._serialPort.close(callback);
 };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Log serial errors.  Most of these are exit-able offenses, though.</p></div></div><div class="code"><div class="wrapper">G2.prototype.onSerialError = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data</span>) </span>{
-	<span class="hljs-comment">//if(this.connect_callback) {</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>this.connect_callback(data);</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-comment">//}</span>
-};
-
-G2.prototype.onSerialClose = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data</span>) </span>{
+log.error(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'There was a serial error'</span>))
+  log.error(data)
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>When the serial link to G2 is closed, exit the engine with an error
+In a production environment, the system service manager (usually systemd)
+will simply restart the process and attempt to reconnect</p></div></div><div class="code"><div class="wrapper">G2.prototype.onSerialClose = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data</span>) </span>{
 	<span class="hljs-keyword">this</span>.connected= <span class="hljs-literal">false</span>;
 	log.error(<span class="hljs-string">'G2 Core serial link was lost.'</span>)
 	process.exit(<span class="hljs-number">14</span>);
-};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Write data to the control port.  Log to the system logger.</p></div></div><div class="code"><div class="wrapper">G2.prototype.controlWrite = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">s</span>) </span>{
-	<span class="hljs-keyword">this</span>.watchdog.start();
-	t = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime();
-	log.g2(<span class="hljs-string">'--C-'</span> + t + <span class="hljs-string">'----&gt; '</span> + s.trim());
-	<span class="hljs-keyword">this</span>.control_port.write(s);
-};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Write data to the gcode port.  Log to the system logger.</p></div></div><div class="code"><div class="wrapper">G2.prototype.gcodeWrite = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">s</span>) </span>{
-	<span class="hljs-keyword">this</span>.watchdog.start();
-	t = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime();
-	log.g2(<span class="hljs-string">'--G-'</span> + t + <span class="hljs-string">'----&gt; '</span> + s.trim());
-	<span class="hljs-keyword">this</span>.gcode_port.write(s);
-};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Write data to the serial port.  Log to the system logger.  Execute <strong>callback</strong> when transfer is complete.</p></div></div><div class="code"><div class="wrapper">G2.prototype.controlWriteAndDrain = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">s, callback</span>) </span>{
-	<span class="hljs-keyword">this</span>.watchdog.start();
-	t = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime();
-	log.g2(<span class="hljs-string">'--C-'</span> + t + <span class="hljs-string">'----&gt; '</span> + s);
-	<span class="hljs-keyword">this</span>.control_port.write(s, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
-		<span class="hljs-keyword">this</span>.control_port.drain(callback);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Write to the serial port (and log it)</p></div></div><div class="code"><div class="wrapper">G2.prototype._write = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">s, callback</span>) </span>{
+	log.g2(<span class="hljs-keyword">this</span>._serialToken,<span class="hljs-string">'out'</span>,s);
+	<span class="hljs-keyword">this</span>._serialPort.write(s, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
+		<span class="hljs-keyword">if</span>(callback) {
+			<span class="hljs-keyword">this</span>._serialPort.drain(callback);
+		}
 	}.bind(<span class="hljs-keyword">this</span>));
-};
-
-G2.prototype.gcodeWriteAndDrain = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">s, callback</span>) </span>{
-	<span class="hljs-keyword">this</span>.watchdog.start();
-	t = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime();
-	log.g2(<span class="hljs-string">'--G-'</span> + t + <span class="hljs-string">'----&gt; '</span> + s);
-	<span class="hljs-keyword">this</span>.gcode_port.write(s, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params"></span>) </span>{
-		<span class="hljs-keyword">this</span>.gcode_port.drain(callback);
-	}.bind(<span class="hljs-keyword">this</span>));
-};
-
-G2.prototype.clearAlarm = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-	<span class="hljs-keyword">this</span>.watchdog.start();
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Clear the &quot;alarm&quot; state on the g2 controller.  Alarms happen in a few cases:</p>
+<ul>
+<li>Limit switch triggered (not well handled)</li>
+<li>Soft limit encountered (also not well handled)</li>
+<li>Command recieved after a queue flush has  been issued (this is handled well by this module)</li>
+<li>Firmware errors in G2 that put it in the alarm state as a safety feature</li>
+</ul></div></div><div class="code"><div class="wrapper">G2.prototype.clearAlarm = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
 	<span class="hljs-keyword">this</span>.command({<span class="hljs-string">"clear"</span>:<span class="hljs-literal">null</span>});
-};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Start or continue jogging in the direction provided, which is one of x,-x,y,-y,z-z,a,-a,b,-b,c,-c</p></div></div><div class="code"><div class="wrapper">G2.prototype.jog = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">direction</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Units are sort of weird, and our fork of the g2 firmware hijacks the &quot;gun&quot; command
+to set the system units.  (Conventionally, you have to use a G-code to do this)</p></div></div><div class="code"><div class="wrapper">G2.prototype.setUnits = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">units, callback</span>) </span>{
+	<span class="hljs-keyword">this</span>.command({gun:(units === <span class="hljs-number">0</span> || units == <span class="hljs-string">'in'</span>) ? <span class="hljs-number">0</span> : <span class="hljs-number">1</span>});
+	<span class="hljs-keyword">this</span>.requestStatusReport(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stat</span>) </span>{ callback()});
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Request a status report from G2
+The callback, if provided, is called with the status report contents.</p></div></div><div class="code"><div class="wrapper">G2.prototype.requestStatusReport = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Register the callback to be called when the next status report comes in</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">typeof</span> callback === <span class="hljs-string">'function'</span> &amp;&amp; <span class="hljs-keyword">this</span>.once(<span class="hljs-string">'status'</span>, callback);
+	<span class="hljs-keyword">this</span>.command({<span class="hljs-string">'sr'</span>:<span class="hljs-literal">null</span>});
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO This function should no longer be needed (stream is managed differently now)</p></div></div><div class="code"><div class="wrapper">G2.prototype.requestQueueReport = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{ <span class="hljs-keyword">this</span>.command({<span class="hljs-string">'qr'</span>:<span class="hljs-literal">null</span>}); };
 
-	<span class="hljs-keyword">var</span> MOVES = <span class="hljs-number">10</span>;
-	<span class="hljs-keyword">var</span> FEED_RATE = <span class="hljs-number">60.0</span>;			<span class="hljs-comment">// in/min</span>
-	<span class="hljs-keyword">var</span> MOVE_DISTANCE = <span class="hljs-number">0.05</span>;		<span class="hljs-comment">// in</span>
-	<span class="hljs-keyword">var</span> START_DISTANCE = <span class="hljs-number">0.001</span>; 	<span class="hljs-comment">// sec</span>
-	<span class="hljs-keyword">var</span> START_RATE = <span class="hljs-number">10.0</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Normalize the direction provided by the user</p></div></div><div class="code"><div class="wrapper">	direction = <span class="hljs-built_in">String</span>(direction).trim().toLowerCase().replace(<span class="hljs-regexp">/\+/g</span>,<span class="hljs-string">""</span>);
-
-	<span class="hljs-keyword">if</span> ( !(direction <span class="hljs-keyword">in</span> JOG_AXES) &amp;&amp; !jog_stop_pending ) {
-		<span class="hljs-keyword">this</span>.stopJog();
-	}
-	<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.jog_direction === <span class="hljs-literal">null</span>) {
-		<span class="hljs-keyword">this</span>.jog_stop_pending = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Build a block of short moves to start jogging
-Starter move (plans down to zero no matter what so we make it short)</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">var</span> d = JOG_AXES[direction];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Continued burst of short moves</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">var</span> starting_cmd = <span class="hljs-string">'G91 G1 '</span> + d + START_DISTANCE + <span class="hljs-string">' F'</span> + START_RATE;
-		<span class="hljs-keyword">var</span> move = <span class="hljs-string">'G91 G1 '</span> + d + MOVE_DISTANCE + <span class="hljs-string">' F'</span> + FEED_RATE;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Compile moves into a list</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">var</span> codes = [starting_cmd];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create string buffer of moves from list</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;MOVES; i++) {codes.push(move);}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The queue report handler will keep up the jog if these are set</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">this</span>.jog_command = move;
-		<span class="hljs-keyword">this</span>.jog_direction = direction;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Build serial string and send</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">try</span> {
-			<span class="hljs-keyword">this</span>.gcodeWrite(codes.join(<span class="hljs-string">'\n'</span>));
-		} <span class="hljs-keyword">finally</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Timeout jogging if we don&#39;t get a keepalive from the client</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">this</span>.jog_heartbeat = setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-				log.warn(<span class="hljs-string">"Jog abandoned!  Stopping due to timeout."</span>);
-				<span class="hljs-keyword">this</span>.stopJog();
-			}.bind(<span class="hljs-keyword">this</span>), JOG_TIMEOUT);
-		}
-	} <span class="hljs-keyword">else</span> {
-		<span class="hljs-keyword">if</span>(direction == <span class="hljs-keyword">this</span>.jog_direction) {
-			<span class="hljs-keyword">this</span>.jog_keepalive();
-		}
-	}
-};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Start or continue jogging in the direction provided, which is one of x,-x,y,-y,z-z,a,-a,b,-b,c,-c</p></div></div><div class="code"><div class="wrapper">G2.prototype.fixed_move = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">direction,step,speed</span>) </span>{
-	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.quit_pending){ 
-		log.warn(<span class="hljs-string">"WARNING QUIT PENDING WHILE DOING A FIXED MOVE"</span>)
-	}
-	<span class="hljs-keyword">var</span> mstep = <span class="hljs-built_in">parseFloat</span>(step ? step : <span class="hljs-number">0.01</span>).toFixed(<span class="hljs-number">5</span>);
-	<span class="hljs-keyword">var</span> speed = <span class="hljs-built_in">parseFloat</span>(speed || <span class="hljs-number">60.0</span>).toFixed(<span class="hljs-number">2</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Normalize the direction provided by the user</p></div></div><div class="code"><div class="wrapper">	direction = <span class="hljs-built_in">String</span>(direction).trim().toLowerCase().replace(<span class="hljs-regexp">/\+/g</span>,<span class="hljs-string">""</span>);
-
-	<span class="hljs-keyword">if</span> ( !(direction <span class="hljs-keyword">in</span> JOG_AXES)) {
-		<span class="hljs-keyword">return</span>;
-	}
-	<span class="hljs-keyword">else</span> {
-		<span class="hljs-keyword">var</span> d = JOG_AXES[direction];
-		<span class="hljs-keyword">var</span> move;
-		<span class="hljs-keyword">if</span>(mstep &gt; <span class="hljs-number">0.005</span>) {
-			mstep -= <span class="hljs-number">0.005</span>;
-			mstep = mstep.toFixed(<span class="hljs-number">5</span>)
-			<span class="hljs-keyword">var</span> move = <span class="hljs-string">'G91 G1 '</span> + d + <span class="hljs-number">0.005</span> + <span class="hljs-string">' F'</span> + speed + <span class="hljs-string">'\n'</span> +<span class="hljs-string">'G1'</span> + d + mstep + <span class="hljs-string">'F'</span> + speed + <span class="hljs-string">'\n'</span>;
-		} <span class="hljs-keyword">else</span> {
-			move = <span class="hljs-string">'G91 G1 '</span> + d + mstep + <span class="hljs-string">' F'</span> + speed;
-		}
-		<span class="hljs-keyword">this</span>.gcodeWrite(move);
-	} 
-};
-
-G2.prototype.jog_keepalive = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-	log.info(<span class="hljs-string">'Keeping jog alive.'</span>);
-	clearTimeout(<span class="hljs-keyword">this</span>.jog_heartbeat);
-	<span class="hljs-keyword">this</span>.jog_heartbeat = setTimeout(<span class="hljs-keyword">this</span>.stopJog.bind(<span class="hljs-keyword">this</span>), JOG_TIMEOUT);
-};
-
-G2.prototype.stopJog = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.jog_direction &amp;&amp; !<span class="hljs-keyword">this</span>.jog_stop_pending) {
-		log.debug(<span class="hljs-string">'stopJog()'</span>);
-		<span class="hljs-keyword">this</span>.jog_stop_pending = <span class="hljs-literal">true</span>;
-		clearTimeout(<span class="hljs-keyword">this</span>.jog_heartbeat);
-		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.stat === STAT_RUNNING) {
-			<span class="hljs-keyword">this</span>.quit();
-		}
-	}
-};
-
-G2.prototype.setUnits = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">units, callback</span>) </span>{
-	<span class="hljs-keyword">if</span>(units === <span class="hljs-number">0</span> || units == <span class="hljs-string">'in'</span>) {
-		gc = <span class="hljs-string">'G20'</span>;
-		units = <span class="hljs-number">0</span>;
-	} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(units === <span class="hljs-number">1</span> || units === <span class="hljs-string">'mm'</span>) {
-		gc = <span class="hljs-string">'G21'</span>;
-		units = <span class="hljs-number">1</span>;
-	} <span class="hljs-keyword">else</span> {
-		<span class="hljs-keyword">return</span> callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'Invalid unit setting: '</span> + units))
-	}
-	<span class="hljs-keyword">this</span>.set(<span class="hljs-string">'gun'</span>, units, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-		<span class="hljs-keyword">this</span>.runString(gc, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-			<span class="hljs-keyword">this</span>.requestStatusReport(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">status</span>) </span>{
-				callback(<span class="hljs-literal">null</span>);
-			}.bind(<span class="hljs-keyword">this</span>));
-		}.bind(<span class="hljs-keyword">this</span>));		
-	}.bind(<span class="hljs-keyword">this</span>));
-}
-
-G2.prototype.requestStatusReport = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Register the callback to be called when the next status report comes in</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">typeof</span> callback === <span class="hljs-string">'function'</span> &amp;&amp; <span class="hljs-keyword">this</span>.once(<span class="hljs-string">'status'</span>, callback);
-	<span class="hljs-keyword">this</span>.command({<span class="hljs-string">'sr'</span>:<span class="hljs-literal">null</span>}); 
-};
-
-G2.prototype.requestQueueReport = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{ <span class="hljs-keyword">this</span>.command({<span class="hljs-string">'qr'</span>:<span class="hljs-literal">null</span>}); };
-
+<span class="hljs-comment">//TODO This function should no longer be needed - it is a relic of the days when there were 2 USB channels</span>
 G2.prototype.onWAT = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data</span>) </span>{
 	<span class="hljs-keyword">var</span> s = data.toString(<span class="hljs-string">'ascii'</span>);
 	<span class="hljs-keyword">var</span> len = s.length;
 	<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;len; i++) {
 		c = s[i];
 		<span class="hljs-keyword">if</span>(c === <span class="hljs-string">'\n'</span>) {
-			string = <span class="hljs-keyword">this</span>.current_gcode_data.join(<span class="hljs-string">''</span>);
+			string = <span class="hljs-keyword">this</span>._currentGCodeData.join(<span class="hljs-string">''</span>);
 			t = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime();
-			log.g2(<span class="hljs-string">'&lt;-G--'</span> + t + <span class="hljs-string">'---- '</span> + string);
-			<span class="hljs-keyword">this</span>.current_gcode_data = [];
+			log.g2(<span class="hljs-string">'D'</span>,<span class="hljs-string">'in'</span>,string);
+			<span class="hljs-comment">//log.g2('&lt;-G--' + t + '---- ' + string);</span>
+			<span class="hljs-keyword">this</span>._currentGCodeData = [];
 		} <span class="hljs-keyword">else</span> {
-			<span class="hljs-keyword">this</span>.current_gcode_data.push(c);
+			<span class="hljs-keyword">this</span>._currentGCodeData.push(c);
 		}
 	}
-
 };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Called for every chunk of data returned from G2</p></div></div><div class="code"><div class="wrapper">G2.prototype.onData = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data</span>) </span>{
-	t = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime();
-	<span class="hljs-comment">//log.debug('&lt;----' + t + '---- ' + data);</span>
-	<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'raw_data'</span>,data);
-	<span class="hljs-keyword">var</span> s = data.toString(<span class="hljs-string">'ascii'</span>);
+	t = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime(); <span class="hljs-comment">// Get current time for logging</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>raw_data event for listeners that want to snoop on all data. 
+Not usually used except for debugging</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'raw_data'</span>,data); 
+	</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Although data comes in &quot;chunks&quot; from the serial stream, the information is processed as lines
+The following section repartitions the incoming chunk as lines so that it can be interpreted</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> s = data.toString(<span class="hljs-string">'ascii'</span>);
 	<span class="hljs-keyword">var</span> len = s.length;
 	<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;len; i++) {
 		c = s[i];
 		<span class="hljs-keyword">if</span>(c === <span class="hljs-string">'\n'</span>) {
-			<span class="hljs-keyword">var</span> json_string = <span class="hljs-keyword">this</span>.current_data.join(<span class="hljs-string">''</span>);
+			<span class="hljs-keyword">var</span> json_string = <span class="hljs-keyword">this</span>._currentData.join(<span class="hljs-string">''</span>);
 			t = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>().getTime();
-			log.g2(<span class="hljs-string">'&lt;-C--'</span> + t + <span class="hljs-string">'---- '</span> + json_string);
-			obj = <span class="hljs-literal">null</span>;
-			<span class="hljs-keyword">try</span> {
-				obj = <span class="hljs-built_in">JSON</span>.parse(json_string);
-			}<span class="hljs-keyword">catch</span>(e){</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A JSON parse error usually means the asynchronous LOADER SEGMENT NOT READY MESSAGE</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span>(json_string.trim() === <span class="hljs-string">'######## LOADER - SEGMENT NOT READY'</span>) {
-					<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'error'</span>, [-<span class="hljs-number">1</span>, <span class="hljs-string">'LOADER_SEGMENT_NOT_READY'</span>, <span class="hljs-string">'Asynchronous error: Segment not ready.'</span>]);
-				} <span class="hljs-keyword">else</span> {
-					<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'error'</span>, [-<span class="hljs-number">1</span>, <span class="hljs-string">'JSON_PARSE_ERROR'</span>, <span class="hljs-string">"Could not parse response: '"</span> + json_string + <span class="hljs-string">"' ("</span> + e.toString() + <span class="hljs-string">")"</span>]);
-				}
-			} <span class="hljs-keyword">finally</span> {
-				<span class="hljs-keyword">if</span>(obj) {
-					<span class="hljs-keyword">this</span>.onMessage(obj);
-				}
+			log.g2(<span class="hljs-string">'S'</span>,<span class="hljs-string">'in'</span>,json_string);
+			<span class="hljs-keyword">try</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Responses from G2 are in JSON format (always) so we parse them out, and handle the messages</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">var</span> obj = <span class="hljs-built_in">JSON</span>.parse(json_string);
+				<span class="hljs-keyword">this</span>.onMessage(obj);
+			}<span class="hljs-keyword">catch</span>(e){
+				<span class="hljs-keyword">throw</span> e
+				<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'error'</span>, [-<span class="hljs-number">1</span>, <span class="hljs-string">'JSON_PARSE_ERROR'</span>, <span class="hljs-string">"Could not parse response: '"</span> + jsesc(json_string) + <span class="hljs-string">"' ("</span> + e.toString() + <span class="hljs-string">")"</span>]);
 			}
-			<span class="hljs-keyword">this</span>.current_data = [];
+			<span class="hljs-keyword">this</span>._currentData = [];
 		} <span class="hljs-keyword">else</span> {
-			<span class="hljs-keyword">this</span>.current_data.push(c);
+			<span class="hljs-keyword">this</span>._currentData.push(c);
 		}
 	}
-};
-
-G2.prototype.handleQueueReport = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">r</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deal with jog mode</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> qo = r.qo || <span class="hljs-number">0</span>;
-	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.jog_command &amp;&amp; (qo &gt; <span class="hljs-number">0</span>)) {
-		<span class="hljs-keyword">this</span>.gcodeWrite(<span class="hljs-keyword">this</span>.jog_command + <span class="hljs-string">'\n'</span>);
-		<span class="hljs-keyword">return</span>;
-	}
-};
-
-G2.prototype.handleFooter = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">response</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO not really needed anymore</p></div></div><div class="code"><div class="wrapper">G2.prototype.handleQueueReport = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">r</span>) </span>{
+	<span class="hljs-keyword">var</span> qo = r.qo || <span class="hljs-number">0</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Pass</p></div></div><div class="code"><div class="wrapper">};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The footer is the part of the JSON response message that contains error information
+If the footer indicates an error code, we do a lookup on the error message and emit an error event
+Note that G2_ERRORS must be up-to-date with the current firmware in order for the lookup to be meaningful.</p></div></div><div class="code"><div class="wrapper">G2.prototype.handleFooter = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">response</span>) </span>{
 	<span class="hljs-keyword">if</span>(response.f) {
 		<span class="hljs-keyword">if</span>(response.f[<span class="hljs-number">1</span>] !== <span class="hljs-number">0</span>) {
 			<span class="hljs-keyword">var</span> err_code = response.f[<span class="hljs-number">1</span>];
@@ -311,26 +280,32 @@ For now, let&#39;s not emit a bunch of errors into the log that don&#39;t mean a
 			<span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(err_msg[<span class="hljs-number">1</span>]);
 		}
 	}
-};
-
-G2.prototype.handleExceptionReport = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">response</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>When there is an exception in the G2 firmware, it issues an &quot;exception report&quot;
+which comes as a part of the normal JSON response.  There are a number of ways
+to react to this, depending on the exception.  In time past, certain exceptions were
+ignored or handled in a special way.  Now, we mostly just make a note of the exception and report it in the log.</p></div></div><div class="code"><div class="wrapper">G2.prototype.handleExceptionReport = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">response</span>) </span>{
 	<span class="hljs-keyword">if</span>(response.er) {
 		<span class="hljs-keyword">this</span>._lastExceptionReport = response.er;
 		<span class="hljs-keyword">var</span> stat = response.er.st;
-		<span class="hljs-keyword">if</span>(((stat === <span class="hljs-number">204</span>) || (stat === <span class="hljs-number">207</span>)) &amp;&amp; <span class="hljs-keyword">this</span>.quit_pending) {
-			<span class="hljs-keyword">this</span>.gcodeWrite(<span class="hljs-string">"{clr:n}\nM30\n"</span>);
-			<span class="hljs-keyword">this</span>.quit_pending = <span class="hljs-literal">false</span>;
+		<span class="hljs-keyword">if</span>((stat === <span class="hljs-number">207</span>) &amp;&amp; <span class="hljs-keyword">this</span>.quit_pending) {
+			<span class="hljs-comment">//this.quit_pending = false;</span>
+			<span class="hljs-comment">//this._write("{clr:n}\n");</span>
+			<span class="hljs-comment">//this.command("M30");</span>
 		}
+		log.error(<span class="hljs-string">"Response with an exception report:"</span>)
+		log.error(<span class="hljs-built_in">JSON</span>.stringify(response))
 	}
 };
 
 G2.prototype.getLastException = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
 	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._lastExceptionReport || <span class="hljs-literal">null</span>;
 }
-
 G2.prototype.clearLastException = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
 	<span class="hljs-keyword">this</span>._lastExceptionReport = <span class="hljs-literal">null</span>;
-}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>0    machine is initializing
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This function handles status reports that are returned by the tool.
+Status reports contain position, velocity, status, input/output data, etc.
+When they arrive, we update internal state, fire events, etc.</p>
+<p>0    machine is initializing
 1    machine is ready for use
 2    machine is in alarm state (shut down)
 3    program stop or no more blocks (M0, M1, M60)
@@ -339,39 +314,75 @@ G2.prototype.clearLastException = <span class="hljs-function"><span class="hljs-
 6    motion is holding
 7    probe cycle active
 8    machine is running (cycling)
-9    machine is homing</p></div></div><div class="code"><div class="wrapper">G2.prototype.handleStatusReport = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">response</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>RAS: Keeping this around for debugging a bit longer - 2016/03/11
-if(response.sr &amp;&amp; ((response.sr.stat === this.STAT_END) || (response.sr.stat === this.STAT_RUNNING))) {
-    if(this.status.stat === this.STAT_END) {
-        console.log(&quot;STAT IS ALREADY 4&quot;)
-    }
-    console.log(response);<br>}</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(response.sr) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update our copy of the system status</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> key <span class="hljs-keyword">in</span> response.sr) {
+9    machine is homing</p></div></div><div class="code"><div class="wrapper">G2.prototype.handleStatusReport = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">response</span>) </span>{
+
+	<span class="hljs-keyword">if</span>(response.sr) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Update our copy of the system status</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> key <span class="hljs-keyword">in</span> response.sr) {
 			value = response.sr[key];
 			<span class="hljs-keyword">if</span>(key === <span class="hljs-string">'unit'</span>) {
 				value = value === <span class="hljs-number">0</span> ? <span class="hljs-string">'in'</span> : <span class="hljs-string">'mm'</span>;
 			}
-
 			<span class="hljs-keyword">this</span>.status[key] = value;
 		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Send more g-codes if warranted</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span>(<span class="hljs-string">'line'</span> <span class="hljs-keyword">in</span> response.sr) {
 			line = response.sr.line;
 			lines_left = <span class="hljs-keyword">this</span>.lines_sent - line;
-
-			<span class="hljs-keyword">if</span>(lines_left &lt; GCODE_MIN_LINE_THRESH) {
-				<span class="hljs-keyword">this</span>.last_line_seen = line;
-				<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.gcode_queue.getLength() &gt; <span class="hljs-number">0</span>) {
-					log.warn(<span class="hljs-string">"Lines left has fallen to "</span> + lines_left + <span class="hljs-string">" sending more..."</span>);
-					<span class="hljs-keyword">this</span>.sendMoreGCodes();
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>stat is the system state (detailed in the list above)</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span>(<span class="hljs-string">'stat'</span> <span class="hljs-keyword">in</span> response.sr) {
+			<span class="hljs-keyword">switch</span>(response.sr.stat) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If we stopped and flushed, we might have provided a callback
+We call it once we get the confirmation that the tool has actually stopped and flushed.</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">case</span> STAT_STOP:
+					<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.flushcallback) {
+						<span class="hljs-keyword">this</span>.flushcallback(<span class="hljs-literal">null</span>);
+						<span class="hljs-keyword">this</span>.flushcallback = <span class="hljs-literal">null</span>;
+					}
+					<span class="hljs-keyword">break</span>;
+				<span class="hljs-keyword">case</span> STAT_END:
+					<span class="hljs-keyword">this</span>.status.line = <span class="hljs-literal">null</span>;
+					<span class="hljs-keyword">break</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A really bad error in the firmware causes a &quot;panic&quot; - these are rare, but they do
+happen.  A panic is not resolvable without resetting the micrcontroller hosting G2
+TODO: We might want to actually kill the engine here, or issue some kind of reset.</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">case</span> STAT_PANIC:
+					log.error(<span class="hljs-string">'Panicked Response:'</span>)
+					log.error(<span class="hljs-built_in">JSON</span>.stringify(response))
+					<span class="hljs-keyword">break</span>
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>this.quit_pending is set when a quit is issued while the tool is running.
+The reason to have this flag is that once a stop and flush are issued to the g2 controller
+a second stop and flush can cause the system to crash.  A second quit will not be sent if
+another quit is pending.  The quit is pending until g2 has fully transitioned to STAT_END
+If it moves into STAT_STOP or STAT_HOLD during a pending quit, a stop and flush are 
+sent to exit the machining cycle.  A stop/flush that is issued too soon after the transition
+to STAT_STOP or STAT_HOLDING can also cause the system to crash, so we give 50ms before doing
+this.
+TODO - This state jiggerypokery is because there are issues with state management surrounding
+       job kills in the firmware.  Those issues should be resolved so that this is not necessary.</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.quit_pending) {
+				<span class="hljs-keyword">switch</span>(response.sr.stat) {
+					<span class="hljs-keyword">case</span> STAT_STOP:
+					<span class="hljs-keyword">case</span> STAT_HOLDING:
+						log.info(<span class="hljs-string">"Issuing the job kill command."</span>)
+						setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+							<span class="hljs-keyword">this</span>._write(<span class="hljs-string">'\x04\n'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{});
+						}.bind(<span class="hljs-keyword">this</span>), <span class="hljs-number">50</span>)
+						<span class="hljs-keyword">break</span>;
+					<span class="hljs-keyword">case</span> STAT_END:
+						log.info(<span class="hljs-string">"Clearing the quit pending state."</span>)
+						<span class="hljs-keyword">this</span>.lines_to_send = <span class="hljs-number">4</span>
+						<span class="hljs-keyword">this</span>.quit_pending = <span class="hljs-literal">false</span>;
+						<span class="hljs-keyword">this</span>.pause_flag = <span class="hljs-literal">false</span>;
+						<span class="hljs-keyword">break</span>;
 				}
-			}
-		}
-
-		<span class="hljs-keyword">if</span>(<span class="hljs-string">'stat'</span> <span class="hljs-keyword">in</span> response.sr) {
-			<span class="hljs-keyword">if</span>(response.sr.stat === STAT_STOP) {
-				<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.flushcallback) {
-					<span class="hljs-keyword">this</span>.flushcallback(<span class="hljs-literal">null</span>);
-					<span class="hljs-keyword">this</span>.flushcallback = <span class="hljs-literal">null</span>;
+			} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If we move into the holding state, set a flag indicating that we&#39;re paused, 
+and pause the cycle context if it exists.</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">switch</span>(response.sr.stat) {
+					<span class="hljs-keyword">case</span> STAT_HOLDING:
+						<span class="hljs-keyword">this</span>.pause_flag = <span class="hljs-literal">true</span>;
+						<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.context) {
+							<span class="hljs-keyword">this</span>.context.pause()
+						}
+						<span class="hljs-keyword">break</span>;
+					<span class="hljs-keyword">default</span>:
+						<span class="hljs-keyword">this</span>.pause_flag = <span class="hljs-literal">false</span>;
+						<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.context) {
+							<span class="hljs-keyword">this</span>.context.resume();
+						}
+						<span class="hljs-keyword">break</span>;
 				}
-			}
-			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.expectations.length &gt; <span class="hljs-number">0</span>) {
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>this.expectations is a list of &quot;expected states&quot; and callbacks.
+Certain function</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.expectations.length &gt; <span class="hljs-number">0</span>) {
 				<span class="hljs-keyword">var</span> expectation = <span class="hljs-keyword">this</span>.expectations.pop();
 				<span class="hljs-keyword">var</span> stat = states[<span class="hljs-keyword">this</span>.status.stat];
 				<span class="hljs-keyword">if</span>(stat <span class="hljs-keyword">in</span> expectation) {
@@ -387,15 +398,36 @@ if(response.sr &amp;&amp; ((response.sr.stat === this.STAT_END) || (response.sr.
 		}
 
 		<span class="hljs-keyword">this</span>.stat = <span class="hljs-keyword">this</span>.status.stat !== <span class="hljs-literal">undefined</span> ? <span class="hljs-keyword">this</span>.status.stat : <span class="hljs-keyword">this</span>.stat;
-		<span class="hljs-keyword">this</span>.hold = <span class="hljs-keyword">this</span>.status.hold !== <span class="hljs-literal">undefined</span> ? <span class="hljs-keyword">this</span>.status.hold : <span class="hljs-keyword">this</span>.hold;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Emit status no matter what</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'status'</span>, <span class="hljs-keyword">this</span>.status);
+		<span class="hljs-keyword">this</span>.hold = <span class="hljs-keyword">this</span>.status.hold !== <span class="hljs-literal">undefined</span> ? <span class="hljs-keyword">this</span>.status.hold : <span class="hljs-keyword">this</span>.hold;
+
+		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.context) {
+			<span class="hljs-keyword">this</span>.context.emit(<span class="hljs-string">'status'</span>, <span class="hljs-keyword">this</span>.status);
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Emit status no matter what</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span>(<span class="hljs-string">'stat'</span> <span class="hljs-keyword">in</span> response.sr) {
+			<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'stat'</span>, response.sr.stat)
+			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.context) {
+				<span class="hljs-keyword">this</span>.context.emit(<span class="hljs-string">'stat'</span>, response.sr.stat);
+			}
+		}
+		<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'status'</span>, <span class="hljs-keyword">this</span>.status);
 	}
-};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Called once a proper JSON response is decoded from the chunks of data that come back from G2</p></div></div><div class="code"><div class="wrapper">G2.prototype.onMessage = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">response</span>) </span>{
-	<span class="hljs-keyword">this</span>.watchdog.stop();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO more elegant way of dealing with &quot;response&quot; data.</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(response.r) {
-		<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'response'</span>, <span class="hljs-literal">false</span>, response.r);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Called once a proper JSON response is decoded from the chunks of data that come back from G2</p></div></div><div class="code"><div class="wrapper">G2.prototype.onMessage = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">response</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO more elegant way of dealing with &quot;response&quot; data.</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(response.r) {
+		<span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>._seen_ready) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Special message type for initial system ready message</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span>(response.r.msg &amp;&amp; (response.r.msg === <span class="hljs-string">"SYSTEM READY"</span>)) {
+				<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'ready'</span>, <span class="hljs-keyword">this</span>);
+				<span class="hljs-keyword">return</span>;
+			}
+		}
+		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._ignored_responses &gt; <span class="hljs-number">0</span>) {
+			<span class="hljs-keyword">this</span>._ignored_responses--;
+		} <span class="hljs-keyword">else</span> {
+			<span class="hljs-keyword">this</span>.lines_to_send += <span class="hljs-number">1</span>;
+			<span class="hljs-keyword">this</span>.sendMore();
+		}
 		r = response.r;
+		<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'response'</span>, <span class="hljs-literal">false</span>, response.r);
 	} <span class="hljs-keyword">else</span> {
 		r = response;
-	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deal with G2 status (top priority)</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.handleStatusReport(r);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deal with exceptions</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.handleExceptionReport(r);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deal with streaming (if response contains a queue report)</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.handleQueueReport(r);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deal with footer</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> err = <span class="hljs-keyword">this</span>.handleFooter(response); </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Emitted everytime a message is received, regardless of content</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'message'</span>, response);
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deal with G2 status (top priority)</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.handleStatusReport(r);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deal with exceptions</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.handleExceptionReport(r);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deal with streaming (if response contains a queue report)
+this.handleQueueReport(r);</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deal with footer</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> err = <span class="hljs-keyword">this</span>.handleFooter(response);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Emitted everytime a message is received, regardless of content</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'message'</span>, response);
 
 	<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> key <span class="hljs-keyword">in</span> r) {
 		<span class="hljs-keyword">if</span>(key <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.readers) {
@@ -403,82 +435,122 @@ if(response.sr &amp;&amp; ((response.sr.stat === this.STAT_END) || (response.sr.
 				<span class="hljs-comment">//if(r[key] !== null) {</span>
 					callback = <span class="hljs-keyword">this</span>.readers[key].shift();
 					<span class="hljs-keyword">if</span>(err) {
-						callback(err);						
+						callback(err);
 					} <span class="hljs-keyword">else</span> {
-						callback(<span class="hljs-literal">null</span>, r[key]);						
+						callback(<span class="hljs-literal">null</span>, r[key]);
 					}
 				<span class="hljs-comment">//}</span>
 			}
 		}
-	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Special message type for initial system ready message</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(r.msg &amp;&amp; (r.msg === <span class="hljs-string">"SYSTEM READY"</span>)) {
-		<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'ready'</span>, <span class="hljs-keyword">this</span>);
 	}
-};
 
-G2.prototype.feedHold = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>&quot;pause&quot; the current machining cycle by issuing a feedhold.
+callback is called when the next state change takes place.</p></div></div><div class="code"><div class="wrapper">G2.prototype.feedHold = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
 	<span class="hljs-keyword">this</span>.pause_flag = <span class="hljs-literal">true</span>;
 	<span class="hljs-keyword">this</span>.flooded = <span class="hljs-literal">false</span>;
 	<span class="hljs-keyword">typeof</span> callback === <span class="hljs-string">'function'</span> &amp;&amp; <span class="hljs-keyword">this</span>.once(<span class="hljs-string">'state'</span>, callback);
-	log.debug(<span class="hljs-string">"Sending a feedhold"</span>);
-	<span class="hljs-keyword">this</span>.controlWriteAndDrain(<span class="hljs-string">'!\n'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-		log.debug(<span class="hljs-string">"Drained."</span>);   
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.stat === <span class="hljs-keyword">this</span>.STAT_PROBE) {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.quit()
+    }
+    log.debug(<span class="hljs-string">"Sending a feedhold"</span>);
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.context) {
+		<span class="hljs-keyword">this</span>.context.pause();
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO this &quot;drained&quot; printout is an old debug thing that can be removed</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>._write(<span class="hljs-string">'!\n'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		log.debug(<span class="hljs-string">"Drained."</span>);
 	});
-};
-
-G2.prototype.queueFlush = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Clears the queue, this means both the queue of g-codes in the engine to send,
+and whatever gcodes have been received but not yet executed in the g2 firmware context</p></div></div><div class="code"><div class="wrapper">G2.prototype.queueFlush = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
 	log.debug(<span class="hljs-string">'Clearing the queue.'</span>);
 	<span class="hljs-keyword">this</span>.flushcallback = callback;
-	<span class="hljs-keyword">this</span>.gcodeWrite(<span class="hljs-string">'{clr:n}\n'</span>);
-	<span class="hljs-keyword">this</span>.controlWrite(<span class="hljs-string">'\%\n'</span>);
-};
-
-G2.prototype.resume = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-	<span class="hljs-keyword">this</span>.controlWrite(<span class="hljs-string">'~\n'</span>); <span class="hljs-comment">//cycle start command character</span>
-	<span class="hljs-keyword">this</span>.pause_flag = <span class="hljs-literal">false</span>;
-};
-
-
-G2.prototype.quit = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-	<span class="hljs-keyword">this</span>.quit_pending = <span class="hljs-literal">true</span>;
+	<span class="hljs-keyword">this</span>.lines_to_send = <span class="hljs-number">4</span>;
 	<span class="hljs-keyword">this</span>.gcode_queue.clear();
-	<span class="hljs-keyword">this</span>.gcodeWrite(<span class="hljs-string">'{clr:n}\n'</span>);	
-	<span class="hljs-keyword">this</span>.controlWrite(<span class="hljs-string">'\x04'</span>);
-}
+	<span class="hljs-keyword">this</span>.command({<span class="hljs-string">'clr'</span>:<span class="hljs-literal">null</span>});
+	<span class="hljs-keyword">this</span>._write(<span class="hljs-string">'\%'</span>);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Bring the system out of feedhold
+Like the quit() function below, to issue another resume while the first one is pending can
+make the system crashy - so we&#39;re careful not to do that.
+This function returns a promise that resolves when the machining cycle has resumed.</p></div></div><div class="code"><div class="wrapper">G2.prototype.resume = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">var</span> thisPromise = _promiseCounter;
+	<span class="hljs-keyword">if</span>(resumePending){
+		<span class="hljs-keyword">return</span>;
+	}
+	log.info(<span class="hljs-string">"Creating promise "</span> + thisPromise);
+	_promiseCounter += <span class="hljs-number">1</span>;
+	resumePending = <span class="hljs-literal">true</span>;
+	<span class="hljs-keyword">var</span> deferred = Q.defer();
+	<span class="hljs-keyword">var</span> that = <span class="hljs-keyword">this</span>;
+	<span class="hljs-keyword">var</span> onStat = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stat</span>) </span>{
+		<span class="hljs-keyword">if</span>(stat !== STAT_RUNNING) {
+			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.quit_pending &amp;&amp; stat === STAT_HOLDING) {
+				<span class="hljs-keyword">return</span>;
+			}
+			that.removeListener(<span class="hljs-string">'stat'</span>, onStat);
+			log.info(<span class="hljs-string">"Resolving promise (resume): "</span> + thisPromise);
+			resumePending = <span class="hljs-literal">false</span>;
+			deferred.resolve(stat);
+		}
+	}
 
-G2.prototype.get = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key, callback</span>) </span>{
-	<span class="hljs-keyword">var</span> keys;
+	<span class="hljs-keyword">this</span>.on(<span class="hljs-string">'stat'</span>, onStat);
+	<span class="hljs-keyword">this</span>._write(<span class="hljs-string">'~'</span>); <span class="hljs-comment">//cycle start command character</span>
+
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.context) {
+		<span class="hljs-keyword">this</span>.context.resume();
+	}
+	<span class="hljs-keyword">this</span>.requestStatusReport(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">sr</span>) </span>{
+		<span class="hljs-keyword">this</span>.pause_flag = <span class="hljs-literal">false</span>;
+	}.bind(<span class="hljs-keyword">this</span>));
+	<span class="hljs-keyword">return</span> deferred.promise;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Quit means to stop the tool and abandon the machining cycle.
+This used to be a more complex function than it is now, but the firmware is pretty good
+about taking a job kill command (\x04) just about any time.  It used to be very state-dependent.</p></div></div><div class="code"><div class="wrapper">G2.prototype.quit = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.quit_pending) {
+		log.warn(<span class="hljs-string">"Not quitting because a quit is already pending."</span>);
+		<span class="hljs-keyword">return</span>;
+	}
+
+	<span class="hljs-keyword">switch</span>(<span class="hljs-keyword">this</span>.status.stat) {
+		<span class="hljs-comment">//case STAT_END:</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>return;
+break;</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">default</span>:
+			<span class="hljs-keyword">this</span>.quit_pending = <span class="hljs-literal">true</span>;
+
+			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.stream) {
+				<span class="hljs-keyword">this</span>.stream.end()
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Clear the gcodes we have queued up</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">this</span>.gcode_queue.clear();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Issue the actual Job Kill</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">this</span>._write(<span class="hljs-string">'\x04\n'</span>);
+			<span class="hljs-keyword">break</span>;
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>get the specified configuration value from g2.
+key can be an array of keys as well, in which case an object will be returned mapping keys to values
+This function is expected to not take too long, even if we&#39;re busy running a file, so a timeout is implemented.</p></div></div><div class="code"><div class="wrapper">G2.prototype.get = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key, callback</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deal with possible array-ness of this
+TODO - This sort of thing is pretty ugly - we should probably break this out into a get
+       and a getMany or something like that.  </p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> keys;
 	<span class="hljs-keyword">if</span>(key <span class="hljs-keyword">instanceof</span> <span class="hljs-built_in">Array</span>) {
 		keys = key;
 		is_array = <span class="hljs-literal">true</span>;
 	} <span class="hljs-keyword">else</span> {
 		is_array = <span class="hljs-literal">false</span>;
 		keys = [key];
-	}
-	<span class="hljs-keyword">async</span>.map(keys, </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Function called for each item in the keys array</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">k, cb</span>) </span>{
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>For each key</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">async</span>.map(keys,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Function called for each item in the keys array</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">k, cb</span>) </span>{
 			cb = cb.bind(<span class="hljs-keyword">this</span>);
 			cmd = {};
-			cmd[k] = <span class="hljs-literal">null</span>;
-
-			<span class="hljs-keyword">if</span>(k <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.readers) {
+			cmd[k] = <span class="hljs-literal">null</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>this.readers contains the key values that we&#39;re expecting to read back, and maps them
+to the callbacks that are called once the values are retrieved</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">if</span>(k <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.readers) {
 				<span class="hljs-keyword">this</span>.readers[k].push(cb);
 			} <span class="hljs-keyword">else</span> {
 				<span class="hljs-keyword">this</span>.readers[k] = [cb];
-			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Ensure that an errback is called if the data isn&#39;t read out</p></div></div><div class="code"><div class="wrapper">			setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Ensure that an error callback is called if the data isn&#39;t read out</p></div></div><div class="code"><div class="wrapper">			setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
 				<span class="hljs-keyword">if</span>(k <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.readers) {
 						callbacks = <span class="hljs-keyword">this</span>.readers[k];
-						stored_cb = callbacks[callbacks.length-<span class="hljs-number">1</span>];
-						<span class="hljs-keyword">if</span>(cb == stored_cb) {
+						stored_cb = callbacks[callbacks.length-<span class="hljs-number">1</span>];</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - using the right equals here?</p></div></div><div class="code"><div class="wrapper">						<span class="hljs-keyword">if</span>(cb == stored_cb) {
 							<span class="hljs-keyword">if</span>(<span class="hljs-keyword">typeof</span> cb == <span class="hljs-string">'function'</span>) {
 								<span class="hljs-keyword">this</span>.readers[k].shift();
 								cb(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Timeout"</span>), <span class="hljs-literal">null</span>);
 							}
 						}
 					}
-			}.bind(<span class="hljs-keyword">this</span>), CMD_TIMEOUT);
-
-			<span class="hljs-keyword">this</span>.command(cmd);
-		}.bind(<span class="hljs-keyword">this</span>),
-	</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Function to call with the list of results</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
+			}.bind(<span class="hljs-keyword">this</span>), CMD_TIMEOUT);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Actually issue the read to the controller, now that the response
+handling is all set up correctly</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">this</span>.command(cmd);
+		}.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Function to call with the list of results</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
 			<span class="hljs-keyword">if</span>(err) {
 				<span class="hljs-keyword">return</span> callback(err, result);
 			} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If given an array, return one.  Else, return a single item.</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span>(is_array) {
@@ -489,11 +561,13 @@ G2.prototype.get = <span class="hljs-function"><span class="hljs-keyword">functi
 			}
 		}
 	);
-};
-
-G2.prototype.setMany = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">obj, callback</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set configuration keys to values provided in the supplied object
+callback is called with an object that represents the actual values set
+For example:
+for obj = {&#39;2su&#39; : 400.18625 } : if, because of the internal resolution of that value,
+only 400.2 is achievable the callback will be called with {&#39;2su&#39; : 400.18625}</p></div></div><div class="code"><div class="wrapper">G2.prototype.setMany = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">obj, callback</span>) </span>{
 	<span class="hljs-keyword">var</span> keys = <span class="hljs-built_in">Object</span>.keys(obj);
-	<span class="hljs-keyword">async</span>.map(keys, </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Function called for each item in the keys array</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">k, cb</span>) </span>{
+	<span class="hljs-keyword">async</span>.map(keys,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Function called for each item in the keys array</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">k, cb</span>) </span>{
 			cmd = {};
 			cmd[k] = obj[k];
 			<span class="hljs-keyword">if</span>(k <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.readers) {
@@ -518,9 +592,11 @@ G2.prototype.setMany = <span class="hljs-function"><span class="hljs-keyword">fu
 			}
 		}
 	);
-};
-
-G2.prototype.set = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key, value, callback</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set works just like setMany above, but for a single value only
+TODO: This is just a specific version of above, rewrite this to call the above function!</p></div></div><div class="code"><div class="wrapper">G2.prototype.set = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">key, value, callback</span>) </span>{
+	<span class="hljs-keyword">if</span>(value === <span class="hljs-literal">undefined</span>) {
+		<span class="hljs-keyword">return</span> callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Undefined value passed to G2"</span>));
+	}
 	cmd = {};
 	cmd[key] = value;
 	<span class="hljs-keyword">if</span> (key <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.readers) {
@@ -545,65 +621,124 @@ G2.prototype.set = <span class="hljs-function"><span class="hljs-keyword">functi
 	<span class="hljs-keyword">var</span> cmd;
 	<span class="hljs-keyword">if</span>((<span class="hljs-keyword">typeof</span> obj) == <span class="hljs-string">'string'</span>) {
 		cmd = obj.trim();
-		<span class="hljs-comment">//this.controlWrite('{"gc":"'+cmd+'"}\n');</span>
-		<span class="hljs-keyword">this</span>.gcodeWrite(cmd + <span class="hljs-string">'\n'</span>);
-	} <span class="hljs-keyword">else</span> {
-		cmd = <span class="hljs-built_in">JSON</span>.stringify(obj);
-		<span class="hljs-keyword">this</span>.controlWrite(cmd + <span class="hljs-string">'\n'</span>);
+		<span class="hljs-keyword">this</span>.gcode_queue.enqueue(cmd);
+	} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>G2 supports a &quot;truncated&quot; format that allows for more compact JSON</p></div></div><div class="code"><div class="wrapper">		cmd = <span class="hljs-built_in">JSON</span>.stringify(obj);
+		cmd = cmd.replace(<span class="hljs-regexp">/(:\s*)(true)(\s*[},])/g</span>, <span class="hljs-string">"$1t$3"</span>)
+		cmd = cmd.replace(<span class="hljs-regexp">/(:\s*)(false)(\s*[},])/g</span>, <span class="hljs-string">"$1f$3"</span>)
+		<span class="hljs-keyword">this</span>.command_queue.enqueue(cmd);
 	}
+	<span class="hljs-keyword">this</span>.sendMore();
 };</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Send a (possibly multi-line) string
-An M30 will be placed at the end to put the machine back in the &quot;idle&quot; state</p></div></div><div class="code"><div class="wrapper">G2.prototype.runString = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data, callback</span>) </span>{
-	<span class="hljs-keyword">this</span>.runSegment(data + <span class="hljs-string">"\nM30\n"</span>, callback);
-};
-
-G2.prototype.runImmediate = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data, callback</span>) </span>{
-	<span class="hljs-keyword">this</span>.expectStateChange( {
-		<span class="hljs-string">'end'</span>:callback,
-		<span class="hljs-string">'stop'</span>:callback,
-		<span class="hljs-string">'timeout'</span>:<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-			callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Timeout while running immediate gcode"</span>));
-		}
-	});
-	<span class="hljs-keyword">this</span>.runString(data);
-}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Send a (possibly multi-line) string</p></div></div><div class="code"><div class="wrapper">G2.prototype.runSegment = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data, callback</span>) </span>{
-	line_count = <span class="hljs-number">0</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Divide string into a list of lines</p></div></div><div class="code"><div class="wrapper">	lines = data.split(<span class="hljs-string">'\n'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Cleanup the lines and enqueue</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;lines.length; i++) {
-		line_count += <span class="hljs-number">1</span>;
-		line = lines[i].trim().toUpperCase();
-		<span class="hljs-keyword">if</span>(callback) {
-			callback.line = line_count;
-		}
-		<span class="hljs-keyword">this</span>.gcode_queue.enqueue(line);
+TODO - this function used to take a callback, but now does not.<br>       Either implement it or drop it from the arguments list</p></div></div><div class="code"><div class="wrapper">G2.prototype.runString = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data, callback</span>) </span>{
+	<span class="hljs-keyword">var</span> stringStream = <span class="hljs-keyword">new</span> stream.Readable();
+	stringStream.push(data + <span class="hljs-string">"\n"</span>);
+	stringStream.push(<span class="hljs-literal">null</span>);
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.runStream(stringStream);
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Works like runString above, but takes a list of lines instead of a string
+TODO see above about callback</p></div></div><div class="code"><div class="wrapper">G2.prototype.runList = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">l, callback</span>) </span>{
+	<span class="hljs-keyword">var</span> stringStream = <span class="hljs-keyword">new</span> stream.Readable();
+	<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;l.length; i++) {
+		stringStream.push(l[i] + <span class="hljs-string">"\n"</span>);
 	}
-
-	<span class="hljs-keyword">this</span>.lines_sent = <span class="hljs-number">0</span>;
-	<span class="hljs-keyword">this</span>.sendMoreGCodes();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Kick off the run if any lines were queued</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(line_count &gt; <span class="hljs-number">0</span>) {
-		<span class="hljs-keyword">this</span>.pause_flag = <span class="hljs-literal">false</span>;
-		<span class="hljs-keyword">typeof</span> callback === <span class="hljs-string">"function"</span> &amp;&amp; callback(<span class="hljs-literal">null</span>);
+	stringStream.push(<span class="hljs-literal">null</span>);
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.runStream(stringStream);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return a promise that resolves when one of the provided states is encountered
+states - a list of states which will cause the promise to resolve
+The promise resolves with the state that caused the resolution as an argument</p></div></div><div class="code"><div class="wrapper">G2.prototype._createStatePromise = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">states</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Track the promise created (debug)</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> thisPromise = _promiseCounter;
+	log.info(<span class="hljs-string">"Creating promise "</span> + thisPromise);
+	_promiseCounter += <span class="hljs-number">1</span>;
+	<span class="hljs-keyword">var</span> deferred = Q.defer();
+	<span class="hljs-keyword">var</span> that = <span class="hljs-keyword">this</span>;
+	<span class="hljs-keyword">var</span> onStat = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stat</span>) </span>{
+		<span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;states.length; i++) {
+			<span class="hljs-keyword">if</span>(stat === states[i]) {
+				that.removeListener(<span class="hljs-string">'stat'</span>, onStat);
+				log.info(<span class="hljs-string">"Resolving promise "</span> + thisPromise + <span class="hljs-string">" because of state "</span> + stat + <span class="hljs-string">" which is one of "</span> + states)
+				deferred.resolve(stat);
+			}
+		}
+	}
+	<span class="hljs-keyword">this</span>.on(<span class="hljs-string">'stat'</span>, onStat);
+	<span class="hljs-keyword">return</span> deferred.promise;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Wait for a state or states (as reported in the status report &#39;stat&#39; member)
+See _createStatePromise for more information
+states - either a single state or list of states</p></div></div><div class="code"><div class="wrapper">G2.prototype.waitForState = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">states</span>) </span>{
+	<span class="hljs-keyword">if</span>(!states.length) {
+		states = [states]
+	}
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._createStatePromise(states);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Run data from a stream, rather than a string or a list
+This allows us to run huge files from disk, or say, http, or from 
+a stream processor that is streaming from one of those sources without
+having to load the entire file into memory.</p></div></div><div class="code"><div class="wrapper">G2.prototype.runStream = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">s</span>) </span>{
+		<span class="hljs-keyword">this</span>._createCycleContext();
+		s.pipe(<span class="hljs-keyword">this</span>.context._stream);
+		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.context;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Run data from a file.  This is done with streams, which enjoy the benefits described in runStream above.</p></div></div><div class="code"><div class="wrapper">G2.prototype.runFile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">filename</span>) </span>{
+	<span class="hljs-keyword">var</span> st = fs.createReadStream(filename);
+	<span class="hljs-keyword">var</span> ln = <span class="hljs-keyword">new</span> LineNumberer();
+	<span class="hljs-comment">//return this.runStream(st);</span>
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.runStream(st.pipe(ln));
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - Do we really need this function if we have runString?</p></div></div><div class="code"><div class="wrapper">G2.prototype.runImmediate = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data</span>) </span>{
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.runString(data);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>G2 begins running G-Codes as soon as it recieves them, and in certain cases, it is possible for
+G2 to &quot;plan to a stop&quot; when this is not the desired behavior.  This typically happens at the start of
+of a run, when the host has only sent a few moves down, and G2&#39;s planner outpaces the moves coming in.
+To resolve this, this module provides a &quot;priming&quot; behavior that will prevent it from sending any g-codes
+to G2 until it is &quot;primed&quot; with enough of them so that it&#39;s not going to starve the planner after it starts
+sending.  The difficulty with this is, if the prime threshold is 10 g-codes, and the host wants to send a
+file that is only 5 g-codes long, the system will never be primed, and no g-codes are sent.  The prime() 
+function then, is provided for cases where we know we&#39;re not sending anymore g-codes, and we want G2
+to just run whatever we&#39;ve sent so far.</p></div></div><div class="code"><div class="wrapper">G2.prototype.prime = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	log.info(<span class="hljs-string">"Priming driver (manually)"</span>);
+	<span class="hljs-keyword">this</span>._primed = <span class="hljs-literal">true</span>;
+	<span class="hljs-keyword">this</span>.sendMore();
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - This was mostly an informational thing that should no longer be needed</p></div></div><div class="code"><div class="wrapper">G2.prototype.getInfo = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">return</span> <span class="hljs-string">"G2: primed:"</span> + 
+			(<span class="hljs-keyword">this</span>._primed ? <span class="hljs-string">'1'</span> : <span class="hljs-string">'0'</span>) +
+			<span class="hljs-string">" l2s:"</span> + 
+			<span class="hljs-keyword">this</span>.lines_to_send + 
+			<span class="hljs-string">" gcq:"</span> + <span class="hljs-keyword">this</span>.gcode_queue.getLength()
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This function is called internally when it&#39;s time to send more g-codes or commands from the queue.
+This implements the so-called &quot;linemode&quot; protocol (see G2 source documentation for more info)
+<a href="https://github.com/synthetos/g2/wiki/g2core-Communications">https://github.com/synthetos/g2/wiki/g2core-Communications</a></p></div></div><div class="code"><div class="wrapper">G2.prototype.sendMore = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Don&#39;t ever send anything if we&#39;re paused</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.pause_flag) {
+		<span class="hljs-keyword">return</span>;
+	}
+	</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>&quot;commands&quot; (JSON messages) preempt g-codes.  Send these first, regardless of whether or not we&#39;re primed.</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> count = <span class="hljs-keyword">this</span>.command_queue.getLength();
+	<span class="hljs-keyword">if</span>(count) {
+		<span class="hljs-keyword">var</span> to_send = count;
+		<span class="hljs-keyword">var</span> codes = <span class="hljs-keyword">this</span>.command_queue.multiDequeue(count)
+		codes.push(<span class="hljs-string">""</span>);
+		<span class="hljs-keyword">this</span>._ignored_responses+=to_send;
+		<span class="hljs-keyword">this</span>._write(codes.join(<span class="hljs-string">'\n'</span>), <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{});
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If we&#39;re primed, go ahead and send more g-codes</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._primed) {
+		<span class="hljs-keyword">var</span> count = <span class="hljs-keyword">this</span>.gcode_queue.getLength();
+		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.lines_to_send &gt;= THRESH) {
+				<span class="hljs-keyword">if</span>(count &gt;= THRESH || <span class="hljs-keyword">this</span>._streamDone) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Send some lines, but no more than we are allowed per linemode protocol</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">var</span> to_send = <span class="hljs-built_in">Math</span>.min(<span class="hljs-keyword">this</span>.lines_to_send, count);
+				<span class="hljs-keyword">var</span> codes = <span class="hljs-keyword">this</span>.gcode_queue.multiDequeue(to_send);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Ensures that when we join below that we get a \n on the end</p></div></div><div class="code"><div class="wrapper">				codes.push(<span class="hljs-string">""</span>); 
+				<span class="hljs-keyword">if</span>(codes.length &gt; <span class="hljs-number">1</span>) {
+					<span class="hljs-keyword">this</span>.lines_to_send -= to_send<span class="hljs-comment">/*-offset*/</span>;
+					<span class="hljs-keyword">this</span>._write(codes.join(<span class="hljs-string">'\n'</span>), <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{ });
+				}
+			}
+		}
 	} <span class="hljs-keyword">else</span> {
-		<span class="hljs-keyword">typeof</span> callback === <span class="hljs-string">"function"</span> &amp;&amp; callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"No G-codes were present in the provided string"</span>));
+		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.gcode_queue.getLength() &gt; <span class="hljs-number">0</span>) {
+			<span class="hljs-comment">//log.debug("Not sending because not primed.");</span>
+		}
 	}
-};
-
-G2.prototype.sendMoreGCodes = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-	codes = <span class="hljs-keyword">this</span>.gcode_queue.multiDequeue(GCODE_BLOCK_SEND_SIZE);
-	<span class="hljs-keyword">if</span>(codes.length &gt; <span class="hljs-number">0</span>) {
-		<span class="hljs-keyword">this</span>.lines_sent += codes.length;
-		<span class="hljs-keyword">this</span>.gcodeWrite(codes.join(<span class="hljs-string">'\n'</span>) + <span class="hljs-string">'\n'</span>);
-	}
-};
-
-G2.prototype.setMachinePosition = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">position, callback</span>) </span>{
-	<span class="hljs-keyword">var</span> gcode = <span class="hljs-string">"G21\n"</span>;
-	[<span class="hljs-string">'x'</span>,<span class="hljs-string">'y'</span>,<span class="hljs-string">'z'</span>,<span class="hljs-string">'a'</span>,<span class="hljs-string">'b'</span>,<span class="hljs-string">'c'</span>,<span class="hljs-string">'u'</span>,<span class="hljs-string">'v'</span>,<span class="hljs-string">'w'</span>].forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">axis</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the position of the motion system using the G28.3 code
+position - An object mapping axes to position values. Axes that are not included will not be updated. </p></div></div><div class="code"><div class="wrapper">G2.prototype.setMachinePosition = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">position, callback</span>) </span>{
+	<span class="hljs-keyword">var</span> axes = [<span class="hljs-string">'x'</span>,<span class="hljs-string">'y'</span>,<span class="hljs-string">'z'</span>,<span class="hljs-string">'a'</span>,<span class="hljs-string">'b'</span>,<span class="hljs-string">'c'</span>,<span class="hljs-string">'u'</span>,<span class="hljs-string">'v'</span>,<span class="hljs-string">'w'</span>]
+	<span class="hljs-keyword">var</span> gcodes = [<span class="hljs-string">'G21'</span>]
+	axes.forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">axis</span>) </span>{
 		<span class="hljs-keyword">if</span>(position[axis] != <span class="hljs-literal">undefined</span>) {
-			gcode += <span class="hljs-string">'G28.3 '</span> + axis + position[axis].toFixed(<span class="hljs-number">5</span>) + <span class="hljs-string">'\n'</span>;
-		}		
+			gcodes.push(<span class="hljs-string">'G28.3 '</span> + axis + position[axis].toFixed(<span class="hljs-number">5</span>));
+		}
 	});
 
-	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.unit === <span class="hljs-string">'in'</span>) {
-		gcode += <span class="hljs-string">'G20\n'</span>;
-	}
-	<span class="hljs-keyword">this</span>.runString(gcode, callback);
+	gcodes.push(<span class="hljs-keyword">this</span>.status.unit === <span class="hljs-string">'in'</span> ? <span class="hljs-string">'G20'</span> : <span class="hljs-string">'G21'</span>);
+	<span class="hljs-keyword">this</span>.runList(gcodes).then(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{callback &amp;&amp; callback()})
 }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Function works like &quot;once()&quot; for a state change
 callbacks is an associative array mapping states to callbacks
 If the <em>next</em> state change matches a state in the associative array, the callback it maps to is called.
@@ -629,9 +764,7 @@ that the new state is either STAT_END or STAT_PAUSE.  If the new state is neithe
 		}.bind(<span class="hljs-keyword">this</span>), EXPECT_TIMEOUT);
 	}
 	<span class="hljs-keyword">this</span>.expectations.push(callbacks);
-};
-
-states = {
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Name helper for the states - useful for error messages.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> states = {
 	<span class="hljs-number">0</span> : <span class="hljs-string">"init"</span>,
 	<span class="hljs-number">1</span> : <span class="hljs-string">"ready"</span>,
 	<span class="hljs-number">2</span> : <span class="hljs-string">"alarm"</span>,
@@ -641,17 +774,14 @@ states = {
 	<span class="hljs-number">6</span> : <span class="hljs-string">"holding"</span>,
 	<span class="hljs-number">7</span> : <span class="hljs-string">"probe"</span>,
 	<span class="hljs-number">8</span> : <span class="hljs-string">"cycling"</span>,
-	<span class="hljs-number">9</span> : <span class="hljs-string">"homing"</span>, 
+	<span class="hljs-number">9</span> : <span class="hljs-string">"homing"</span>,
 	<span class="hljs-number">11</span> : <span class="hljs-string">"interlock"</span>,
 	<span class="hljs-number">12</span> : <span class="hljs-string">"shutdown"</span>,
 	<span class="hljs-number">13</span> : <span class="hljs-string">"panic"</span>
 };
-
 <span class="hljs-keyword">var</span> state = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">s</span>) </span>{
 	<span class="hljs-keyword">return</span> states[s];
-};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>export the class</p></div></div><div class="code"><div class="wrapper">exports.G2 = G2;
-
-exports.STAT_INIT = STAT_INIT;
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>export the class</p></div></div><div class="code"><div class="wrapper">exports.G2 = G2;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Convenient names for states</p></div></div><div class="code"><div class="wrapper">exports.STAT_INIT = STAT_INIT;
 exports.STAT_READY = STAT_READY;
 exports.STAT_ALARM = STAT_ALARM;
 exports.STAT_STOP = STAT_STOP;

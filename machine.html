@@ -1,4 +1,20 @@
-<!DOCTYPE html><html lang="en"><head><title>machine</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content=""><meta name="groc-document-path" content="machine"><meta name="groc-project-path" content="machine.js"><link rel="stylesheet" type="text/css" media="all" href="assets/style.css"><script type="text/javascript" src="assets/behavior.js"></script><body><div id="meta"><div class="file-path">machine.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> g2 = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./g2'</span>);
+<!DOCTYPE html><html lang="en"><head><title>machine</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content=""><meta name="groc-document-path" content="machine"><meta name="groc-project-path" content="machine.js"><link rel="stylesheet" type="text/css" media="all" href="assets/style.css"><script type="text/javascript" src="assets/behavior.js"></script><body><div id="meta"><div class="file-path">machine.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>machine.js</p>
+<p>Defines the &quot;machine model&quot; which is an abstraction of the physical machine that lives
+sort of one layer up from the G2 driver.  It maintains a &quot;machine state&quot; that is similar to, but
+not the same as G2s internal state, and provides functions for high level machine operations.</p>
+<p>The machine model includes the important concept of runtimes, which are individual software components
+that get control of the machine for performing certain actions.  Runtimes are important for compartmentalizing
+different ways of controlling the machine.  Manually driving the machine with a pendant, for example is
+a very different sort of activity from running a g-code file, so those two activities are implemented 
+by two separate runtimes that each get a chance to take control of the machine when it is time to perform
+their respective tasks.</p>
+<p>This module also sort of &quot;meta manages&quot; the motion systems state.  An example
+of this is that G2 has digital inputs defined, and can specify their input mode and basic function, but the 
+machine model might layer some additional function on top of them, such as their higher-level application</p>
+<ul>
+<li>perhaps acting as a door interlock, a tool release button, etc.</li>
+</ul>
+<p>The machine model is a singleton.  There is only ever one of them, which is instantiated by the connect() method.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> g2 = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./g2'</span>);
 <span class="hljs-keyword">var</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'util'</span>);
 <span class="hljs-keyword">var</span> events = <span class="hljs-built_in">require</span>(<span class="hljs-string">'events'</span>);
 <span class="hljs-keyword">var</span> PLATFORM = <span class="hljs-built_in">require</span>(<span class="hljs-string">'process'</span>).platform;
@@ -8,16 +24,21 @@
 <span class="hljs-keyword">var</span> db = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./db'</span>);
 <span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./log'</span>).logger(<span class="hljs-string">'machine'</span>);
 <span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./config'</span>);
-
-<span class="hljs-keyword">var</span> GCodeRuntime = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./runtime/gcode'</span>).GCodeRuntime;
+<span class="hljs-keyword">var</span> updater = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./updater'</span>);
+<span class="hljs-keyword">var</span> u = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./util'</span>);
+<span class="hljs-keyword">var</span> <span class="hljs-keyword">async</span> = <span class="hljs-built_in">require</span>(<span class="hljs-string">'async'</span>);
+<span class="hljs-keyword">var</span> canQuit = <span class="hljs-literal">false</span>;
+<span class="hljs-keyword">var</span> canResume = <span class="hljs-literal">false</span>;
+<span class="hljs-keyword">var</span> clickDisabled = <span class="hljs-literal">false</span>;
+<span class="hljs-keyword">var</span> interlockBypass = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load up all the runtimes that are currently defined
+TODO - One day, a folder-scan and auto-registration process might be nice here, this is all sort of hand-rolled.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> GCodeRuntime = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./runtime/gcode'</span>).GCodeRuntime;
 <span class="hljs-keyword">var</span> SBPRuntime = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./runtime/opensbp'</span>).SBPRuntime;
 <span class="hljs-keyword">var</span> ManualRuntime = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./runtime/manual'</span>).ManualRuntime;
 <span class="hljs-keyword">var</span> PassthroughRuntime = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./runtime/passthrough'</span>).PassthroughRuntime;
-<span class="hljs-keyword">var</span> IdleRuntime = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./runtime/idle'</span>).IdleRuntime;
-
-<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">connect</span>(<span class="hljs-params">callback</span>) </span>{
-
-	<span class="hljs-keyword">switch</span>(PLATFORM) {
+<span class="hljs-keyword">var</span> IdleRuntime = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./runtime/idle'</span>).IdleRuntime;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Instantiate a machine, connecting to the serial port specified in the engine configuration.
+TODO: We probably don&#39;t need special keys in the config for each platform anymore.  Since the engine
+      does its first-time config platform-detecting magic (See engine.js) these ports are likely to
+      be filled with sensible defaults</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">connect</span>(<span class="hljs-params">callback</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO: These are hardwired for a time when there were two USB channels - there is only one, now.</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">switch</span>(PLATFORM) {
 
 		<span class="hljs-keyword">case</span> <span class="hljs-string">'linux'</span>:
 			control_path = config.engine.get(<span class="hljs-string">'control_port_linux'</span>);
@@ -40,16 +61,13 @@
 			gcode_path = <span class="hljs-literal">null</span>;
 			<span class="hljs-keyword">break</span>;
 	}
-	<span class="hljs-keyword">if</span>(control_path &amp;&amp; gcode_path) {
-		exports.machine = <span class="hljs-keyword">new</span> Machine(control_path, gcode_path, callback);
+	<span class="hljs-keyword">if</span>(control_path) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - I dunno, this is sort of a weird pattern</p></div></div><div class="code"><div class="wrapper">		exports.machine = <span class="hljs-keyword">new</span> Machine(control_path, callback);
 	} <span class="hljs-keyword">else</span> {
 		<span class="hljs-keyword">typeof</span> callback === <span class="hljs-string">"function"</span> &amp;&amp; callback(<span class="hljs-string">'No supported serial path for platform "'</span> + PLATFORM + <span class="hljs-string">'"'</span>);
 	}
 }
 
-<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">Machine</span>(<span class="hljs-params">control_path, gcode_path, callback</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle Inheritance</p></div></div><div class="code"><div class="wrapper">	events.EventEmitter.call(<span class="hljs-keyword">this</span>);
-
-	<span class="hljs-keyword">this</span>.fireButtonDebounce = <span class="hljs-literal">false</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Instantiate driver and connect to G2</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.status = {
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">Machine</span>(<span class="hljs-params">control_path, callback</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle Inheritance</p></div></div><div class="code"><div class="wrapper">	events.EventEmitter.call(<span class="hljs-keyword">this</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Instantiate driver and connect to G2</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.status = {
 		state : <span class="hljs-string">"not_ready"</span>,
 		posx : <span class="hljs-number">0.0</span>,
 		posy : <span class="hljs-number">0.0</span>,
@@ -62,6 +80,14 @@
 		in6 : <span class="hljs-number">1</span>,
 		in7 : <span class="hljs-number">1</span>,
 		in8 : <span class="hljs-number">1</span>,
+		out1 :<span class="hljs-number">0</span>,
+		out2 :<span class="hljs-number">0</span>,
+		out3 :<span class="hljs-number">0</span>,
+		out4 :<span class="hljs-number">0</span>,
+		out5 :<span class="hljs-number">0</span>,
+		out6 :<span class="hljs-number">0</span>,
+		out7 :<span class="hljs-number">0</span>,
+		out8 :<span class="hljs-number">0</span>,
 		job : <span class="hljs-literal">null</span>,
 		info : <span class="hljs-literal">null</span>,
 		unit : <span class="hljs-string">'mm'</span>,
@@ -70,41 +96,62 @@
 		auth : <span class="hljs-literal">false</span>
 	};
 
-	<span class="hljs-keyword">this</span>.driver = <span class="hljs-keyword">new</span> g2.G2();
+	<span class="hljs-keyword">this</span>.fireButtonDebounce = <span class="hljs-literal">false</span>;
+	<span class="hljs-keyword">this</span>.APCollapseTimer = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.quit_pressed = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">this</span>.fireButtonPressed =<span class="hljs-number">0</span>; 
+	<span class="hljs-keyword">this</span>.info_id = <span class="hljs-number">0</span>;
+	<span class="hljs-keyword">this</span>.action = <span class="hljs-literal">null</span>;
+	<span class="hljs-keyword">this</span>.interlock_action = <span class="hljs-literal">null</span>;
+	</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Instantiate and connect to the G2 driver using the port specified in the constructor</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.driver = <span class="hljs-keyword">new</span> g2.G2();
 	<span class="hljs-keyword">this</span>.driver.on(<span class="hljs-string">"error"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{log.error(err);});
 
-	<span class="hljs-keyword">this</span>.driver.connect(control_path, gcode_path, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
-	</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the initial state based on whether or not we got a valid connection to G2</p></div></div><div class="code"><div class="wrapper">	    <span class="hljs-keyword">if</span>(err){
+	<span class="hljs-keyword">this</span>.driver.connect(control_path, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Most of the setup of the machine happens here, AFTER we&#39;ve successfully connected to G2</p></div></div><div class="code"><div class="wrapper">	    <span class="hljs-keyword">if</span>(err){
+			log.error(<span class="hljs-built_in">JSON</span>.stringify(err));
 	    	log.warn(<span class="hljs-string">"Setting the disconnected state"</span>);
-		    <span class="hljs-keyword">this</span>.status.state = <span class="hljs-string">'not_ready'</span>;
+	    	<span class="hljs-keyword">this</span>.die(<span class="hljs-string">"An internal error has occurred. You must reboot your tool."</span>)  <span class="hljs-comment">// RealBad (tm) Error</span>
+		    <span class="hljs-keyword">if</span>(<span class="hljs-keyword">typeof</span> callback === <span class="hljs-string">"function"</span>) {
+		    	<span class="hljs-keyword">return</span> callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'No connection to G2'</span>));
+		    } <span class="hljs-keyword">else</span> {
+		    	<span class="hljs-keyword">return</span>;
+		    }
 	    } <span class="hljs-keyword">else</span> {
 		    <span class="hljs-keyword">this</span>.status.state = <span class="hljs-string">'idle'</span>;
 	    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Create runtimes for different functions/command languages</p></div></div><div class="code"><div class="wrapper">	    <span class="hljs-keyword">this</span>.gcode_runtime = <span class="hljs-keyword">new</span> GCodeRuntime();
 	    <span class="hljs-keyword">this</span>.sbp_runtime = <span class="hljs-keyword">new</span> SBPRuntime();
 	    <span class="hljs-keyword">this</span>.manual_runtime = <span class="hljs-keyword">new</span> ManualRuntime();
 	    <span class="hljs-keyword">this</span>.passthrough_runtime = <span class="hljs-keyword">new</span> PassthroughRuntime();
-	    <span class="hljs-keyword">this</span>.idle_runtime = <span class="hljs-keyword">new</span> IdleRuntime();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Idle </p></div></div><div class="code"><div class="wrapper">	    <span class="hljs-keyword">this</span>.setRuntime(<span class="hljs-literal">null</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{});
+	    <span class="hljs-keyword">this</span>.idle_runtime = <span class="hljs-keyword">new</span> IdleRuntime();
 
-	    <span class="hljs-keyword">if</span>(err) {
-		    <span class="hljs-keyword">typeof</span> callback === <span class="hljs-string">"function"</span> &amp;&amp; callback(err);
-	    } <span class="hljs-keyword">else</span> {
-		    <span class="hljs-keyword">this</span>.driver.requestStatusReport(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">result</span>) </span>{
-		    	<span class="hljs-keyword">if</span>(<span class="hljs-string">'stat'</span> <span class="hljs-keyword">in</span> result) {
-		    		<span class="hljs-keyword">switch</span>(result.stat) {
-		    			<span class="hljs-keyword">case</span> g2.STAT_INTERLOCK:
-		    			<span class="hljs-keyword">case</span> g2.STAT_SHUTDOWN:
-		    			<span class="hljs-keyword">case</span> g2.STAT_PANIC:
-		    				<span class="hljs-keyword">this</span>.die(<span class="hljs-string">'A G2 exception has occurred. You must reboot your tool.'</span>);
-		    				<span class="hljs-keyword">break</span>;
-		    		}
-		    	}
-			    <span class="hljs-keyword">typeof</span> callback === <span class="hljs-string">"function"</span> &amp;&amp; callback(<span class="hljs-literal">null</span>, <span class="hljs-keyword">this</span>);
-		    }.bind(<span class="hljs-keyword">this</span>));
-	    }
-
-    }.bind(<span class="hljs-keyword">this</span>));
-
-    config.driver.on(<span class="hljs-string">'change'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">update</span>) </span>{
+		<span class="hljs-keyword">this</span>.runtimes = [
+			<span class="hljs-keyword">this</span>.gcode_runtime,
+			<span class="hljs-keyword">this</span>.sbp_runtime,
+			<span class="hljs-keyword">this</span>.manual_runtime,
+			<span class="hljs-keyword">this</span>.passthrough_runtime,
+			<span class="hljs-keyword">this</span>.idle_runtime
+		]</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The machine only has one &quot;active&quot; runtime at a time.  When it&#39;s not doing anything else
+the active runtime is the IdleRuntime (setRuntime(null) sets the IdleRuntime)</p></div></div><div class="code"><div class="wrapper">	    <span class="hljs-keyword">this</span>.setRuntime(<span class="hljs-literal">null</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err</span>) </span>{
+	    	<span class="hljs-keyword">if</span>(err) {
+                <span class="hljs-keyword">typeof</span> callback === <span class="hljs-string">"function"</span> &amp;&amp; callback(err);
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-keyword">this</span>.driver.requestStatusReport(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">result</span>) </span>{
+                    <span class="hljs-keyword">if</span>(<span class="hljs-string">'stat'</span> <span class="hljs-keyword">in</span> result) {
+                        <span class="hljs-keyword">switch</span>(result.stat) {
+                            <span class="hljs-keyword">case</span> g2.STAT_INTERLOCK:
+                            <span class="hljs-keyword">case</span> g2.STAT_SHUTDOWN:
+                            <span class="hljs-keyword">case</span> g2.STAT_PANIC:
+                                <span class="hljs-keyword">this</span>.die(<span class="hljs-string">'A G2 exception has occurred. You must reboot your tool.'</span>);
+                                <span class="hljs-keyword">break</span>;
+                        }
+                    }
+                    <span class="hljs-keyword">typeof</span> callback === <span class="hljs-string">"function"</span> &amp;&amp; callback(<span class="hljs-literal">null</span>, <span class="hljs-keyword">this</span>);
+                }.bind(<span class="hljs-keyword">this</span>));
+            }
+        }.bind(<span class="hljs-keyword">this</span>));
+    }.bind(<span class="hljs-keyword">this</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If any of the axes in G2s configuration become enabled or disabled, we want to show or hide
+them accordingly.  These change events happen even during the initial configuration load, so
+right from the beginning, we will be displaying the correct axes.
+TODO - I think it&#39;s good to used named callbacks, to make the code more self-documenting</p></div></div><div class="code"><div class="wrapper">    config.driver.on(<span class="hljs-string">'change'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">update</span>) </span>{
     	[<span class="hljs-string">'x'</span>,<span class="hljs-string">'y'</span>,<span class="hljs-string">'z'</span>,<span class="hljs-string">'a'</span>,<span class="hljs-string">'b'</span>].forEach(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">axis</span>) </span>{
     		<span class="hljs-keyword">var</span> mode = axis + <span class="hljs-string">'am'</span>;
     		<span class="hljs-keyword">var</span> pos = <span class="hljs-string">'pos'</span> + axis;
@@ -118,26 +165,173 @@
     			}
     		}
     	}.bind(<span class="hljs-keyword">this</span>));
-    }.bind(<span class="hljs-keyword">this</span>));
-
-    <span class="hljs-keyword">this</span>.driver.on(<span class="hljs-string">'status'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stat</span>) </span>{
-    	<span class="hljs-keyword">var</span> auth_input = <span class="hljs-string">'in'</span> + config.machine.get(<span class="hljs-string">'auth_input'</span>);
-    	<span class="hljs-keyword">if</span>(stat[auth_input] &amp;&amp; <span class="hljs-keyword">this</span>.status.state === <span class="hljs-string">'armed'</span>) {
-    		log.info(<span class="hljs-string">"Fire button hit!"</span>)
-    		<span class="hljs-keyword">this</span>.fire();
-    	}
+    }.bind(<span class="hljs-keyword">this</span>));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This handler deals with inputs that are selected for special functions (authorize, ok, quit, etc)</p></div></div><div class="code"><div class="wrapper">    <span class="hljs-keyword">this</span>.driver.on(<span class="hljs-string">'status'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stat</span>) </span>{
+		<span class="hljs-keyword">var</span> auth_input = <span class="hljs-string">'in'</span> + config.machine.get(<span class="hljs-string">'auth_input'</span>);
+		<span class="hljs-keyword">var</span> quit_input = <span class="hljs-string">'in'</span> + config.machine.get(<span class="hljs-string">'quit_input'</span>);
+		<span class="hljs-keyword">var</span> ap_input = <span class="hljs-string">'in'</span> + config.machine.get(<span class="hljs-string">'ap_input'</span>);
+		<span class="hljs-keyword">var</span> interlock_input = <span class="hljs-string">'in'</span> + config.machine.get(<span class="hljs-string">'interlock_input'</span>);
+		</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If you press a button to pause, you&#39;re not allowed to resume or quit for at least a second
+(To eliminate the chance of a double-tap doing something you didn&#39;t intend.)</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.state === <span class="hljs-string">"paused"</span>){
+			setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>)</span>{
+				 canQuit = <span class="hljs-literal">true</span>;
+				 canResume = <span class="hljs-literal">true</span>;
+			}, <span class="hljs-number">1000</span>);
+		} <span class="hljs-keyword">else</span> {
+			canQuit = <span class="hljs-literal">false</span>;
+			canResume = <span class="hljs-literal">false</span>;
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Handle okay and cancel buttons.
+Auth = OK
+Quit = Cancel
+If okay/cancel </p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span>(auth_input === quit_input){
+			<span class="hljs-keyword">this</span>.handleOkayCancelDual(stat, auth_input)
+		}<span class="hljs-keyword">else</span> {
+			<span class="hljs-keyword">this</span>.handleOkayButton(stat, auth_input);
+			<span class="hljs-keyword">this</span>.handleCancelButton(stat, quit_input);
+			
+		}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Other functions</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">this</span>.handleFireButton(stat, auth_input);
+		<span class="hljs-keyword">this</span>.handleAPCollapseButton(stat, ap_input);
+		
     }.bind(<span class="hljs-keyword">this</span>));
 }
-util.inherits(Machine, events.EventEmitter);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>State Functions</p></div></div><div class="code"><div class="wrapper">Machine.prototype.die = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err_msg</span>) </span>{
-	<span class="hljs-keyword">this</span>.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'dead'</span>, {error : <span class="hljs-string">'A G2 exception has occurred. You must reboot your tool.'</span>});
+util.inherits(Machine, events.EventEmitter);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Given the status report provided and the specified input, perform the AP Mode Collapse behavior if necessary
+The AP mode collapse is a network failsafe.  In the case that a tool gets &quot;lost&quot; on a network, it can be 
+provoked back into AP mode by holding down a specific button for some time.  Both the input to use for the
+button and the hold-down duration are specified in the machine settings</p></div></div><div class="code"><div class="wrapper">Machine.prototype.handleAPCollapseButton = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stat, ap_input</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If the button has been pressed</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(stat[ap_input]) {
+		<span class="hljs-keyword">var</span> ap_collapse_time = config.machine.get(<span class="hljs-string">'ap_time'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>For the first time</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.APCollapseTimer) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Do an AP collapse in ap_collapse_time seconds, if the button is never released</p></div></div><div class="code"><div class="wrapper">			log.debug(<span class="hljs-string">'Starting a timer for AP mode collapse (AP button was pressed)'</span>)
+			<span class="hljs-keyword">this</span>.APCollapseTimer = setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">APCollapse</span>(<span class="hljs-params"></span>) </span>{
+				log.info(<span class="hljs-string">"AP Collapse button held for "</span> + ap_collapse_time + <span class="hljs-string">" seconds.  Triggering AP collapse."</span>);
+				<span class="hljs-keyword">this</span>.APCollapseTimer = <span class="hljs-literal">null</span>;
+				updater.APModeCollapse();
+			}.bind(<span class="hljs-keyword">this</span>), ap_collapse_time*<span class="hljs-number">1000</span>);
+		}
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Otherwise</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Cancel an AP collapse that is pending, if there is one.</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.APCollapseTimer) {
+			log.debug(<span class="hljs-string">'Cancelling AP collapse (AP button was released)'</span>)
+			clearTimeout(<span class="hljs-keyword">this</span>.APCollapseTimer);
+			<span class="hljs-keyword">this</span>.APCollapseTimer = <span class="hljs-literal">null</span>;
+		}
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Given the status report and specified input, process the okay/cancel behavior
+This function is called only when the ok button (authorize) and cancel button (quit)
+are assigned to the same input.  The behavior in that case is slightly 
+different than if they were separate. (see below)</p></div></div><div class="code"><div class="wrapper">Machine.prototype.handleOkayCancelDual = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stat, quit_input</span>) </span>{
+
+	<span class="hljs-comment">//this may be changed to user select wether to continue or to cancel</span>
+	<span class="hljs-keyword">if</span>(!stat[quit_input] &amp;&amp; <span class="hljs-keyword">this</span>.status.state === <span class="hljs-string">'paused'</span> &amp;&amp; canQuit &amp;&amp; <span class="hljs-keyword">this</span>.quit_pressed) {
+		log.info(<span class="hljs-string">"Cancel hit!"</span>)
+		<span class="hljs-keyword">this</span>.quit(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, msg</span>)</span>{
+			<span class="hljs-keyword">if</span>(err){
+				log.error(err);
+			} <span class="hljs-keyword">else</span> {
+				log.info(msg);
+			}
+		});
+	} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.state === <span class="hljs-string">'interlock'</span> &amp;&amp; <span class="hljs-keyword">this</span>.quit_pressed) {
+		log.info(<span class="hljs-string">"Okay hit, resuming from interlock"</span>)
+		<span class="hljs-keyword">this</span>.resume(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, msg</span>)</span>{
+			<span class="hljs-keyword">if</span>(err){
+				log.error(err);
+			} <span class="hljs-keyword">else</span> {
+				log.info(msg);
+			}
+		});
+	}
+	<span class="hljs-keyword">this</span>.quit_pressed = stat[quit_input];
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Given the status report and specified input, process the &quot;fire&quot; behavior
+The machine has a state of being &quot;armed&quot; - either with an action, or when preparing to 
+go into an authorized state.  Pressing &quot;fire&quot; while armed either executes the action, or
+puts the system in an authorized state for the authorization period.</p></div></div><div class="code"><div class="wrapper">Machine.prototype.handleFireButton = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stat, auth_input</span>) </span>{
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.fireButtonPressed &amp;&amp; !stat[auth_input] &amp;&amp; <span class="hljs-keyword">this</span>.status.state === <span class="hljs-string">'armed'</span>) {
+		log.info(<span class="hljs-string">"Fire button hit!"</span>)
+		<span class="hljs-keyword">this</span>.fire();
+	}
+	<span class="hljs-keyword">this</span>.fireButtonPressed = stat[auth_input]
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Given the status report and specified input process the &quot;okay&quot; behavior
+Hitting the &quot;okay&quot; button on the machine essentially causes it to behave as if you had
+hit the okay/resume in the dashboard UI.  It is a convenience that prevents you from 
+having to return to the dashboard just to confirm an action at the tool.</p></div></div><div class="code"><div class="wrapper">Machine.prototype.handleOkayButton = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stat, auth_input</span>)</span>{
+	
+	<span class="hljs-keyword">if</span>(stat[auth_input]){
+		
+		<span class="hljs-keyword">if</span> (clickDisabled){
+			log.info(<span class="hljs-string">"Can't hit okay now"</span>);
+			<span class="hljs-keyword">return</span>
+		}
+
+		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.state === <span class="hljs-string">'paused'</span> &amp;&amp; canResume) {
+			log.info(<span class="hljs-string">"Okay hit, resuming from pause"</span>)
+			<span class="hljs-keyword">this</span>.resume(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, msg</span>)</span>{
+				<span class="hljs-keyword">if</span>(err){
+					log.error(err);
+				} <span class="hljs-keyword">else</span> {
+					log.info(msg);
+				}
+			});
+			clickDisabled = <span class="hljs-literal">true</span>;
+			setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>)</span>{clickDisabled = <span class="hljs-literal">false</span>;}, <span class="hljs-number">2000</span>);
+		} <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.state === <span class="hljs-string">'interlock'</span>) {
+			log.info(<span class="hljs-string">"Okay hit, resuming from interlock"</span>)
+			<span class="hljs-keyword">this</span>.resume(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, msg</span>)</span>{
+				<span class="hljs-keyword">if</span>(err){
+					log.error(err);
+				} <span class="hljs-keyword">else</span> {
+					log.info(msg);
+				}
+			});
+		}
+
+	}
+}
+
+Machine.prototype.handleCancelButton = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stat, quit_input</span>)</span>{
+
+	<span class="hljs-keyword">if</span>(stat[quit_input] &amp;&amp; <span class="hljs-keyword">this</span>.status.state === <span class="hljs-string">'paused'</span> &amp;&amp; canQuit) {
+		log.info(<span class="hljs-string">"Cancel hit!"</span>)
+		<span class="hljs-keyword">this</span>.quit(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, msg</span>)</span>{
+			<span class="hljs-keyword">if</span>(err){
+				log.error(err);
+			} <span class="hljs-keyword">else</span> {
+				log.info(msg);
+			}
+		});
+	}
+
+ }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>State Functions</p></div></div><div class="code"><div class="wrapper">Machine.prototype.die = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err_msg</span>) </span>{
+	<span class="hljs-keyword">this</span>.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'dead'</span>, {error : err_msg || <span class="hljs-string">'A G2 exception has occurred. You must reboot your tool.'</span>});
 	<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'status'</span>,<span class="hljs-keyword">this</span>.status);
-}
-
-Machine.prototype.arm = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">action, timeout</span>) </span>{
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This function restores the driver configuration to what is stored in the g2 configuration on disk
+It is typically used after, for instance, a running file has altered the configuration in memory.
+This is used to ensure that when the machine returns to idle the driver is in a &quot;known&quot; configuration</p></div></div><div class="code"><div class="wrapper">Machine.prototype.restoreDriverState = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	callback = callback || <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{};
+	<span class="hljs-keyword">this</span>.driver.setUnits(config.machine.get(<span class="hljs-string">'units'</span>), <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		<span class="hljs-keyword">this</span>.driver.requestStatusReport(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">status</span>) </span>{
+			<span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> key <span class="hljs-keyword">in</span> <span class="hljs-keyword">this</span>.status) {
+				<span class="hljs-keyword">if</span>(key <span class="hljs-keyword">in</span> status) {
+					<span class="hljs-keyword">this</span>.status[key] = status[key];
+				}
+			}			
+			config.driver.restore(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+				callback();
+			});			
+		}.bind(<span class="hljs-keyword">this</span>));
+	}.bind(<span class="hljs-keyword">this</span>));
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>&quot;Arm&quot; the machine with the specified action. The armed state is abandoned after the timeout expires.<br>  action - The action to execute when fire() is called.  Can be null. 
+           If null, the action will be to &quot;authorize&quot; the tool for subsequent actions for the authorization
+           period which is specified in the settings.
+  timeout - The number of seconds that the system should remain armed</p></div></div><div class="code"><div class="wrapper">Machine.prototype.arm = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">action, timeout</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>It&#39;s a real finesse job to get authorize to play nice with interlock, etc.</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> requireAuth = config.machine.get(<span class="hljs-string">'auth_required'</span>);
 	<span class="hljs-keyword">switch</span>(<span class="hljs-keyword">this</span>.status.state) {
 		<span class="hljs-keyword">case</span> <span class="hljs-string">'idle'</span>:
+			<span class="hljs-keyword">this</span>.interlock_action = action;
 		<span class="hljs-keyword">break</span>;
-
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'interlock'</span>:
+			requireAuth = <span class="hljs-literal">false</span>;
+			action = <span class="hljs-keyword">this</span>.interlock_action || action;
+		<span class="hljs-keyword">break</span>;
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'manual'</span>:
+			<span class="hljs-keyword">if</span>(action == <span class="hljs-literal">null</span> || (action.type == <span class="hljs-string">'runtimeCode'</span> &amp;&amp; action.payload.name == <span class="hljs-string">'manual'</span>)) {
+				<span class="hljs-keyword">break</span>;
+			}
+			<span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'Cannot arm machine for '</span> + action.type + <span class="hljs-string">'from the manual state'</span>)
+			<span class="hljs-keyword">break</span>;
 		<span class="hljs-keyword">case</span> <span class="hljs-string">'paused'</span>:
 		<span class="hljs-keyword">case</span> <span class="hljs-string">'stopped'</span>:
 			<span class="hljs-keyword">if</span>(action.type != <span class="hljs-string">'resume'</span>) {
@@ -146,104 +340,121 @@ Machine.prototype.arm = <span class="hljs-function"><span class="hljs-keyword">f
 			<span class="hljs-keyword">break</span>;
 		<span class="hljs-keyword">default</span>:
 		<span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Cannot arm the machine from the "</span> + <span class="hljs-keyword">this</span>.status.state + <span class="hljs-string">" state."</span>);
-		<span class="hljs-keyword">break</span>;		
-	}	
-
-	<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.status.info
-	<span class="hljs-keyword">this</span>.action = action;
-	log.info(<span class="hljs-string">"Arming the machine"</span> + (action ? (<span class="hljs-string">' for '</span> + action.type) : <span class="hljs-string">'(No action)'</span>));
-	log.error(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>());
+		<span class="hljs-keyword">break</span>;
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The info object contains any dialogs that are displayed in the dash.</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.status.info</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the action to be executed when fire() is called</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.action = action;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check to see if interlock is required</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> interlockRequired = config.machine.get(<span class="hljs-string">'interlock_required'</span>);
+	<span class="hljs-keyword">var</span> interlockInput = <span class="hljs-string">'in'</span> + config.machine.get(<span class="hljs-string">'interlock_input'</span>);
+<span class="xml"><span class="hljs-tag">&lt;&lt;&lt;&lt;&lt;&lt;&lt; <span class="hljs-attribute">HEAD</span>
+	<span class="hljs-attribute">if</span>(<span class="hljs-attribute">this.action</span> &amp;&amp; <span class="hljs-attribute">this.action.payload</span> &amp;&amp; <span class="hljs-attribute">this.action.payload.name</span> =<span class="hljs-value">==</span> '<span class="hljs-attribute">manual</span>' || <span class="hljs-attribute">interlockBypass</span>) {
+=<span class="hljs-value">======</span>
+</span></span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Ignore the interlock for pulling up the manual drive panel</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.action &amp;&amp; <span class="hljs-keyword">this</span>.action.payload &amp;&amp; <span class="hljs-keyword">this</span>.action.payload.name === <span class="hljs-string">'manual'</span>) {
+&gt;&gt;&gt;&gt;&gt;&gt;&gt; documentation
+		interlockRequired = <span class="hljs-literal">false</span>;
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Refuse the action if the interlock is required and tripped</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.action) {
+		<span class="hljs-keyword">if</span>(interlockRequired &amp;&amp; <span class="hljs-keyword">this</span>.driver.status[interlockInput]) {
+			<span class="hljs-keyword">this</span>.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'interlock'</span>)
+			<span class="hljs-keyword">return</span>;			
+		}
+	} </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Otherwise, arm the machine and set the timer to the provided value</p></div></div><div class="code"><div class="wrapper">	log.info(<span class="hljs-string">"Arming the machine"</span> + (action ? (<span class="hljs-string">' for '</span> + action.type) : <span class="hljs-string">'(No action)'</span>));
+	<span class="hljs-comment">//log.error(new Error())</span>
 	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._armTimer) { clearTimeout(<span class="hljs-keyword">this</span>._armTimer);}
 	<span class="hljs-keyword">this</span>._armTimer = setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
 		log.info(<span class="hljs-string">'Arm timeout ('</span> + timeout + <span class="hljs-string">'s) expired.'</span>);
 		<span class="hljs-keyword">this</span>.disarm();
-	}.bind(<span class="hljs-keyword">this</span>), timeout*<span class="hljs-number">1000</span>);
+	}.bind(<span class="hljs-keyword">this</span>), timeout*<span class="hljs-number">1000</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Record the state we were in before arming, so we can fall back to it if the timer runs out</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.preArmedState = <span class="hljs-keyword">this</span>.status.state;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - we trashed this info above - worth looking at why this is here</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.preArmedInfo = <span class="hljs-keyword">this</span>.status.info;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Actions related to the manual state get fired immediately</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(action.payload)  {
+		<span class="hljs-keyword">if</span>(action.payload.name === <span class="hljs-string">"manual"</span>){
+			<span class="hljs-keyword">var</span> cmd = action.payload.code.cmd;
+			<span class="hljs-keyword">switch</span>(cmd) {
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'set'</span>:
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'exit'</span>:
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'start'</span>:
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'fixed'</span>:
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'stop'</span>:
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'goto'</span>:
+					<span class="hljs-keyword">this</span>.fire(<span class="hljs-literal">true</span>);
+					<span class="hljs-keyword">return</span>;
+					<span class="hljs-keyword">break</span>;
+			}
+		}
+	}
 
-	<span class="hljs-keyword">this</span>.preArmedState = <span class="hljs-keyword">this</span>.status.state;
-	<span class="hljs-keyword">this</span>.preArmedInfo = <span class="hljs-keyword">this</span>.status.info;
-
-
-
-	<span class="hljs-keyword">if</span>(config.machine.get(<span class="hljs-string">'auth_input'</span>) == <span class="hljs-number">0</span>) {
+	<span class="hljs-keyword">if</span>(!requireAuth) {
 		log.info(<span class="hljs-string">"Firing automatically since authorization is disabled."</span>);
-		<span class="hljs-comment">//this.status.state = 'armed';</span>
 		<span class="hljs-keyword">this</span>.fire(<span class="hljs-literal">true</span>);
 	} <span class="hljs-keyword">else</span> {
-		<span class="hljs-keyword">this</span>.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'armed'</span>);	
-	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>this.emit(&#39;status&#39;, this.status);</p></div></div><div class="code"><div class="wrapper">}
-
-Machine.prototype.disarm = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+		<span class="hljs-keyword">this</span>.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'armed'</span>);
+		<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'status'</span>, <span class="hljs-keyword">this</span>.status);
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Collapse out of the armed state.  Happens when the user hits cancel in the authorize dialog.</p></div></div><div class="code"><div class="wrapper">Machine.prototype.disarm = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	log.stack();
 	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._armTimer) { clearTimeout(<span class="hljs-keyword">this</span>._armTimer);}
 	<span class="hljs-keyword">this</span>.action = <span class="hljs-literal">null</span>;
 	<span class="hljs-keyword">this</span>.fireButtonDebounce = <span class="hljs-literal">false</span>;
 	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.state === <span class="hljs-string">'armed'</span>) {
 		<span class="hljs-keyword">this</span>.setState(<span class="hljs-keyword">this</span>, <span class="hljs-keyword">this</span>.preArmedState || <span class="hljs-string">'idle'</span>, <span class="hljs-keyword">this</span>.preArmedInfo);
 	}
-}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Execute the action in the chamber (the one passed to the arm() method)</p></div></div><div class="code"><div class="wrapper">Machine.prototype.fire = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">force</span>) </span>{
 
-Machine.prototype.fire = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">force</span>) </span>{
-	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.fireButtonDebounce) {<span class="hljs-keyword">return</span>;}
-
-	<span class="hljs-keyword">this</span>.fireButtonDebounce = <span class="hljs-literal">true</span>;
-
-	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._armTimer) { clearTimeout(<span class="hljs-keyword">this</span>._armTimer);}
+	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.fireButtonDebounce &amp; !force) {
+		log.debug(<span class="hljs-string">"Fire button debounce reject."</span>);
+		log.debug(<span class="hljs-string">"debounce: "</span> + <span class="hljs-keyword">this</span>.fireButtonDebounce + <span class="hljs-string">" force: "</span> + force);
+		<span class="hljs-keyword">return</span>;
+	}
+	<span class="hljs-keyword">this</span>.fireButtonDebounce = <span class="hljs-literal">true</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Clear the timers related to authorization 
+(since we&#39;re either going to execute this thing or bounce, those will need to be reset)</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._armTimer) { clearTimeout(<span class="hljs-keyword">this</span>._armTimer);}
 	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._authTimer) { clearTimeout(<span class="hljs-keyword">this</span>._authTimer);}
 
 	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.state != <span class="hljs-string">'armed'</span> &amp;&amp; !force) {
 		<span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">"Cannot fire: Not armed."</span>);
-	}
-
-	<span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.action) {
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If no action, we&#39;re just authorizing for the next auth timeout</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.action) {
 		<span class="hljs-keyword">this</span>.authorize(config.machine.get(<span class="hljs-string">'auth_timeout'</span>));
 		<span class="hljs-keyword">this</span>.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'idle'</span>);
 		<span class="hljs-keyword">return</span>;
-	}
-	<span class="hljs-keyword">this</span>.deauthorize();
-
-	<span class="hljs-keyword">switch</span>(<span class="hljs-keyword">this</span>.action.type) {
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>We deauthorize the machine as soon as we&#39;re executing an action
+that way, when the action is concluded, the user has to reauthorize again.
+TODO - re-evaluate this decision.  The idea here is that once an action is kicked off, once it&#39;s 
+       completed there&#39;s a good chance that the user might not be close to the machine anymore.
+       many actions take less than the authorization timeout, though, so in those cases, this causes
+       incessant authorization prompts.</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.deauthorize();
+	
+	<span class="hljs-keyword">var</span> action = <span class="hljs-keyword">this</span>.action;
+	<span class="hljs-keyword">this</span>.action = <span class="hljs-literal">null</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Actually execute the action (finally!)</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">switch</span>(action.type) {
 		<span class="hljs-keyword">case</span> <span class="hljs-string">'nextJob'</span>:
 			<span class="hljs-keyword">this</span>._runNextJob(force, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{});
 			<span class="hljs-keyword">break</span>;
 
 		<span class="hljs-keyword">case</span> <span class="hljs-string">'runtimeCode'</span>:
-			<span class="hljs-keyword">var</span> name = <span class="hljs-keyword">this</span>.action.payload.name
-			<span class="hljs-keyword">var</span> code = <span class="hljs-keyword">this</span>.action.payload.code
+			<span class="hljs-keyword">var</span> name = action.payload.name
+			<span class="hljs-keyword">var</span> code = action.payload.code
 			<span class="hljs-keyword">this</span>._executeRuntimeCode(name, code);
 			<span class="hljs-keyword">break</span>;
 
 		<span class="hljs-keyword">case</span> <span class="hljs-string">'runFile'</span>:
-			<span class="hljs-keyword">var</span> filename = <span class="hljs-keyword">this</span>.action.payload.filename
+			<span class="hljs-keyword">var</span> filename = action.payload.filename
 			<span class="hljs-keyword">this</span>._runFile(filename);
 			<span class="hljs-keyword">break</span>;
 		<span class="hljs-keyword">case</span> <span class="hljs-string">'resume'</span>:
 			<span class="hljs-keyword">this</span>._resume();
 			<span class="hljs-keyword">break</span>;
 	}
-}
-
-Machine.prototype.authorize = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">timeout</span>) </span>{
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Authorize the machine for the specified period of time (or the default time if unspecified)</p></div></div><div class="code"><div class="wrapper">Machine.prototype.authorize = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">timeout</span>) </span>{
 	<span class="hljs-keyword">var</span> timeout = timeout || config.machine.get(<span class="hljs-string">'auth_timeout'</span>);
-	<span class="hljs-keyword">if</span>(timeout) {
-			log.info(<span class="hljs-string">"Machine is authorized for the next "</span> + timeout + <span class="hljs-string">" seconds."</span>);			
+
+	<span class="hljs-keyword">if</span>(config.machine.get(<span class="hljs-string">'auth_required'</span>) &amp;&amp; timeout) {
+		log.info(<span class="hljs-string">"Machine is authorized for the next "</span> + timeout + <span class="hljs-string">" seconds."</span>);
 		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._authTimer) { clearTimeout(<span class="hljs-keyword">this</span>._authTimer);}
 		<span class="hljs-keyword">this</span>._authTimer = setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
 			log.info(<span class="hljs-string">'Authorization timeout ('</span> + timeout + <span class="hljs-string">'s) expired.'</span>);
 			<span class="hljs-keyword">this</span>.deauthorize();
-		}.bind(<span class="hljs-keyword">this</span>), timeout*<span class="hljs-number">1000</span>);		
+		}.bind(<span class="hljs-keyword">this</span>), timeout*<span class="hljs-number">1000</span>);
 	} <span class="hljs-keyword">else</span> {
 		<span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.status.auth) {
 			log.info(<span class="hljs-string">"Machine is authorized indefinitely."</span>);
 		}
 	}
-	<span class="hljs-keyword">this</span>.status.auth = <span class="hljs-literal">true</span>;
-	<span class="hljs-comment">//this.setState(this, 'idle');</span>
-	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.info &amp;&amp; <span class="hljs-keyword">this</span>.status.info.auth) {
+	<span class="hljs-keyword">this</span>.status.auth = <span class="hljs-literal">true</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Once authorized, clear info (which contains the auth message)</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.info &amp;&amp; <span class="hljs-keyword">this</span>.status.info.auth) {
 		<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.status.info;
-	}
-	<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'status'</span>, <span class="hljs-keyword">this</span>.status);
-}
-
-Machine.prototype.deauthorize = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Report status back to the host (since the auth state has changed)</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'status'</span>, <span class="hljs-keyword">this</span>.status);
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Clear the authorized state (forbid action without a reauthorize)</p></div></div><div class="code"><div class="wrapper">Machine.prototype.deauthorize = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
 	<span class="hljs-keyword">if</span>(!config.machine.get(<span class="hljs-string">'auth_timeout'</span>)) { <span class="hljs-keyword">return</span>; }
 	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>._authTimer) {
 		clearTimeout(<span class="hljs-keyword">this</span>._authTimer);
@@ -254,7 +465,7 @@ Machine.prototype.deauthorize = <span class="hljs-function"><span class="hljs-ke
 }
 
 Machine.prototype.isConnected = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.status.state !== <span class="hljs-string">'not_ready'</span>;
+	<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>.status.state !== <span class="hljs-string">'not_ready'</span> &amp;&amp; <span class="hljs-keyword">this</span>.status.state !== <span class="hljs-string">'dead'</span>;
 };
 
 Machine.prototype.disconnect = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
@@ -263,20 +474,62 @@ Machine.prototype.disconnect = <span class="hljs-function"><span class="hljs-key
 
 Machine.prototype.toString = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
 	<span class="hljs-keyword">return</span> <span class="hljs-string">"[Machine Model on '"</span> + <span class="hljs-keyword">this</span>.driver.path + <span class="hljs-string">"']"</span>;
-};
-
-Machine.prototype.runJob = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">job</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Run the provided Job object (see db.js)</p></div></div><div class="code"><div class="wrapper">Machine.prototype.runJob = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">job</span>) </span>{
 	db.File.getByID(job.file_id,<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, file</span>)</span>{
 		<span class="hljs-keyword">if</span>(err) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO deal with no file found</p></div></div><div class="code"><div class="wrapper">		} <span class="hljs-keyword">else</span> {
 			log.info(<span class="hljs-string">"Running file "</span> + file.path);
 			<span class="hljs-keyword">this</span>.status.job = job;
-			<span class="hljs-keyword">this</span>._runFile(file.path);			
+			<span class="hljs-keyword">this</span>._runFile(file.path);
 		}
-	}.bind(<span class="hljs-keyword">this</span>));	
-};
+	}.bind(<span class="hljs-keyword">this</span>));
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the preferred units to the provided value (&#39;in&#39; or &#39;mm&#39;)
+Changing the preferred units is a heavy duty operation. See below.</p></div></div><div class="code"><div class="wrapper">Machine.prototype.setPreferredUnits = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">units, callback</span>) </span>{
+	<span class="hljs-keyword">try</span> {
+		<span class="hljs-keyword">if</span>(config.driver.changeUnits) {
+			units = u.unitType(units); <span class="hljs-comment">// Normalize units</span>
+			<span class="hljs-keyword">var</span> uv = <span class="hljs-literal">null</span>;
+ 			<span class="hljs-keyword">switch</span>(units) {
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'in'</span>:
+					log.info(<span class="hljs-string">"Changing default units to INCH"</span>);
+					uv = <span class="hljs-number">0</span>;
+					<span class="hljs-keyword">break</span>;
 
-Machine.prototype.getGCodeForFile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">filename, callback</span>) </span>{
-	fs.readFile(filename, <span class="hljs-string">'utf8'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">err,data</span>) </span>{ 
+				<span class="hljs-keyword">case</span> <span class="hljs-string">'mm'</span>:
+					log.info(<span class="hljs-string">"Changing default units to MM"</span>);
+					uv = <span class="hljs-number">1</span>;
+				<span class="hljs-keyword">break</span>;
+
+				<span class="hljs-keyword">default</span>:
+					log.warn(<span class="hljs-string">'Invalid units "'</span> + gc + <span class="hljs-string">'"found in machine configuration.'</span>);
+				<span class="hljs-keyword">break</span>;
+			}
+			<span class="hljs-keyword">if</span>(uv !== <span class="hljs-literal">null</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Change units on the driver</p></div></div><div class="code"><div class="wrapper">				config.driver.changeUnits(uv, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+					log.info(<span class="hljs-string">"Done setting driver units"</span>)</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Change units on each runtime in turn</p></div></div><div class="code"><div class="wrapper">					<span class="hljs-keyword">async</span>.eachSeries(<span class="hljs-keyword">this</span>.runtimes, <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">runtime_set_units</span>(<span class="hljs-params">item, callback</span>) </span>{
+						log.info(<span class="hljs-string">"Setting preferred units for "</span> + item)
+						<span class="hljs-keyword">if</span>(item.setPreferredUnits) {
+							<span class="hljs-keyword">return</span> item.setPreferredUnits(uv, callback);
+						}
+						callback();
+					}.bind(<span class="hljs-keyword">this</span>), callback);
+				}.bind(<span class="hljs-keyword">this</span>));
+			}
+		} <span class="hljs-keyword">else</span> {
+			<span class="hljs-keyword">return</span> callback(<span class="hljs-literal">null</span>);
+		}
+	}
+	<span class="hljs-keyword">catch</span> (e) {
+		log.warn(<span class="hljs-string">"Couldn't access driver configuration..."</span>);
+		log.error(e)
+		<span class="hljs-keyword">try</span> {
+			<span class="hljs-keyword">this</span>.driver.setUnits(uv);
+		} <span class="hljs-keyword">catch</span>(e) {
+			callback(e);
+		}
+	}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Retrieve the G-Code output for a specific file ID.
+If the file is a g-code file, just return its contents.
+If the file is a shopbot file, instantiate a SBPRuntime, run it in simulation, and return the result</p></div></div><div class="code"><div class="wrapper">Machine.prototype.getGCodeForFile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">filename, callback</span>) </span>{
+	fs.readFile(filename, <span class="hljs-string">'utf8'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">err,data</span>) </span>{
 		<span class="hljs-keyword">if</span> (err) {
 			log.error(<span class="hljs-string">'Error reading file '</span> + filename);
 				log.error(err);
@@ -285,48 +538,41 @@ Machine.prototype.getGCodeForFile = <span class="hljs-function"><span class="hlj
 			parts = filename.split(path.sep);
 			ext = path.extname(filename).toLowerCase();
 
-			<span class="hljs-keyword">if</span>(ext == <span class="hljs-string">'.sbp'</span>) {
-				<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.state != <span class="hljs-string">'idle'</span>) {
-					<span class="hljs-keyword">return</span> callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'Cannot generate G-Code from OpenSBP while machine is running.'</span>));
-				}
-				<span class="hljs-keyword">this</span>.setRuntime(<span class="hljs-literal">null</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{});
-				<span class="hljs-keyword">this</span>.sbp_runtime.simulateString(data, callback);
+			<span class="hljs-keyword">if</span>(ext == <span class="hljs-string">'.sbp'</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>if(this.status.state != &#39;idle&#39;) {
+    return callback(new Error(&#39;Cannot generate G-Code from OpenSBP while machine is running.&#39;));
+}</p></div></div><div class="code"><div class="wrapper"> 
+
+				<span class="hljs-comment">//this.setRuntime(null, function() {});</span>
+
+				(<span class="hljs-keyword">new</span> SBPRuntime()).simulateString(data, callback);
 			} <span class="hljs-keyword">else</span> {
 				fs.readFile(filename, callback);
 			}
 		}
 	}.bind(<span class="hljs-keyword">this</span>));
-}
-
-Machine.prototype._runFile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">filename</span>) </span>{
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Run a file given a filename on disk.  Choose the runtime that is appropriate for that file.</p></div></div><div class="code"><div class="wrapper">Machine.prototype._runFile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">filename</span>) </span>{
 	<span class="hljs-keyword">var</span> parts = filename.split(path.sep);
-	<span class="hljs-keyword">var</span> ext = path.extname(filename).toLowerCase();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Choose the appropriate runtime based on the file extension    </p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> runtime = <span class="hljs-keyword">this</span>.gcode_runtime;
+	<span class="hljs-keyword">var</span> ext = path.extname(filename).toLowerCase();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Choose the appropriate runtime based on the file extension</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">var</span> runtime = <span class="hljs-keyword">this</span>.gcode_runtime;
 	<span class="hljs-keyword">if</span>(ext === <span class="hljs-string">'.sbp'</span>) {
 		runtime = <span class="hljs-keyword">this</span>.sbp_runtime;
 	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the appropriate runtime</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">this</span>.setRuntime(runtime, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, runtime</span>) </span>{
 		<span class="hljs-keyword">if</span>(err) {
 			<span class="hljs-keyword">return</span> log.error(err);
 		}
-		fs.readFile(filename, <span class="hljs-string">'utf8'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">err,data</span>) </span>{
-			<span class="hljs-keyword">if</span> (err) {
-				log.error(err);
-				<span class="hljs-keyword">return</span>;
-			} <span class="hljs-keyword">else</span> {
-				runtime.runString(data, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{});
-			}
-		}.bind(<span class="hljs-keyword">this</span>));
+		runtime.runFile(filename);
 	});
-};
-
-Machine.prototype.setRuntime = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">runtime, callback</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the active runtime
+If the selected runtime is different than the current one,
+disconnect the current one, and connect the new one.</p></div></div><div class="code"><div class="wrapper">Machine.prototype.setRuntime = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">runtime, callback</span>) </span>{
+	runtime = runtime || <span class="hljs-keyword">this</span>.idle_runtime;
 	<span class="hljs-keyword">try</span> {
 		<span class="hljs-keyword">if</span>(runtime) {
 			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.current_runtime != runtime) {
 				<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.current_runtime) {
-					<span class="hljs-keyword">this</span>.current_runtime.disconnect();					
+					<span class="hljs-keyword">this</span>.current_runtime.disconnect();
 				}
-				runtime.connect(<span class="hljs-keyword">this</span>);
 				<span class="hljs-keyword">this</span>.current_runtime = runtime;
+				runtime.connect(<span class="hljs-keyword">this</span>);
 			}
 		} <span class="hljs-keyword">else</span> {
 			<span class="hljs-keyword">this</span>.current_runtime = <span class="hljs-keyword">this</span>.idle_runtime;
@@ -338,9 +584,9 @@ Machine.prototype.setRuntime = <span class="hljs-function"><span class="hljs-key
 		setImmediate(callback, e);
 	}
 	setImmediate(callback,<span class="hljs-literal">null</span>, runtime);
-};
-
-Machine.prototype.getRuntime = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">name</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return a runtime object given a name
+TODO - these names should be properties of the runtimes themselves, and we should look-up that way
+       (cleaner and better compartmentalized)</p></div></div><div class="code"><div class="wrapper">Machine.prototype.getRuntime = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">name</span>) </span>{
 	<span class="hljs-keyword">switch</span>(name) {
 		<span class="hljs-keyword">case</span> <span class="hljs-string">'gcode'</span>:
 		<span class="hljs-keyword">case</span> <span class="hljs-string">'nc'</span>:
@@ -360,25 +606,30 @@ Machine.prototype.getRuntime = <span class="hljs-function"><span class="hljs-key
 			<span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
 			<span class="hljs-keyword">break</span>;
 	}
-}
-
-Machine.prototype.setState = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">source, newstate, stateinfo</span>) </span>{
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Change the overall machine state
+source - The runtime requesting the change
+newstate - The state to transition to
+stateinfo - The contents of the &#39;info&#39; field of the status report, if needed.</p></div></div><div class="code"><div class="wrapper">Machine.prototype.setState = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">source, newstate, stateinfo</span>) </span>{
 	<span class="hljs-keyword">this</span>.fireButtonDebounce = <span class="hljs-literal">false</span> ;
+	
 	<span class="hljs-keyword">if</span> ((source === <span class="hljs-keyword">this</span>) || (source === <span class="hljs-keyword">this</span>.current_runtime)) {
 		log.info(<span class="hljs-string">"Got a machine state change: "</span> + newstate)
-		<span class="hljs-keyword">this</span>.status.state = newstate;
-		
-		<span class="hljs-keyword">if</span>(stateinfo) {
+	</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the info field
+status.info.id is the info field id - it helps the dash with display of dialogs</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span>(stateinfo) {
 			<span class="hljs-keyword">this</span>.status.info = stateinfo
-		} <span class="hljs-keyword">else</span> {
-			<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.status.info
+			<span class="hljs-keyword">this</span>.info_id += <span class="hljs-number">1</span>;
+			<span class="hljs-keyword">this</span>.status.info.id = <span class="hljs-keyword">this</span>.info_id;
+		} <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If the info field is unspecified, we clear the one that&#39;s currently in place</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.status.info
 		}
 
-		<span class="hljs-keyword">switch</span>(<span class="hljs-keyword">this</span>.status.state) {
+		<span class="hljs-keyword">switch</span>(newstate) {
 			<span class="hljs-keyword">case</span> <span class="hljs-string">'idle'</span>:
-				<span class="hljs-keyword">this</span>.status.nb_lines = <span class="hljs-literal">null</span>;
-				<span class="hljs-keyword">this</span>.status.line = <span class="hljs-literal">null</span>;
-				<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.action) {
+				<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.state != <span class="hljs-string">'idle'</span>) {
+					<span class="hljs-keyword">this</span>.driver.command({<span class="hljs-string">"out4"</span>:<span class="hljs-number">0</span>}); <span class="hljs-comment">// Permissive relay</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>A switch to the &#39;idle&#39; state means we change to the idle runtime</p></div></div><div class="code"><div class="wrapper">					<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.current_runtime != <span class="hljs-keyword">this</span>.idle_runtime) {
+						<span class="hljs-keyword">this</span>.setRuntime(<span class="hljs-literal">null</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{});
+					}	
+				}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Clear the fields that describe a running job</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">this</span>.status.nb_lines = <span class="hljs-literal">null</span>;
+				<span class="hljs-keyword">this</span>.status.line = <span class="hljs-literal">null</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - What&#39;s going on here?</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.action) {
 					<span class="hljs-keyword">switch</span>(<span class="hljs-keyword">this</span>.action.type) {
 						<span class="hljs-keyword">case</span> <span class="hljs-string">'nextJob'</span>:
 						<span class="hljs-keyword">break</span>;
@@ -387,59 +638,113 @@ Machine.prototype.setState = <span class="hljs-function"><span class="hljs-keywo
 							<span class="hljs-keyword">break</span>;
 					}
 				}
-				<span class="hljs-keyword">this</span>.action = <span class="hljs-literal">null</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Deliberately fall through</p></div></div><div class="code"><div class="wrapper">			<span class="hljs-keyword">case</span> <span class="hljs-string">'paused'</span>:
-				<span class="hljs-keyword">this</span>.driver.get(<span class="hljs-string">'mpo'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, mpo</span>) </span>{
-					<span class="hljs-keyword">if</span>(config.instance) {
-						config.instance.update({<span class="hljs-string">'position'</span> : mpo});						
-					}
-				});
+				<span class="hljs-keyword">this</span>.action = <span class="hljs-literal">null</span>;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If we&#39;re changing from a non-idle state to the idle state
+Go ahead and request the current machine position and write it to disk.  This 
+is done regularly, so that if the machine is powered down it retains the current position</p></div></div><div class="code"><div class="wrapper">				<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.state != newstate) {
+                    <span class="hljs-keyword">this</span>.driver.get(<span class="hljs-string">'mpo'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, mpo</span>) </span>{
+					    <span class="hljs-keyword">if</span>(config.instance) {
+						    config.instance.update({<span class="hljs-string">'position'</span> : mpo});
+					    }
+				    });
+                }
 				<span class="hljs-keyword">break</span>;
-			<span class="hljs-keyword">case</span> <span class="hljs-string">'dead'</span>:
-				log.error(<span class="hljs-string">'G2 is dead!'</span>);
+			<span class="hljs-keyword">case</span> <span class="hljs-string">'paused'</span>:
+
+                <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.state != newstate) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Save the position to the instance configuration.  See note above.</p></div></div><div class="code"><div class="wrapper">                    <span class="hljs-keyword">this</span>.driver.get(<span class="hljs-string">'mpo'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, mpo</span>) </span>{
+					    <span class="hljs-keyword">if</span>(config.instance) {
+						    config.instance.update({<span class="hljs-string">'position'</span> : mpo});
+					    }
+				    });</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Check the interlock and switch to the interlock state if it&#39;s engaged</p></div></div><div class="code"><div class="wrapper">				    <span class="hljs-keyword">var</span> interlockRequired = config.machine.get(<span class="hljs-string">'interlock_required'</span>);
+					<span class="hljs-keyword">var</span> interlockInput = <span class="hljs-string">'in'</span> + config.machine.get(<span class="hljs-string">'interlock_input'</span>);
+<span class="xml"><span class="hljs-tag">&lt;&lt;&lt;&lt;&lt;&lt;&lt; <span class="hljs-attribute">HEAD</span>
+				
+
+					
+				    <span class="hljs-attribute">if</span>(<span class="hljs-attribute">interlockRequired</span> &amp;&amp; <span class="hljs-attribute">this.driver.status</span>[<span class="hljs-attribute">interlockInput</span>] &amp;&amp; !<span class="hljs-attribute">interlockBypass</span>) {
+						<span class="hljs-attribute">log.stack</span>();
+=<span class="hljs-value">======</span>
+				    <span class="hljs-attribute">if</span>(<span class="hljs-attribute">interlockRequired</span> &amp;&amp; <span class="hljs-attribute">this.driver.status</span>[<span class="hljs-attribute">interlockInput</span>]) {
+&gt;</span>&gt;&gt;&gt;&gt;&gt;&gt; documentation
+						this.interlock_action = null;
+						this.setState(this, 'interlock')		
+						return
+					}
+                } 
+				break;
+			case 'dead':</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Sadness</p></div></div><div class="code"><div class="wrapper">				log.error(<span class="hljs-string">'G2 is dead!'</span>);
+				<span class="hljs-keyword">break</span>;
+			<span class="hljs-keyword">default</span>:
+                <span class="hljs-comment">//this.driver.command({"out4":1});</span>
 				<span class="hljs-keyword">break</span>;
 		}
-	} <span class="hljs-keyword">else</span> {		
+
+		<span class="hljs-keyword">this</span>.status.state = newstate;
+	} <span class="hljs-keyword">else</span> {
 		log.warn(<span class="hljs-string">"Got a state change from a runtime that's not the current one. ("</span> + source + <span class="hljs-string">")"</span>)
 	}
 	<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'status'</span>,<span class="hljs-keyword">this</span>.status);
-};
-
-Machine.prototype.pause = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.state === <span class="hljs-string">"running"</span>) {
-		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.current_runtime) {
-			<span class="hljs-keyword">this</span>.current_runtime.pause();
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Pause the machine
+This is pretty much passed through to whatever runtime is currently in control</p></div></div><div class="code"><div class="wrapper">Machine.prototype.pause = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.state === <span class="hljs-string">"running"</span>) {
+			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.current_runtime) {
+				<span class="hljs-keyword">this</span>.current_runtime.pause();
+				callback(<span class="hljs-literal">null</span>, <span class="hljs-string">'paused'</span>);
+			} <span class="hljs-keyword">else</span> {
+				calback(<span class="hljs-string">"Not pausing because no runtime provided"</span>);
+			}
+		} <span class="hljs-keyword">else</span> {
+			calback(<span class="hljs-string">"Not pausing because machine is not running"</span>);
 		}
-	}
-};
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Quit </p></div></div><div class="code"><div class="wrapper">Machine.prototype.quit = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+		<span class="hljs-keyword">this</span>.disarm();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Quitting from the idle state dismisses the &#39;info&#39; data</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">switch</span>(<span class="hljs-keyword">this</span>.status.state) {
 
-Machine.prototype.quit = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
-	<span class="hljs-keyword">this</span>.disarm();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Quitting from the idle state dismisses the &#39;info&#39; data</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.state === <span class="hljs-string">"idle"</span>) {
-		<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.status.info;
-		<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'status'</span>, <span class="hljs-keyword">this</span>.status);
-	}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Cancel the currently running job, if there is one</p></div></div><div class="code"><div class="wrapper">	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.job) {
-		<span class="hljs-keyword">this</span>.status.job.pending_cancel = <span class="hljs-literal">true</span>;
-	}
-	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.current_runtime) {
-		<span class="hljs-keyword">this</span>.current_runtime.quit();
-	}
-};
+			<span class="hljs-keyword">case</span> <span class="hljs-string">"idle"</span>:
+				<span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>.status.info;
+				<span class="hljs-keyword">this</span>.emit(<span class="hljs-string">'status'</span>, <span class="hljs-keyword">this</span>.status);
+				<span class="hljs-keyword">break</span>;
 
-Machine.prototype.resume = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+			<span class="hljs-keyword">case</span> <span class="hljs-string">"interlock"</span>:
+				<span class="hljs-keyword">this</span>.action = <span class="hljs-literal">null</span>;
+				<span class="hljs-keyword">this</span>.setState(<span class="hljs-keyword">this</span>, <span class="hljs-string">'idle'</span>);
+				<span class="hljs-keyword">break</span>;
+		}
+	</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Cancel the currently running job, if there is one</p></div></div><div class="code"><div class="wrapper">		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.job) {
+			<span class="hljs-keyword">this</span>.status.job.pending_cancel = <span class="hljs-literal">true</span>;
+		}
+		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.current_runtime) {
+			log.info(<span class="hljs-string">"Quitting the current runtime..."</span>)
+			<span class="hljs-keyword">this</span>.current_runtime.quit();
+			callback(<span class="hljs-literal">null</span>, <span class="hljs-string">'quit'</span>);
+			alreadyQuiting = <span class="hljs-literal">false</span>;
+		} <span class="hljs-keyword">else</span> {
+			log.warn(<span class="hljs-string">"No current runtime!"</span>)
+			calback(<span class="hljs-string">"Not quiting because no current runtime"</span>)
+		}    
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Resume from the paused state.</p></div></div><div class="code"><div class="wrapper">Machine.prototype.resume = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
 	<span class="hljs-keyword">this</span>.arm({
 		type : <span class="hljs-string">'resume'</span>
 	}, config.machine.get(<span class="hljs-string">'auth_timeout'</span>));
+	callback(<span class="hljs-literal">null</span>, <span class="hljs-string">'resumed'</span>);
 }
 
-Machine.prototype.runFile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">filename</span>) </span>{
+&lt;&lt;<span class="xml"><span class="hljs-tag">&lt;&lt;&lt;&lt;&lt; <span class="hljs-attribute">HEAD</span>
+<span class="hljs-attribute">Machine.prototype.runFile</span> = <span class="hljs-attribute">function</span>(<span class="hljs-attribute">filename</span>, <span class="hljs-attribute">bypassInterlock</span>) {
+	<span class="hljs-attribute">interlockBypass</span> = <span class="hljs-attribute">bypassInterlock</span>;
+	<span class="hljs-attribute">if</span>(!<span class="hljs-attribute">bypassInterlock</span>){
+		<span class="hljs-attribute">interlockBypass</span> = <span class="hljs-attribute">false</span>;		
+	}
+=<span class="hljs-value">======</span></span></span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Run a file from disk
+filename - full path to the file to run</p></div></div><div class="code"><div class="wrapper">Machine.prototype.runFile = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">filename</span>) </span>{
+&gt;&gt;&gt;&gt;&gt;&gt;&gt; documentation
 	<span class="hljs-keyword">this</span>.arm({
 		type : <span class="hljs-string">'runFile'</span>,
 		payload : {
 			filename : filename
 		}
 	}, config.machine.get(<span class="hljs-string">'auth_timeout'</span>));
-}
-
-Machine.prototype.runNextJob = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Run the next job in the queue
+callback is called when the tool is armed for the run, NOT when the job is complete.</p></div></div><div class="code"><div class="wrapper">Machine.prototype.runNextJob = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+	interlockBypass = <span class="hljs-literal">false</span>;
 	db.Job.getPending(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, pendingJobs</span>) </span>{
 		<span class="hljs-keyword">if</span>(err) {
 			<span class="hljs-keyword">return</span> callback(err);
@@ -447,59 +752,71 @@ Machine.prototype.runNextJob = <span class="hljs-function"><span class="hljs-key
 		<span class="hljs-keyword">if</span>(pendingJobs.length &gt; <span class="hljs-number">0</span>) {
 			<span class="hljs-keyword">this</span>.arm({
 				type : <span class="hljs-string">'nextJob'</span>
-			}, config.machine.get(<span class="hljs-string">'auth_timeout'</span>));	
-			callback();		
+			}, config.machine.get(<span class="hljs-string">'auth_timeout'</span>));
+			callback();
 		} <span class="hljs-keyword">else</span> {
 			callback(<span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'No pending jobs.'</span>));
 		}
 	}.bind(<span class="hljs-keyword">this</span>));
-}
-
-Machine.prototype.executeRuntimeCode = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">runtimeName, code</span>) </span>{
-	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.auth) {
-		<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._executeRuntimeCode(runtimeName, code);
-	}
-	<span class="hljs-keyword">if</span>(runtimeName === <span class="hljs-string">'manual'</span>) {
-		<span class="hljs-keyword">this</span>.arm(<span class="hljs-literal">null</span>, config.machine.get(<span class="hljs-string">'auth_timeout'</span>));		
-		<span class="hljs-keyword">return</span>;
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Executes a &quot;code&quot; on a specific runtime.
+runtimeName - the name of a valid runtime
+       code - can be anything, it is runtime specific.
+              example: if you pass gcode to the gcode runtime, it runs g-code.</p></div></div><div class="code"><div class="wrapper">Machine.prototype.executeRuntimeCode = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">runtimeName, code</span>) </span>{
+	interlockBypass = <span class="hljs-literal">false</span>;
+	runtime = <span class="hljs-keyword">this</span>.getRuntime(runtimeName);
+	<span class="hljs-keyword">var</span> needsAuth = runtime.needsAuth(code);
+	<span class="hljs-keyword">if</span> (needsAuth){
+		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.status.auth) {
+			<span class="hljs-keyword">return</span> <span class="hljs-keyword">this</span>._executeRuntimeCode(runtimeName, code);
+		} <span class="hljs-keyword">else</span> {
+			<span class="hljs-keyword">this</span>.arm({
+				type : <span class="hljs-string">'runtimeCode'</span>,
+				payload : {
+					name : runtimeName,
+					code : code
+				}
+			}, config.machine.get(<span class="hljs-string">'auth_timeout'</span>));
+		}
 	} <span class="hljs-keyword">else</span> {
-		<span class="hljs-keyword">this</span>.arm({
-			type : <span class="hljs-string">'runtimeCode'</span>,
-			payload : {
-				name : runtimeName,
-				code : code
-			}
-		}, config.machine.get(<span class="hljs-string">'auth_timeout'</span>));		
+		<span class="hljs-keyword">this</span>._executeRuntimeCode(runtimeName, code);
 	}
-}
-
-Machine.prototype.sbp = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">string</span>) </span>{
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Just run this SBP code immediately
+string - the code to run</p></div></div><div class="code"><div class="wrapper">Machine.prototype.sbp = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">string</span>) </span>{
 	<span class="hljs-keyword">this</span>.executeRuntimeCode(<span class="hljs-string">'sbp'</span>, string);
-}
 
-Machine.prototype.gcode = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">string</span>) </span>{
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Just run this gcode immediately
+string - the gcode to run</p></div></div><div class="code"><div class="wrapper">Machine.prototype.gcode = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">string</span>) </span>{
 	<span class="hljs-keyword">this</span>.executeRuntimeCode(<span class="hljs-string">'gcode'</span>, string);
-}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Functions below require authorization to run
-Don&#39;t call them unless the tool is authorized!</p></div></div><div class="code"><div class="wrapper">Machine.prototype._executeRuntimeCode = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">runtimeName, code, callback</span>) </span>{
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><hr>
+<p>Functions below require authorization to run</p>
+<h2 id="don39t-call-them-unless-the-tool-is-authorized">Don&#39;t call them unless the tool is authorized!</h2>
+<p>For documentation of these functions, see their corresponding &quot;public&quot; methods above.</p></div></div><div class="code"><div class="wrapper">Machine.prototype._executeRuntimeCode = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">runtimeName, code, callback</span>) </span>{
 	runtime = <span class="hljs-keyword">this</span>.getRuntime(runtimeName);
 	<span class="hljs-keyword">if</span>(runtime) {
-		<span class="hljs-keyword">this</span>.setRuntime(runtime, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, runtime</span>) </span>{
-			<span class="hljs-keyword">if</span>(err) {
-				log.error(err);
-			} <span class="hljs-keyword">else</span> {
-				runtime.executeCode(code, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
-					<span class="hljs-keyword">this</span>.authorize();
-					<span class="hljs-keyword">var</span> callback = callback || <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{};
-					callback(err, data);
-				}.bind(<span class="hljs-keyword">this</span>));			
-			}
-		}.bind(<span class="hljs-keyword">this</span>));
+		<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.current_runtime == <span class="hljs-keyword">this</span>.idle_runtime) {
+			<span class="hljs-keyword">this</span>.setRuntime(runtime, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, runtime</span>) </span>{
+				<span class="hljs-keyword">if</span>(err) {
+					log.error(err);
+				} <span class="hljs-keyword">else</span> {
+					runtime.executeCode(code);
+				}
+			}.bind(<span class="hljs-keyword">this</span>));
+		} <span class="hljs-keyword">else</span> {
+			<span class="hljs-keyword">this</span>.current_runtime.executeCode(code);
+		}
 	}
-}
-
-Machine.prototype._resume = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>e</p></div></div><div class="code"><div class="wrapper">Machine.prototype._resume = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+	<span class="hljs-keyword">switch</span>(<span class="hljs-keyword">this</span>.status.state) {
+		<span class="hljs-keyword">case</span> <span class="hljs-string">'interlock'</span>:
+			<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.interlock_action) {
+				<span class="hljs-keyword">this</span>.arm(<span class="hljs-keyword">this</span>.interlock_action);
+				<span class="hljs-keyword">this</span>.interlock_action = <span class="hljs-literal">null</span>;
+				<span class="hljs-keyword">return</span>;
+			}
+		<span class="hljs-keyword">break</span>;
+	}
 	<span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.current_runtime) {
-		<span class="hljs-keyword">this</span>.current_runtime.resume();
+		<span class="hljs-keyword">this</span>.current_runtime.resume()
 	}
 };
 

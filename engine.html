@@ -1,10 +1,13 @@
-<!DOCTYPE html><html lang="en"><head><title>engine</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content=""><meta name="groc-document-path" content="engine"><meta name="groc-project-path" content="engine.js"><link rel="stylesheet" type="text/css" media="all" href="assets/style.css"><script type="text/javascript" src="assets/behavior.js"></script><body><div id="meta"><div class="file-path">engine.js</div></div><div id="document"><div class="segment"><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> restify = <span class="hljs-built_in">require</span>(<span class="hljs-string">'restify'</span>);
+<!DOCTYPE html><html lang="en"><head><title>engine</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content=""><meta name="groc-document-path" content="engine"><meta name="groc-project-path" content="engine.js"><link rel="stylesheet" type="text/css" media="all" href="assets/style.css"><script type="text/javascript" src="assets/behavior.js"></script><body><div id="meta"><div class="file-path">engine.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>engine.js</p>
+<p>Defines the Engine object, which is the top level application singleton that represents this running engine instance.</p>
+<p>The engine object is primarily defined by its start() method, which defines most of the startup configuration
+activities for the engine.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> restify = <span class="hljs-built_in">require</span>(<span class="hljs-string">'restify'</span>);
 <span class="hljs-keyword">var</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./util'</span>);
 <span class="hljs-keyword">var</span> socketio = <span class="hljs-built_in">require</span>(<span class="hljs-string">'socket.io'</span>);
 <span class="hljs-keyword">var</span> <span class="hljs-keyword">async</span> = <span class="hljs-built_in">require</span>(<span class="hljs-string">'async'</span>);
 <span class="hljs-keyword">var</span> process = <span class="hljs-built_in">require</span>(<span class="hljs-string">'process'</span>);
 <span class="hljs-keyword">var</span> machine = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./machine'</span>);
-<span class="hljs-keyword">var</span> detection_daemon = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./detection_daemon'</span>)();
+<span class="hljs-keyword">var</span> detection_daemon = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./detection_daemon'</span>);
 <span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./config'</span>);
 <span class="hljs-keyword">var</span> PLATFORM = process.platform;
 <span class="hljs-keyword">var</span> log = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./log'</span>).logger(<span class="hljs-string">'engine'</span>);
@@ -15,24 +18,40 @@
 <span class="hljs-keyword">var</span> glob = <span class="hljs-built_in">require</span>(<span class="hljs-string">'glob'</span>);
 <span class="hljs-keyword">var</span> argv = <span class="hljs-built_in">require</span>(<span class="hljs-string">'minimist'</span>)(process.argv);
 <span class="hljs-keyword">var</span> fs = <span class="hljs-built_in">require</span>(<span class="hljs-string">'fs'</span>);
-
-<span class="hljs-keyword">var</span> Engine = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+<span class="hljs-keyword">var</span> sessions = <span class="hljs-built_in">require</span>(<span class="hljs-string">"client-sessions"</span>);
+<span class="hljs-keyword">var</span> authentication = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./authentication'</span>);
+<span class="hljs-keyword">var</span> profiles = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./profiles'</span>);
+<span class="hljs-keyword">var</span> crypto = <span class="hljs-built_in">require</span>(<span class="hljs-string">'crypto'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The engine object has a few high level properties and some key methods that define the application lifecycle
+Most of the important stuff is in the start() method.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> Engine = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
     <span class="hljs-keyword">this</span>.version = <span class="hljs-literal">null</span>;
     <span class="hljs-keyword">this</span>.time_synced = <span class="hljs-literal">false</span>;
-};
-
-<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">EngineConfigFirstTime</span>(<span class="hljs-params">callback</span>) </span>{
+    <span class="hljs-keyword">this</span>.firmware = {
+        build : <span class="hljs-literal">null</span>,
+        config : <span class="hljs-literal">null</span>,
+        version : <span class="hljs-literal">null</span>
+    }
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Configure the engine for the first time.
+This function is typically called when an engine configuration does not exist.
+It sets some defaults in the engine config (by way of the config module) based on system platform.
+Mainly this amounts to configuring appropriate serial port paths and http hosting ports 
+for different types of machines.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">EngineConfigFirstTime</span>(<span class="hljs-params">callback</span>) </span>{
     <span class="hljs-keyword">switch</span>(PLATFORM) {
         <span class="hljs-keyword">case</span> <span class="hljs-string">'linux'</span>:
-            callback();
+                    <span class="hljs-keyword">var</span> ports = {
+                        <span class="hljs-string">'control_port_linux'</span> : <span class="hljs-string">'/dev/ttyACM0'</span>,
+                        <span class="hljs-string">'data_port_linux'</span> : <span class="hljs-string">'/dev/ttyACM0'</span>
+                    }
+                    config.engine.update(ports, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+                        callback();
+                    });
             <span class="hljs-keyword">break</span>;
         <span class="hljs-keyword">case</span> <span class="hljs-string">'darwin'</span>:
             config.engine.set(<span class="hljs-string">'server_port'</span>, <span class="hljs-number">9876</span>);
             glob.glob(<span class="hljs-string">'/dev/cu.usbmodem*'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, files</span>) </span>{
-                <span class="hljs-keyword">if</span>(files.length &gt;= <span class="hljs-number">2</span>) {
+                <span class="hljs-keyword">if</span>(files.length &gt;= <span class="hljs-number">1</span>) {
                     <span class="hljs-keyword">var</span> ports = {
                         <span class="hljs-string">'control_port_osx'</span> : files[<span class="hljs-number">0</span>],
-                        <span class="hljs-string">'data_port_osx'</span> : files[<span class="hljs-number">1</span>]
+                        <span class="hljs-string">'data_port_osx'</span> : files[<span class="hljs-number">1</span>] || files[<span class="hljs-number">0</span>]
                     }
                     config.engine.update(ports, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
                         callback();
@@ -47,37 +66,36 @@
             callback();
         <span class="hljs-keyword">break</span>;
     }
-};
-
-Engine.prototype.setTime = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">obj</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Set the current system time to the provided value.
+obj - an object with a &#39;utc&#39; property that coresponds to the current UTC time</p></div></div><div class="code"><div class="wrapper">Engine.prototype.setTime = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">obj</span>) </span>{
     <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.time_synced) {
         <span class="hljs-keyword">this</span>.time_synced = <span class="hljs-literal">true</span>;
         <span class="hljs-keyword">var</span> d = <span class="hljs-keyword">new</span> <span class="hljs-built_in">Date</span>(obj.utc);
         log.debug(<span class="hljs-string">"Setting the time to "</span> + d.toUTCString());
         <span class="hljs-keyword">var</span> t = d.getUTCFullYear() + <span class="hljs-string">'-'</span> + d.getUTCMonth() + <span class="hljs-string">'-'</span> + d.getUTCDay() + <span class="hljs-string">' '</span> + d.getUTCHours() + <span class="hljs-string">':'</span> + d.getUTCMinutes() + <span class="hljs-string">':'</span> + d.getUTCSeconds()
-    cmd = <span class="hljs-string">'timedatectl set-time '</span> + t + <span class="hljs-string">'; timedatectl'</span>;
+        cmd = <span class="hljs-string">'timedatectl set-time '</span> + t + <span class="hljs-string">'; timedatectl'</span>;
         util.doshell(cmd, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">stdout</span>) </span>{
-            <span class="hljs-built_in">console</span>.log(stdout);
+            log.debug(stdout);
         });
     }
-}
-
-Engine.prototype.stop = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Stop this engine instance.
+Basically does cleanup activities before shutting the engine down.</p></div></div><div class="code"><div class="wrapper">Engine.prototype.stop = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
     <span class="hljs-keyword">this</span>.machine.disconnect();
     <span class="hljs-keyword">this</span>.machine.setState(<span class="hljs-keyword">this</span>.machine, <span class="hljs-string">'stopped'</span>);
-
-    <span class="hljs-comment">//this.server.close();</span>
-    <span class="hljs-comment">//this.server.io.server.close();</span>
     callback(<span class="hljs-literal">null</span>);
-};
-
-Engine.prototype.getVersion = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Get the version of this engine.</p>
+<p>For production builds, the version is provided by a version.json that defines a version object that includes:
+hash - A hash for the build, typically a commit SHA (may not exist in a release type build)
+number - The semver version number
+type - The type of release, either &#39;dev&#39;, &#39;rc&#39;, or &#39;release&#39;</p>
+<p>If that file exists and can be parsed, return a version object that reflects its contents.
+If it does not exist, use git (if available on the system) to read out some version information instead</p></div></div><div class="code"><div class="wrapper">Engine.prototype.getVersion = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
     util.doshell(<span class="hljs-string">'git rev-parse --verify HEAD'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data</span>) </span>{
         <span class="hljs-keyword">this</span>.version = {};
         <span class="hljs-keyword">this</span>.version.hash = (data || <span class="hljs-string">""</span>).trim();
         <span class="hljs-keyword">this</span>.version.number = <span class="hljs-string">""</span>;
         <span class="hljs-keyword">this</span>.version.debug = (<span class="hljs-string">'debug'</span> <span class="hljs-keyword">in</span> argv);
-        fs.readFile(<span class="hljs-string">'version.json'</span>, <span class="hljs-string">'utf8'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+    fs.readFile(<span class="hljs-string">'version.json'</span>, <span class="hljs-string">'utf8'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
             <span class="hljs-keyword">if</span>(err) {
                 <span class="hljs-keyword">this</span>.version.type = <span class="hljs-string">'dev'</span>;
                 <span class="hljs-keyword">return</span> callback(<span class="hljs-literal">null</span>, <span class="hljs-keyword">this</span>.version);
@@ -85,38 +103,74 @@ Engine.prototype.getVersion = <span class="hljs-function"><span class="hljs-keyw
             <span class="hljs-keyword">try</span> {
                 data = <span class="hljs-built_in">JSON</span>.parse(data);
                 <span class="hljs-keyword">if</span>(data.number) {
-                    <span class="hljs-keyword">this</span>.version.number = data.number;                    
+                    <span class="hljs-keyword">this</span>.version.number = data.number;
                     <span class="hljs-keyword">this</span>.version.type = <span class="hljs-string">'release'</span>;
                 }
             } <span class="hljs-keyword">catch</span>(e) {
                 <span class="hljs-keyword">this</span>.version.type = <span class="hljs-string">'dev'</span>;
-                <span class="hljs-keyword">this</span>.version.number
             } <span class="hljs-keyword">finally</span> {
                 callback(<span class="hljs-literal">null</span>, <span class="hljs-keyword">this</span>.version);
             }
         }.bind(<span class="hljs-keyword">this</span>))
+    }.bind(<span class="hljs-keyword">this</span>));
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Return &quot;info&quot; about this engine, which currently is just version data for the engine and the firmware</p></div></div><div class="code"><div class="wrapper">Engine.prototype.getInfo = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
+    callback(<span class="hljs-literal">null</span>, {
+        firmware : <span class="hljs-keyword">this</span>.firmware,
+        version : <span class="hljs-keyword">this</span>.version
     });
-}
+}</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This function is the primary content of the Engine object.  It is called on application launch, and is
+sort of the &quot;main thread&quot; of execution.  It executes a bunch of startup/configuration functions, and 
+then sets up the http server to listen on the appropriate port.  Setup happens first so the user doesn&#39;t
+connect to the engine before it is ready to accept connections.</p></div></div><div class="code"><div class="wrapper">Engine.prototype.start = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
 
-Engine.prototype.start = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>) </span>{
-
-    <span class="hljs-keyword">async</span>.series([</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Configure the engine data directories</p></div></div><div class="code"><div class="wrapper">       <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">setup_application</span>(<span class="hljs-params">callback</span>) </span>{
+    <span class="hljs-keyword">async</span>.series([</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Configure the engine data directories
+Create the folder structure (typically) in /opt/fabmo
+eg: /opt/fabmo/config, /opt/fabmo/macros, etc...</p></div></div><div class="code"><div class="wrapper">       <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">setup_application</span>(<span class="hljs-params">callback</span>) </span>{
             log.info(<span class="hljs-string">'Checking engine data directory tree...'</span>);
             config.createDataDirectories(callback);
-        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load the engine configuration from disk</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_engine_config</span>(<span class="hljs-params">callback</span>) </span>{
+        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load the engine configuration from disk.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_engine_config</span>(<span class="hljs-params">callback</span>) </span>{
             log.info(<span class="hljs-string">"Loading engine configuration..."</span>);
             config.configureEngine(callback);
-        },
-
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">check_engine_config</span>(<span class="hljs-params">callback</span>) </span>{
-            <span class="hljs-keyword">if</span>(!config.engine.userConfigLoaded) {
-                EngineConfigFirstTime(callback);
+        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Determine if we&#39;re configuring the engine for the first time ever.
+If so, populate the engine configuration with defaults that are sensible for this platform.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">check_engine_config</span>(<span class="hljs-params">callback</span>) </span>{
+            <span class="hljs-keyword">if</span>(!config.engine.get(<span class="hljs-string">'init'</span>)) {
+                log.info(<span class="hljs-string">'Configuring the engine for the first time...'</span>);
+                EngineConfigFirstTime(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+                    config.engine.set(<span class="hljs-string">'init'</span>, <span class="hljs-literal">true</span>);
+                    callback();
+                });
             } <span class="hljs-keyword">else</span> {
                 callback();
             }
-        },
-
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">get_fabmo_version</span>(<span class="hljs-params">callback</span>) </span>{
+        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load profiles.  See the profiles module for what this entails.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_profiles</span>(<span class="hljs-params">callback</span>) </span>{
+            profiles.load(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, profiles</span>) </span>{
+                <span class="hljs-keyword">if</span>(err) {log.error(err);}
+                callback()
+            });
+        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load users.  See config/user_config.js for what this entails.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_users</span>(<span class="hljs-params">callback</span>) </span>{
+            log.info(<span class="hljs-string">'Loading users....'</span>)
+            config.configureUser(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>)</span>{
+                callback();
+            });
+        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Read the selected profile from the engine config.
+If the engine config doesn&#39;t specify a profile, look in /fabmo/site/.default
+If /fabmo/site/.default exists and has content, interpret its content as the selected profile.
+If neither of these strategies yields a profile, just choose the &#39;Default&#39; profile.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">profile_shim</span>(<span class="hljs-params">callback</span>) </span>{
+            <span class="hljs-keyword">var</span> profile = config.engine.get(<span class="hljs-string">'profile'</span>);
+            <span class="hljs-keyword">var</span> def = <span class="hljs-string">''</span>;
+            <span class="hljs-keyword">if</span>(profile) { 
+                <span class="hljs-keyword">return</span> callback(); 
+            } <span class="hljs-keyword">else</span> {
+                fs.readFile(<span class="hljs-string">'../site/.default'</span>,<span class="hljs-string">'utf8'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">err, content</span>) </span>{
+                    <span class="hljs-keyword">if</span>(err){
+                        def = <span class="hljs-string">'Default'</span>;
+                    } <span class="hljs-keyword">else</span> {
+                        def = content;
+                    }
+                    config.engine.set(<span class="hljs-string">'profile'</span>, def, callback);
+                })
+            }
+        }.bind(<span class="hljs-keyword">this</span>), </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Read the engine version and hang onto it</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">get_fabmo_version</span>(<span class="hljs-params">callback</span>) </span>{
             log.info(<span class="hljs-string">"Getting engine version..."</span>);
             <span class="hljs-keyword">this</span>.getVersion(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
                 <span class="hljs-keyword">if</span>(err) {
@@ -124,30 +178,41 @@ Engine.prototype.start = <span class="hljs-function"><span class="hljs-keyword">
                     <span class="hljs-keyword">this</span>.version = <span class="hljs-string">""</span>;
                     <span class="hljs-keyword">return</span> callback();
                 }
+                log.info(<span class="hljs-string">"Got engine version: "</span> + <span class="hljs-built_in">JSON</span>.stringify(<span class="hljs-keyword">this</span>.version));
                 <span class="hljs-keyword">this</span>.version = data;
                 callback();
             }.bind(<span class="hljs-keyword">this</span>));
-        }.bind(<span class="hljs-keyword">this</span>),
-
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">clear_approot</span>(<span class="hljs-params">callback</span>) </span>{
+        }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The approot should be cleared if:</p>
+<ul>
+<li>We&#39;re running in &#39;debug&#39; mode (and might be making changes to system apps)</li>
+<li>The version of the engine has changed since the last time we run it.
+So, we check those things, and clear the approot accordingly.</li>
+</ul>
+<p>See dashboard/app_manager.js for more about the approot.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">clear_approot</span>(<span class="hljs-params">callback</span>) </span>{
             <span class="hljs-keyword">if</span>(<span class="hljs-string">'debug'</span> <span class="hljs-keyword">in</span> argv) {
                 log.info(<span class="hljs-string">"Running in debug mode - clearing the approot."</span>);
-                config.clearAppRoot(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, stdout</span>) </span>{
+                </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If in debug mode, we also set our version to a random number, which provides effective
+cache-busting on the client side when debugging.
+TODO: This probably isn&#39;t the place for this, it should go up where the other version stuff is.</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">var</span> random = <span class="hljs-built_in">Math</span>.floor(<span class="hljs-built_in">Math</span>.random() * (<span class="hljs-number">99999</span> - <span class="hljs-number">10000</span>)) + <span class="hljs-number">10000</span>;
+                log.info(<span class="hljs-string">"Setting engine version to random"</span>);
+                config.engine.set(<span class="hljs-string">'version'</span>, random.toString());
+                </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Clear the actual approot</p></div></div><div class="code"><div class="wrapper">                config.clearAppRoot(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, stdout</span>) </span>{
                     <span class="hljs-keyword">if</span>(err) { log.error(err); }
                     <span class="hljs-keyword">else</span> {
                         log.debug(stdout);
-                    }
+                    }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - seems like we don&#39;t need to do this twice</p></div></div><div class="code"><div class="wrapper">                    config.engine.set(<span class="hljs-string">'version'</span>, random.toString());
                     callback();
                 });
+                
             } <span class="hljs-keyword">else</span> {
-                <span class="hljs-keyword">var</span> last_time_version = config.engine.get(<span class="hljs-string">'version'</span>).trim();
-                <span class="hljs-keyword">var</span> this_time_version = <span class="hljs-keyword">this</span>.version.hash.trim();
+                <span class="hljs-keyword">var</span> last_time_version = (config.engine.get(<span class="hljs-string">'version'</span>) || <span class="hljs-string">''</span>).trim();
+                <span class="hljs-keyword">var</span> this_time_version = (<span class="hljs-keyword">this</span>.version.hash || <span class="hljs-keyword">this</span>.version.number || <span class="hljs-string">""</span>).trim();
                 log.debug(<span class="hljs-string">"Previous engine version: "</span> + last_time_version);
                 log.debug(<span class="hljs-string">" Current engine version: "</span> + this_time_version);
 
                 <span class="hljs-keyword">if</span>(last_time_version != this_time_version) {
-                    log.info(<span class="hljs-string">"Engine version has changed - clearing the approot."</span>);
-                    config.clearAppRoot(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, stdout</span>) </span>{
+                    log.info(<span class="hljs-string">"Engine version has changed - clearing the approot."</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - reduce code by moving this clearAppRoot out of the if else in its own test (Just set a shouldClearApproot flag or something in the if-else)</p></div></div><div class="code"><div class="wrapper">                    config.clearAppRoot(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, stdout</span>) </span>{
+                        config.engine.set(<span class="hljs-string">'version'</span>, this_time_version);
                         <span class="hljs-keyword">if</span>(err) { log.error(err); }
                         <span class="hljs-keyword">else</span> {
                             log.debug(stdout);
@@ -158,23 +223,23 @@ Engine.prototype.start = <span class="hljs-function"><span class="hljs-keyword">
                     log.info(<span class="hljs-string">"Engine version is unchanged since last run."</span>);
                     callback();
                 }
+                
             }
-            config.engine.set(<span class="hljs-string">'version'</span>, this_time_version);
-        }.bind(<span class="hljs-keyword">this</span>),
-
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">create_data_directories</span>(<span class="hljs-params">callback</span>) </span>{
+            
+        }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - this seems like a duplication of the same step above (see the beginning of this startup sequence)</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">create_data_directories</span>(<span class="hljs-params">callback</span>) </span>{
             config.createDataDirectories(callback);
         }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>&quot;Apply&quot; the engine configuration, that is, take the configuration values loaded and actually
-set up the application based on them.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">apply_engine_config</span>(<span class="hljs-params">callback</span>) </span>{
+set up the application based on them. See config/engine_config.js to see what this entails.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">apply_engine_config</span>(<span class="hljs-params">callback</span>) </span>{
             log.info(<span class="hljs-string">"Applying engine configuration..."</span>);
             config.engine.apply(callback);
-        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Configure the DB</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">setup_database</span>(<span class="hljs-params">callback</span>) </span>{
+        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Configure the DB see db.js to see what this entails.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">setup_database</span>(<span class="hljs-params">callback</span>) </span>{
             log.info(<span class="hljs-string">"Configuring database..."</span>);
             db.configureDB(callback);
-        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Cleanup the DB</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">clean_database</span>(<span class="hljs-params">callback</span>) </span>{
+        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Cleanup the DB.  This is to clear jobs that may be &quot;dangling&quot; after a crash, or other inconsistencies.
+See db.js for more details.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">clean_database</span>(<span class="hljs-params">callback</span>) </span>{
             log.info(<span class="hljs-string">"Cleaning up database..."</span>);
             db.cleanup(callback);
-        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Connect to G2 and initialize machine runtimes</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">connect</span>(<span class="hljs-params">callback</span>) </span>{
+        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Connect to G2 and initialize machine runtimes.  See machine.js for what this entails.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">connect</span>(<span class="hljs-params">callback</span>) </span>{
             log.info(<span class="hljs-string">"Connecting to G2..."</span>);
             machine.connect(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, machine</span>) </span>{
                 <span class="hljs-keyword">if</span>(err) {
@@ -187,7 +252,11 @@ set up the application based on them.</p></div></div><div class="code"><div clas
             });
         }.bind(<span class="hljs-keyword">this</span>),
 
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_machine_config</span>(<span class="hljs-params">callback</span>) </span>{
+        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">launch_detection_daemon</span>(<span class="hljs-params">callback</span>)</span>{
+            log.info(<span class="hljs-string">"Launching detection daemon..."</span>);
+            detection_daemon();
+            callback(<span class="hljs-literal">null</span>);
+        }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Apply the &quot;machine&quot; configuration - see config/machine_config.js for details</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_machine_config</span>(<span class="hljs-params">callback</span>) </span>{
             <span class="hljs-keyword">this</span>.machine = machine.machine;
             log.info(<span class="hljs-string">'Loading the machine configuration...'</span>)
             config.configureMachine(<span class="hljs-keyword">this</span>.machine, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
@@ -196,10 +265,13 @@ set up the application based on them.</p></div></div><div class="code"><div clas
                 }
                 callback(<span class="hljs-literal">null</span>);
             });
-        }.bind(<span class="hljs-keyword">this</span>),
-    
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">set_units</span>(<span class="hljs-params">callback</span>) </span>{
-            <span class="hljs-keyword">this</span>.machine.driver.setUnits(config.machine.get(<span class="hljs-string">'units'</span>), callback);
+        }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The default unit system is specified in the machine configuration.  It requires
+special care to apply - see g2.js for details.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">set_units</span>(<span class="hljs-params">callback</span>) </span>{
+            <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine.isConnected()) {
+                <span class="hljs-keyword">this</span>.machine.driver.setUnits(config.machine.get(<span class="hljs-string">'units'</span>), callback);
+            } <span class="hljs-keyword">else</span> {
+                callback(<span class="hljs-literal">null</span>);
+            }
         }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Configure G2 by loading all its json settings and static configuration parameters</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_driver_config</span>(<span class="hljs-params">callback</span>) </span>{
             <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine.isConnected()) {
                 log.info(<span class="hljs-string">"Configuring G2..."</span>);
@@ -216,97 +288,170 @@ set up the application based on them.</p></div></div><div class="code"><div clas
                 })
                 callback(<span class="hljs-literal">null</span>);
             }
-        }.bind(<span class="hljs-keyword">this</span>),
-
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">get_g2_version</span>(<span class="hljs-params">callback</span>) </span>{
+        }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Retrieve the firmware version from G2.  This is done only once, and the value
+is cached as a property of the Engine object.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">get_g2_version</span>(<span class="hljs-params">callback</span>) </span>{
             <span class="hljs-keyword">if</span>(<span class="hljs-keyword">this</span>.machine.isConnected()) {
                 log.info(<span class="hljs-string">"Getting G2 firmware version..."</span>);
-                <span class="hljs-keyword">this</span>.machine.driver.get(<span class="hljs-string">'fb'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
+                <span class="hljs-keyword">this</span>.machine.driver.get([<span class="hljs-string">'fb'</span>,<span class="hljs-string">'fbs'</span>,<span class="hljs-string">'fbc'</span>], <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, value</span>) </span>{
                     <span class="hljs-keyword">if</span>(err) {
                         log.error(<span class="hljs-string">'Could not get the G2 firmware build. ('</span> + err + <span class="hljs-string">')'</span>);
                     } <span class="hljs-keyword">else</span> {
-                        log.info(<span class="hljs-string">'G2 Firmware Build: '</span> + value);
+                        log.info(<span class="hljs-string">'G2 Firmware Information: '</span> + value);
+                        <span class="hljs-keyword">this</span>.firmware.build = value[<span class="hljs-number">0</span>];
+                        <span class="hljs-keyword">this</span>.firmware.version = value[<span class="hljs-number">1</span>];
+                        <span class="hljs-keyword">this</span>.firmware.config = value[<span class="hljs-number">2</span>];
                     }
                     callback(<span class="hljs-literal">null</span>);
-                });
+                }.bind(<span class="hljs-keyword">this</span>));
             } <span class="hljs-keyword">else</span> {
                 log.warn(<span class="hljs-string">"Skipping G2 firmware version check due to no connection."</span>)
                 callback(<span class="hljs-literal">null</span>);
             }
-        }.bind(<span class="hljs-keyword">this</span>),
-
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">apply_machine_config</span>(<span class="hljs-params">callback</span>) </span>{
-            log.info(<span class="hljs-string">"Applying machine configuration..."</span>);
-            config.machine.apply(callback);
-        }.bind(<span class="hljs-keyword">this</span>),
-
-
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_opensbp_commands</span>(<span class="hljs-params">callback</span>) </span>{
+        }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This is a shim that clears some obsolete entries from the configuration that have been
+known to cause errors with modern versions of G2.
+TODO - this is the sort of thing that might be better done by the updater as part of the 
+       installation process.  It is typical for such processes to &quot;migrate&quot; config files to latest version.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">g2_shim</span>(<span class="hljs-params">callback</span>) </span>{
+          log.debug(<span class="hljs-string">"Running G2 Shim..."</span>);
+          <span class="hljs-keyword">var</span> entries = [
+            <span class="hljs-string">'1sa'</span>,<span class="hljs-string">'1tr'</span>,<span class="hljs-string">'1mi'</span>,
+            <span class="hljs-string">'2sa'</span>,<span class="hljs-string">'2tr'</span>,<span class="hljs-string">'2mi'</span>,
+            <span class="hljs-string">'3sa'</span>,<span class="hljs-string">'3tr'</span>,<span class="hljs-string">'3mi'</span>,
+            <span class="hljs-string">'4sa'</span>,<span class="hljs-string">'4tr'</span>,<span class="hljs-string">'4mi'</span>,
+            <span class="hljs-string">'5sa'</span>,<span class="hljs-string">'5tr'</span>,<span class="hljs-string">'5mi'</span>,
+            <span class="hljs-string">'6sa'</span>,<span class="hljs-string">'6tr'</span>,<span class="hljs-string">'6mi'</span>,
+            <span class="hljs-string">'ja'</span>,
+            <span class="hljs-string">'6ma'</span>,
+            <span class="hljs-string">'6po'</span>,
+            <span class="hljs-string">'6su'</span>,
+            <span class="hljs-string">'6pm'</span>,
+            <span class="hljs-string">'6pl'</span>
+          ]
+          <span class="hljs-keyword">var</span> do_shim = <span class="hljs-literal">false</span>;
+          <span class="hljs-keyword">for</span>(<span class="hljs-keyword">var</span> i=<span class="hljs-number">0</span>; i&lt;entries.length; i++) {
+            <span class="hljs-keyword">if</span>(config.driver.has(entries[i])) {
+              do_shim = <span class="hljs-literal">true</span>;
+            }
+          }
+          <span class="hljs-keyword">if</span>(do_shim) {
+            log.debug(<span class="hljs-string">"Deleting obsolete entries in G2 config"</span>);
+            config.driver.deleteMany(entries, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+              config.driver.restore(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+                callback();
+              });
+            });
+          } <span class="hljs-keyword">else</span> {
+            log.debug(<span class="hljs-string">"No obsolete entries in G2 config."</span>);
+            callback();
+          }
+        }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load commands which are populated dynamically from the contents of a folder
+in the openSBP runtime.  See runtime/opensbp/opensbp.js for what this entails.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_opensbp_commands</span>(<span class="hljs-params">callback</span>) </span>{
+            <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.machine.isConnected()) {
+                log.warn(<span class="hljs-string">'Not loading SBP Commands due to no connection to motion system.'</span>)
+                <span class="hljs-keyword">return</span> callback(<span class="hljs-literal">null</span>);
+            }
             log.info(<span class="hljs-string">"Loading OpenSBP Commands..."</span>);
             <span class="hljs-keyword">this</span>.machine.sbp_runtime.loadCommands(callback);
-        }.bind(<span class="hljs-keyword">this</span>),
-
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_opensbp_config</span>(<span class="hljs-params">callback</span>) </span>{
+        }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Apply the OpenSBP runtime config.  See config/opensbp_config.js for what this entails.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_opensbp_config</span>(<span class="hljs-params">callback</span>) </span>{
+            <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.machine.isConnected()) {
+                log.warn(<span class="hljs-string">'Not configuring SBP due to no connection to motion system.'</span>)
+                <span class="hljs-keyword">return</span> callback(<span class="hljs-literal">null</span>);
+            }
             log.info(<span class="hljs-string">"Configuring OpenSBP runtime..."</span>);
             config.configureOpenSBP(callback);
-        },
-
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">configure_dashboard</span>(<span class="hljs-params">callback</span>) </span>{
+        }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Apply the machine config.  See config/machine_config.js for what this entails</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">apply_machine_config</span>(<span class="hljs-params">callback</span>) </span>{
+            log.info(<span class="hljs-string">"Applying machine configuration..."</span>);
+            config.machine.apply(callback);
+        }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Setup the dashboard.  See dashboard/index.js and dashboard/app_manager.js for what this entails.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">configure_dashboard</span>(<span class="hljs-params">callback</span>) </span>{
             log.info(<span class="hljs-string">"Configuring dashboard..."</span>);
             dashboard.configure(callback);
-        },
-
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_apps</span>(<span class="hljs-params">callback</span>) </span>{
+        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load the apps, see dashboard/app_manager.js for what this entails.
+TODO: Would this be better to just be included in the dashboard configuration function?</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_apps</span>(<span class="hljs-params">callback</span>) </span>{
             log.info(<span class="hljs-string">"Loading dashboard apps..."</span>);
             dashboard.loadApps(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, result</span>) </span>{
                 callback(<span class="hljs-literal">null</span>, result);
             });
-        },
-
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_macros</span>(<span class="hljs-params">callback</span>) </span>{
+        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load macros from disk.  See macros.js</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_macros</span>(<span class="hljs-params">callback</span>) </span>{
             log.info(<span class="hljs-string">"Loading macros..."</span>)
             macros.load(callback);
-        },
-
-        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_instance_config</span>(<span class="hljs-params">callback</span>) </span>{
+        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Load and apply the &#39;instance&#39; configuration.  This is the dynamic machine state, like the current position,
+which is saved periodically in order to preserve state if the tool is power cycled.
+See config/instance_config.js for more details.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">load_instance_config</span>(<span class="hljs-params">callback</span>) </span>{
+            <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.machine.isConnected()) {
+                log.warn(<span class="hljs-string">'Not configuring instance due to no connection to motion system.'</span>)
+                <span class="hljs-keyword">return</span> callback(<span class="hljs-literal">null</span>);
+            }
             log.info(<span class="hljs-string">"Loading instance info..."</span>);
             config.configureInstance(<span class="hljs-keyword">this</span>.machine.driver, callback);
         }.bind(<span class="hljs-keyword">this</span>),
 
         <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">apply_instance_config</span>(<span class="hljs-params">callback</span>) </span>{
+            <span class="hljs-keyword">if</span>(!<span class="hljs-keyword">this</span>.machine.isConnected()) {
+                log.warn(<span class="hljs-string">'Not applying instance config due to no connection to motion system.'</span>)
+                <span class="hljs-keyword">return</span> callback(<span class="hljs-literal">null</span>);
+            }
             log.info(<span class="hljs-string">"Applying instance configuration..."</span>);
             config.instance.apply(callback);
-        },</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Kick off the server if all of the above went OK.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">start_server</span>(<span class="hljs-params">callback</span>) </span>{
-            log.info(<span class="hljs-string">"Setting up the webserver..."</span>);
-            <span class="hljs-keyword">var</span> server = restify.createServer({name:<span class="hljs-string">"FabMo Engine"</span>});
-            <span class="hljs-keyword">this</span>.server = server;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Allow JSON over Cross-origin resource sharing </p></div></div><div class="code"><div class="wrapper">            log.info(<span class="hljs-string">"Configuring cross-origin requests..."</span>);
+        }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The secret key is used for authentication.  It is persistent, stored with other config files.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">generate_auth_key</span>(<span class="hljs-params">callback</span>) </span>{
+          log.info(<span class="hljs-string">"Configuring secret key..."</span>)
+          <span class="hljs-keyword">var</span> secret_file = config.getDataDir() + <span class="hljs-string">'/config/auth_secret'</span>
+          fs.readFile(secret_file, <span class="hljs-string">'utf8'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If there&#39;s already a secret key from disk, use it</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">if</span>(!err &amp;&amp; data &amp;&amp; (data.length == <span class="hljs-number">512</span>)) {
+              log.info(<span class="hljs-string">"Secret key already exists, using that."</span>)
+              <span class="hljs-keyword">this</span>.auth_secret = data;
+              <span class="hljs-keyword">return</span> callback();
+            }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If not, generate, save and use a new one</p></div></div><div class="code"><div class="wrapper">            log.info(<span class="hljs-string">"Generating a new secret key."</span>)
+            <span class="hljs-keyword">this</span>.auth_secret = crypto.randomBytes(<span class="hljs-number">256</span>).toString(<span class="hljs-string">'hex'</span>);
+            fs.writeFile(secret_file, <span class="hljs-keyword">this</span>.auth_secret, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+              callback();
+            }.bind(<span class="hljs-keyword">this</span>));
+
+          }.bind(<span class="hljs-keyword">this</span>))
+        }.bind(<span class="hljs-keyword">this</span>),</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Kick off the server if all of the above went OK.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">start_server</span>(<span class="hljs-params">callback</span>) </span>{
+            log.info(<span class="hljs-string">"Setting up the webserver..."</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO: Is this used any longer?  Maybe remove it.</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">var</span> fmt = {
+                <span class="hljs-string">'application/json'</span>: <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, body</span>) </span>{
+                    <span class="hljs-keyword">return</span> cb(<span class="hljs-literal">null</span>, <span class="hljs-built_in">JSON</span>.stringify(body, <span class="hljs-literal">null</span>, <span class="hljs-string">'\t'</span>));
+                }
+            }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Initialize a server and attach it to the application</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">var</span> server = restify.createServer({name:<span class="hljs-string">"FabMo Engine"</span>});
+            <span class="hljs-keyword">this</span>.server = server;</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Allow JSON over Cross-origin resource sharing</p></div></div><div class="code"><div class="wrapper">            log.info(<span class="hljs-string">"Configuring cross-origin requests..."</span>);
             server.use(
                 <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">crossOrigin</span>(<span class="hljs-params">req,res,next</span>)</span>{
                     res.header(<span class="hljs-string">"Access-Control-Allow-Origin"</span>, <span class="hljs-string">"*"</span>);
                     res.header(<span class="hljs-string">"Access-Control-Allow-Headers"</span>, <span class="hljs-string">"X-Requested-With"</span>);
                     <span class="hljs-keyword">return</span> next();
                 }
-            );
-
-            <span class="hljs-keyword">if</span>(<span class="hljs-string">'debug'</span> <span class="hljs-keyword">in</span> argv &amp;&amp; argv.debug === <span class="hljs-string">'slow'</span>) {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Introduce deliberate latency for testing</p></div></div><div class="code"><div class="wrapper">                log.warn(<span class="hljs-string">"Configuring deliberate latency for testing..."</span>)
+            );</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Introduce deliberate latency for testing.  You can activate this by
+passing the --slow switch when running server.js (must include --debug too)</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">if</span>(<span class="hljs-string">'debug'</span> <span class="hljs-keyword">in</span> argv &amp;&amp; argv.debug === <span class="hljs-string">'slow'</span>) {
+                log.warn(<span class="hljs-string">"Configuring deliberate latency for testing..."</span>)
                 server.use(
                     <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">latency</span>(<span class="hljs-params">req, res, next</span>) </span>{
                         setTimeout(next,<span class="hljs-number">500</span>*<span class="hljs-built_in">Math</span>.random());
                     }
                 );
-            }
-
-            <span class="hljs-keyword">if</span>(<span class="hljs-string">'debug'</span> <span class="hljs-keyword">in</span> argv) {
+            }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If in &#39;debug&#39; mode, do some extra logging of HTTP requests</p></div></div><div class="code"><div class="wrapper">            <span class="hljs-keyword">if</span>(<span class="hljs-string">'debug'</span> <span class="hljs-keyword">in</span> argv) {
                 server.use(
                     <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">debug</span>(<span class="hljs-params">req, res, next</span>) </span>{
-                        <span class="hljs-comment">//log.debug(req.method + ' ' + req.url);</span>
+                        log.debug(req.method + <span class="hljs-string">' '</span> + req.url);
                         next();
                     });
-            }
-
-            server.use(restify.queryParser());
-            
-            server.on(<span class="hljs-string">'uncaughtException'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, route, err</span>) </span>{
+            }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The query parser does just that - map query params to an object for convenience</p></div></div><div class="code"><div class="wrapper">            server.use(restify.plugins.queryParser({
+                mapParams : <span class="hljs-literal">true</span>
+            }));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>The engine URL scheme includes a software version number that performs a 
+cache-busting function:  When the engine is updated, the version number in the
+URL is revised, and the cache is thus busted.
+404 errors are handled in two different ways depending on their content:</p></div></div><div class="code"><div class="wrapper">            server.on(<span class="hljs-string">'NotFound'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">req, res, cb</span>) </span>{
+                <span class="hljs-keyword">var</span> current_hash = config.engine.get(<span class="hljs-string">'version'</span>);
+                <span class="hljs-keyword">var</span> url_arr = req.url.split(<span class="hljs-string">'/'</span>);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If a URL contains a hash that doesn&#39;t match the current version hash:
+Replace the URL&#39;s hash with the current one, and redirect.</p></div></div><div class="code"><div class="wrapper">                <span class="hljs-keyword">if</span>(url_arr[<span class="hljs-number">1</span>] !== current_hash){
+                    url_arr.splice(<span class="hljs-number">1</span>,<span class="hljs-number">1</span>, current_hash);
+                    <span class="hljs-keyword">var</span> newPath = url_arr.join(<span class="hljs-string">'/'</span>);
+                    res.redirect(newPath , <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>)</span>{
+                        <span class="hljs-keyword">return</span>;
+                    });
+                } <span class="hljs-keyword">else</span> {</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>If the URL contains a current hash, and simply points to a bogus resource,
+just redirect to the root.</p></div></div><div class="code"><div class="wrapper">                    res.redirect(<span class="hljs-string">'/'</span> , <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>)</span>{
+                        <span class="hljs-keyword">return</span>;
+                    });
+                }
+            }); </div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Catch-all handler that responds gracefully when an internal server error occurs.</p></div></div><div class="code"><div class="wrapper">            server.on(<span class="hljs-string">'uncaughtException'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, res, route, err</span>) </span>{
                 log.uncaught(err);
                 answer = {
                     status:<span class="hljs-string">"error"</span>,
@@ -314,22 +459,36 @@ set up the application based on them.</p></div></div><div class="code"><div clas
                 };
                 res.json(answer)
             });</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Configure local directory for uploading files</p></div></div><div class="code"><div class="wrapper">            log.info(<span class="hljs-string">"Cofiguring upload directory..."</span>);
-            server.use(restify.bodyParser({<span class="hljs-string">'uploadDir'</span>:config.engine.get(<span class="hljs-string">'upload_dir'</span>) || <span class="hljs-string">'/tmp'</span>}));
-            server.pre(restify.pre.sanitizePath());
-
-            log.info(<span class="hljs-string">"Enabling gzip for transport..."</span>);
-            server.use(restify.gzipResponse());</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Import the routes module and apply the routes to the server</p></div></div><div class="code"><div class="wrapper">            log.info(<span class="hljs-string">"Loading routes..."</span>);
+            server.use(restify.plugins.bodyParser({
+                <span class="hljs-string">'uploadDir'</span>:config.engine.get(<span class="hljs-string">'upload_dir'</span>) || <span class="hljs-string">'/tmp'</span>,
+                mapParams: <span class="hljs-literal">true</span>
+            }));</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO: What is this path sanitizer doing?</p></div></div><div class="code"><div class="wrapper">            server.pre(restify.pre.sanitizePath());</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Configure authentication</p></div></div><div class="code"><div class="wrapper">            log.info(<span class="hljs-string">"Cofiguring authentication..."</span>);
+            log.info(<span class="hljs-string">"Secret Key: "</span> + <span class="hljs-keyword">this</span>.auth_secret.slice(<span class="hljs-number">0</span>,<span class="hljs-number">5</span>) + <span class="hljs-string">'...'</span> + <span class="hljs-keyword">this</span>.auth_secret.slice(-<span class="hljs-number">5</span>));
+            server.cookieSecret = <span class="hljs-keyword">this</span>.auth_secret;
+            server.use(sessions({</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>cookie name dictates the key name added to the request object</p></div></div><div class="code"><div class="wrapper">                cookieName: <span class="hljs-string">'session'</span>,</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>should be a large unguessable string</p></div></div><div class="code"><div class="wrapper">                secret: server.cookieSecret, <span class="hljs-comment">// REQUIRE HTTPS SUPPORT !!!</span></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>how long the session will stay valid in ms</p></div></div><div class="code"><div class="wrapper">                cookie: {
+                  <span class="hljs-comment">//: '/api', // cookie will only be sent to requests under '/api'</span>
+                  maxAge: (<span class="hljs-number">31</span> * <span class="hljs-number">24</span> * <span class="hljs-number">60</span> * <span class="hljs-number">60</span> * <span class="hljs-number">1000</span>),  <span class="hljs-comment">// duration of the cookie in milliseconds, defaults to duration above</span>
+                  ephemeral: <span class="hljs-literal">false</span>, 
+                  httpOnly: <span class="hljs-literal">false</span>, <span class="hljs-comment">// when true, cookie is not accessible from javascript</span>
+                  secure: <span class="hljs-literal">false</span> <span class="hljs-comment">// when true, cookie will only be sent over SSL. use key 'secureProxy' instead if you handle SSL not in your node process</span>
+                }
+            }));
+            server.use(authentication.passport.initialize());
+            server.use(authentication.passport.session());</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>gzipping is a typical way to speed up network operations
+We enable it on the server, so that supporting clients can use it</p></div></div><div class="code"><div class="wrapper">            log.info(<span class="hljs-string">"Enabling gzip for transport..."</span>);
+            server.use(restify.plugins.gzipResponse());</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Import the routes module and apply the routes to the server
+Routes are loaded dynamically. See routes/routes.js for details.</p></div></div><div class="code"><div class="wrapper">            log.info(<span class="hljs-string">"Loading routes..."</span>);
             server.io = socketio.listen(server.server);
-            <span class="hljs-keyword">var</span> routes = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./routes'</span>)(server);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Kick off the server listening for connections</p></div></div><div class="code"><div class="wrapper">            server.listen(config.engine.get(<span class="hljs-string">'server_port'</span>), <span class="hljs-string">"0.0.0.0"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
+            <span class="hljs-keyword">var</span> routes = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./routes'</span>)(server);</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Kick off the server listening for connections
+0.0.0.0 causes us to listen on ALL interfaces (so the engine can be seen over ethernet, wifi, etc.)</p></div></div><div class="code"><div class="wrapper">            server.listen(config.engine.get(<span class="hljs-string">'server_port'</span>), <span class="hljs-string">"0.0.0.0"</span>, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>) </span>{
                 log.info(server.name+ <span class="hljs-string">' listening at '</span>+ server.url);
                 callback(<span class="hljs-literal">null</span>, server);
-            });
+            });</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>TODO - should this be done after server.listen, or before? (or does it matter?)</p></div></div><div class="code"><div class="wrapper">            authentication.configure();
 
         }.bind(<span class="hljs-keyword">this</span>),
-        ],
-
-        <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, results</span>) </span>{
+        ],</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>Print some kind of sane debugging information if anything above fails</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, results</span>) </span>{
             <span class="hljs-keyword">if</span>(err) {
+                log.stack();
                 log.error(err);
                 <span class="hljs-keyword">typeof</span> callback === <span class="hljs-string">'function'</span> &amp;&amp; callback(err);
             } <span class="hljs-keyword">else</span> {
@@ -337,6 +496,5 @@ set up the application based on them.</p></div></div><div class="code"><div clas
             }
         }.bind(<span class="hljs-keyword">this</span>)
     );
-};
-
-<span class="hljs-built_in">module</span>.exports = <span class="hljs-keyword">new</span> Engine();</div></div></div></div></body></html>
+};</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>This module IS the engine object, but instantiating the object does virtually nothing:
+It is the call to start() that kicks off all the real work of running the application.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-built_in">module</span>.exports = <span class="hljs-keyword">new</span> Engine();</div></div></div></div></body></html>

@@ -32,253 +32,13 @@ f.event={add:function(a,c,d,e,g){var h,i,j,k,l,m,n,o,p,q,r,s;if(!(a.nodeType===3
           "foldPrefix": "^",
           "name": "JavaScript"
         },
-        "sourcePath": "/fabmo/engine/Gruntfile.js",
-        "projectPath": "Gruntfile.js",
-        "targetPath": "Gruntfile",
-        "pageTitle": "Gruntfile",
-        "title": "Gruntfile"
+        "sourcePath": "/fabmo/engine/authentication.js",
+        "projectPath": "authentication.js",
+        "targetPath": "authentication",
+        "pageTitle": "authentication",
+        "title": "authentication"
       },
       "depth": 1
-    }, {
-      "type": "folder",
-      "data": {
-        "path": "config",
-        "title": "config"
-      },
-      "depth": 1,
-      "children": [
-        {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".md", ".markdown", ".mkd", ".mkdn", ".mdown"],
-              "commentsOnly": true,
-              "name": "Markdown"
-            },
-            "sourcePath": "/fabmo/engine/config/README.md",
-            "projectPath": "config/README.md",
-            "targetPath": "config/README",
-            "pageTitle": "config/README",
-            "title": "README"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/config/config.js",
-            "projectPath": "config/config.js",
-            "targetPath": "config/config",
-            "pageTitle": "config/config",
-            "title": "config"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/config/dashboard_config.js",
-            "projectPath": "config/dashboard_config.js",
-            "targetPath": "config/dashboard_config",
-            "pageTitle": "config/dashboard_config",
-            "title": "dashboard_config"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/config/engine_config.js",
-            "projectPath": "config/engine_config.js",
-            "targetPath": "config/engine_config",
-            "pageTitle": "config/engine_config",
-            "title": "engine_config"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/config/g2_config.js",
-            "projectPath": "config/g2_config.js",
-            "targetPath": "config/g2_config",
-            "pageTitle": "config/g2_config",
-            "title": "g2_config"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/config/index.js",
-            "projectPath": "config/index.js",
-            "targetPath": "config/index",
-            "pageTitle": "config/index",
-            "title": "index"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/config/instance_config.js",
-            "projectPath": "config/instance_config.js",
-            "targetPath": "config/instance_config",
-            "pageTitle": "config/instance_config",
-            "title": "instance_config"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/config/machine_config.js",
-            "projectPath": "config/machine_config.js",
-            "targetPath": "config/machine_config",
-            "pageTitle": "config/machine_config",
-            "title": "machine_config"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/config/opensbp_config.js",
-            "projectPath": "config/opensbp_config.js",
-            "targetPath": "config/opensbp_config",
-            "pageTitle": "config/opensbp_config",
-            "title": "opensbp_config"
-          },
-          "depth": 2
-        }
-      ]
-    }, {
-      "type": "folder",
-      "data": {
-        "path": "dashboard",
-        "title": "dashboard"
-      },
-      "depth": 1,
-      "children": [
-        {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".md", ".markdown", ".mkd", ".mkdn", ".mdown"],
-              "commentsOnly": true,
-              "name": "Markdown"
-            },
-            "sourcePath": "/fabmo/engine/dashboard/README.md",
-            "projectPath": "dashboard/README.md",
-            "targetPath": "dashboard/README",
-            "pageTitle": "dashboard/README",
-            "title": "README"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/dashboard/app_manager.js",
-            "projectPath": "dashboard/app_manager.js",
-            "targetPath": "dashboard/app_manager",
-            "pageTitle": "dashboard/app_manager",
-            "title": "app_manager"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/dashboard/index.js",
-            "projectPath": "dashboard/index.js",
-            "targetPath": "dashboard/index",
-            "pageTitle": "dashboard/index",
-            "title": "index"
-          },
-          "depth": 2
-        }
-      ]
     }, {
       "type": "file",
       "data": {
@@ -336,31 +96,6 @@ f.event={add:function(a,c,d,e,g){var h,i,j,k,l,m,n,o,p,q,r,s;if(!(a.nodeType===3
         "title": "detection_daemon"
       },
       "depth": 1
-    }, {
-      "type": "folder",
-      "data": {
-        "path": "doc",
-        "title": "doc"
-      },
-      "depth": 1,
-      "children": [
-        {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".md", ".markdown", ".mkd", ".mkdn", ".mdown"],
-              "commentsOnly": true,
-              "name": "Markdown"
-            },
-            "sourcePath": "/fabmo/engine/doc/fabmo-js.md",
-            "projectPath": "doc/fabmo-js.md",
-            "targetPath": "doc/fabmo-js",
-            "pageTitle": "doc/fabmo-js",
-            "title": "fabmo-js"
-          },
-          "depth": 2
-        }
-      ]
     }, {
       "type": "file",
       "data": {
@@ -476,373 +211,24 @@ f.event={add:function(a,c,d,e,g){var h,i,j,k,l,m,n,o,p,q,r,s;if(!(a.nodeType===3
       },
       "depth": 1
     }, {
-      "type": "folder",
+      "type": "file",
       "data": {
-        "path": "routes",
-        "title": "routes"
+        "language": {
+          "nameMatchers": [".js"],
+          "pygmentsLexer": "javascript",
+          "multiLineComment": ["/*", "*", "*/"],
+          "singleLineComment": ["//"],
+          "ignorePrefix": "}",
+          "foldPrefix": "^",
+          "name": "JavaScript"
+        },
+        "sourcePath": "/fabmo/engine/profiles.js",
+        "projectPath": "profiles.js",
+        "targetPath": "profiles",
+        "pageTitle": "profiles",
+        "title": "profiles"
       },
-      "depth": 1,
-      "children": [
-        {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".md", ".markdown", ".mkd", ".mkdn", ".mdown"],
-              "commentsOnly": true,
-              "name": "Markdown"
-            },
-            "sourcePath": "/fabmo/engine/routes/README.md",
-            "projectPath": "routes/README.md",
-            "targetPath": "routes/README",
-            "pageTitle": "routes/README",
-            "title": "README"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/config.js",
-            "projectPath": "routes/config.js",
-            "targetPath": "routes/config",
-            "pageTitle": "routes/config",
-            "title": "config"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/dashboard.js",
-            "projectPath": "routes/dashboard.js",
-            "targetPath": "routes/dashboard",
-            "pageTitle": "routes/dashboard",
-            "title": "dashboard"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/direct.js",
-            "projectPath": "routes/direct.js",
-            "targetPath": "routes/direct",
-            "pageTitle": "routes/direct",
-            "title": "direct"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/index.js",
-            "projectPath": "routes/index.js",
-            "targetPath": "routes/index",
-            "pageTitle": "routes/index",
-            "title": "index"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/jobs.js",
-            "projectPath": "routes/jobs.js",
-            "targetPath": "routes/jobs",
-            "pageTitle": "routes/jobs",
-            "title": "jobs"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/kill.js",
-            "projectPath": "routes/kill.js",
-            "targetPath": "routes/kill",
-            "pageTitle": "routes/kill",
-            "title": "kill"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/log.js",
-            "projectPath": "routes/log.js",
-            "targetPath": "routes/log",
-            "pageTitle": "routes/log",
-            "title": "log"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/macros.js",
-            "projectPath": "routes/macros.js",
-            "targetPath": "routes/macros",
-            "pageTitle": "routes/macros",
-            "title": "macros"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/network.js",
-            "projectPath": "routes/network.js",
-            "targetPath": "routes/network",
-            "pageTitle": "routes/network",
-            "title": "network"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/passthrough.js",
-            "projectPath": "routes/passthrough.js",
-            "targetPath": "routes/passthrough",
-            "pageTitle": "routes/passthrough",
-            "title": "passthrough"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/state.js",
-            "projectPath": "routes/state.js",
-            "targetPath": "routes/state",
-            "pageTitle": "routes/state",
-            "title": "state"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/time.js",
-            "projectPath": "routes/time.js",
-            "targetPath": "routes/time",
-            "pageTitle": "routes/time",
-            "title": "time"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/util.js",
-            "projectPath": "routes/util.js",
-            "targetPath": "routes/util",
-            "pageTitle": "routes/util",
-            "title": "util"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/routes/websocket.js",
-            "projectPath": "routes/websocket.js",
-            "targetPath": "routes/websocket",
-            "pageTitle": "routes/websocket",
-            "title": "websocket"
-          },
-          "depth": 2
-        }
-      ]
-    }, {
-      "type": "folder",
-      "data": {
-        "path": "runtime",
-        "title": "runtime"
-      },
-      "depth": 1,
-      "children": [
-        {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/runtime/idle.js",
-            "projectPath": "runtime/idle.js",
-            "targetPath": "runtime/idle",
-            "pageTitle": "runtime/idle",
-            "title": "idle"
-          },
-          "depth": 2
-        }
-      ]
-    }, {
-      "type": "folder",
-      "data": {
-        "path": "scripts",
-        "title": "scripts"
-      },
-      "depth": 1,
-      "children": [
-        {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/scripts/convert_sb3.js",
-            "projectPath": "scripts/convert_sb3.js",
-            "targetPath": "scripts/convert_sb3",
-            "pageTitle": "scripts/convert_sb3",
-            "title": "convert_sb3"
-          },
-          "depth": 2
-        }, {
-          "type": "file",
-          "data": {
-            "language": {
-              "nameMatchers": [".js"],
-              "pygmentsLexer": "javascript",
-              "multiLineComment": ["/*", "*", "*/"],
-              "singleLineComment": ["//"],
-              "ignorePrefix": "}",
-              "foldPrefix": "^",
-              "name": "JavaScript"
-            },
-            "sourcePath": "/fabmo/engine/scripts/sb3_to_gcode.js",
-            "projectPath": "scripts/sb3_to_gcode.js",
-            "targetPath": "scripts/sb3_to_gcode",
-            "pageTitle": "scripts/sb3_to_gcode",
-            "title": "sb3_to_gcode"
-          },
-          "depth": 2
-        }
-      ]
+      "depth": 1
     }, {
       "type": "file",
       "data": {
@@ -874,11 +260,68 @@ f.event={add:function(a,c,d,e,g){var h,i,j,k,l,m,n,o,p,q,r,s;if(!(a.nodeType===3
           "foldPrefix": "^",
           "name": "JavaScript"
         },
+        "sourcePath": "/fabmo/engine/static.js",
+        "projectPath": "static.js",
+        "targetPath": "static",
+        "pageTitle": "static",
+        "title": "static"
+      },
+      "depth": 1
+    }, {
+      "type": "file",
+      "data": {
+        "language": {
+          "nameMatchers": [".js"],
+          "pygmentsLexer": "javascript",
+          "multiLineComment": ["/*", "*", "*/"],
+          "singleLineComment": ["//"],
+          "ignorePrefix": "}",
+          "foldPrefix": "^",
+          "name": "JavaScript"
+        },
+        "sourcePath": "/fabmo/engine/updater.js",
+        "projectPath": "updater.js",
+        "targetPath": "updater",
+        "pageTitle": "updater",
+        "title": "updater"
+      },
+      "depth": 1
+    }, {
+      "type": "file",
+      "data": {
+        "language": {
+          "nameMatchers": [".js"],
+          "pygmentsLexer": "javascript",
+          "multiLineComment": ["/*", "*", "*/"],
+          "singleLineComment": ["//"],
+          "ignorePrefix": "}",
+          "foldPrefix": "^",
+          "name": "JavaScript"
+        },
         "sourcePath": "/fabmo/engine/util.js",
         "projectPath": "util.js",
         "targetPath": "util",
         "pageTitle": "util",
         "title": "util"
+      },
+      "depth": 1
+    }, {
+      "type": "file",
+      "data": {
+        "language": {
+          "nameMatchers": [".js"],
+          "pygmentsLexer": "javascript",
+          "multiLineComment": ["/*", "*", "*/"],
+          "singleLineComment": ["//"],
+          "ignorePrefix": "}",
+          "foldPrefix": "^",
+          "name": "JavaScript"
+        },
+        "sourcePath": "/fabmo/engine/webpack.config.js",
+        "projectPath": "webpack.config.js",
+        "targetPath": "webpack.config",
+        "pageTitle": "webpack.config",
+        "title": "webpack.config"
       },
       "depth": 1
     }

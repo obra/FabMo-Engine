@@ -1,0 +1,281 @@
+<!DOCTYPE html><html lang="en"><head><title>authentication</title></head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"><meta name="groc-relative-root" content=""><meta name="groc-document-path" content="authentication"><meta name="groc-project-path" content="authentication.js"><link rel="stylesheet" type="text/css" media="all" href="assets/style.css"><script type="text/javascript" src="assets/behavior.js"></script><body><div id="meta"><div class="file-path">authentication.js</div></div><div id="document"><div class="segment"><div class="comments "><div class="wrapper"><p>authentication.js</p>
+<p>Manages user authentication to access the FabMo dashboard</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> passport = <span class="hljs-built_in">require</span>(<span class="hljs-string">'passport-restify'</span>);
+<span class="hljs-keyword">var</span> LocalStrategy   = <span class="hljs-built_in">require</span>(<span class="hljs-string">'passport-local'</span>).Strategy;
+<span class="hljs-keyword">var</span> config = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./config'</span>);
+<span class="hljs-keyword">var</span> machine = <span class="hljs-built_in">require</span>(<span class="hljs-string">'./machine'</span>);
+<span class="hljs-keyword">var</span> util = <span class="hljs-built_in">require</span>(<span class="hljs-string">'util'</span>);
+<span class="hljs-keyword">var</span> events = <span class="hljs-built_in">require</span>(<span class="hljs-string">'events'</span>);
+<span class="hljs-keyword">var</span> eventEmitter = <span class="hljs-keyword">new</span> events.EventEmitter();</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>FabMo is a single-user system, and this variable keeps track of the current one.</p></div></div><div class="code"><div class="wrapper"><span class="hljs-keyword">var</span> currentUser = <span class="hljs-literal">null</span>;
+<span class="hljs-keyword">var</span> userTimer = <span class="hljs-number">5</span>*<span class="hljs-number">60</span>*<span class="hljs-number">1000</span>; <span class="hljs-comment">// 5 minutes</span>
+<span class="hljs-keyword">var</span> currentUserTimer = <span class="hljs-literal">null</span>;
+<span class="hljs-keyword">var</span> isCurrentUserKickeable = <span class="hljs-literal">false</span>;
+<span class="hljs-keyword">var</span> userToKickout = <span class="hljs-literal">undefined</span>;
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">startUserTimer</span>(<span class="hljs-params"></span>)</span>{
+  <span class="hljs-keyword">var</span> currentUserTimer = setTimeout(userTimeout,userTimer);
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">resetUserTimer</span>(<span class="hljs-params"></span>)</span>{
+  clearTimeout(currentUserTimer);
+  currentUserTimer = startUserTimer();
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">userTimeout</span>(<span class="hljs-params"></span>)</span>{
+  isCurrentUserKickeable = <span class="hljs-literal">true</span>;
+}
+
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">logOutUser</span>(<span class="hljs-params">user</span>)</span>{
+  <span class="hljs-keyword">var</span> property = <span class="hljs-string">'user'</span>;
+<span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>._passport &amp;&amp; <span class="hljs-keyword">this</span>._passport.instance) {
+  property = <span class="hljs-keyword">this</span>._passport.instance._userProperty || <span class="hljs-string">'user'</span>;
+}
+
+<span class="hljs-keyword">this</span>[property] = <span class="hljs-literal">null</span>;
+<span class="hljs-keyword">if</span> (<span class="hljs-keyword">this</span>._passport &amp;&amp; <span class="hljs-keyword">this</span>._passport.session) {
+  <span class="hljs-keyword">delete</span> <span class="hljs-keyword">this</span>._passport.session.user;
+}
+}
+
+
+exports.configure = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>)</span>{
+  passport.use(<span class="hljs-keyword">new</span> LocalStrategy({passReqToCallback: <span class="hljs-literal">true</span>},
+    <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">req, username, password, done</span>) </span>{
+      config.user.findOne(username, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+        <span class="hljs-keyword">if</span> (err) { <span class="hljs-keyword">return</span> done(err); }
+        <span class="hljs-keyword">if</span> (!data) {
+          <span class="hljs-keyword">return</span> done(<span class="hljs-literal">null</span>, <span class="hljs-literal">false</span>, { message: <span class="hljs-string">'Incorrect username.'</span> });
+        }
+        <span class="hljs-keyword">if</span> (!config.user.validPassword(username, password)) {
+          <span class="hljs-keyword">return</span> done(<span class="hljs-literal">null</span>, <span class="hljs-literal">false</span>, { message: <span class="hljs-string">'Incorrect password.'</span> });
+        }
+
+        <span class="hljs-keyword">var</span> user = {
+          <span class="hljs-string">'username'</span>: username,
+          <span class="hljs-string">'password'</span>: data.password,
+          <span class="hljs-string">'isAdmin'</span> : data.isAdmin,
+          <span class="hljs-string">'created_at'</span>: data.created_at
+        }</div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>success ! the usert that did the request is registered in the database.</p></div></div></div><div class="segment"><div class="comments "><div class="wrapper"><p>check if the user can take the control of the tool.</p></div></div><div class="code"><div class="wrapper">        <span class="hljs-keyword">if</span>(userToKickout &amp;&amp; userToKickout.username === username){ <span class="hljs-comment">// the freshly kicked out user is doing a request.</span>
+          <span class="hljs-comment">//no boy. you can't do that anymore.</span>
+          req.logout(); <span class="hljs-comment">// remove his session information.</span>
+          userToKickout=<span class="hljs-literal">undefined</span>;
+          <span class="hljs-comment">//console.log("current user have been kicked out");</span>
+          <span class="hljs-keyword">return</span> done(<span class="hljs-literal">null</span>, <span class="hljs-literal">false</span>, { message: <span class="hljs-string">'you have been kicked by user '</span>+currentUser.username+<span class="hljs-string">'.'</span>});
+        }
+
+        <span class="hljs-keyword">if</span>(currentUser &amp;&amp; currentUser.username !== username){ <span class="hljs-comment">// a user is already connected</span>
+          <span class="hljs-keyword">if</span>(req.params.kickout!==<span class="hljs-literal">true</span>){ <span class="hljs-comment">// there is no request to kick the current user out.</span>
+            <span class="hljs-comment">//console.log("there is already a user using the tool");</span>
+            <span class="hljs-keyword">return</span> done(<span class="hljs-literal">null</span>, <span class="hljs-literal">false</span>, { message: <span class="hljs-string">'The user '</span>+currentUser.username+<span class="hljs-string">' is already controlling the tool'</span>, userAlreadyLogedIn:<span class="hljs-literal">true</span>});
+          }
+
+          <span class="hljs-comment">/****************************** Check the kickoutability of the user already connected ****************/</span>
+          <span class="hljs-keyword">if</span>(!user.isAdmin){ <span class="hljs-comment">// the user that wants to connect is not admin</span>
+            <span class="hljs-keyword">if</span>(currentUser.isAdmin){ <span class="hljs-comment">//you can't kick out an admin if your a simple user</span>
+              <span class="hljs-keyword">return</span> done(<span class="hljs-literal">null</span>, <span class="hljs-literal">false</span>, { message: <span class="hljs-string">'The user '</span>+currentUser.username+<span class="hljs-string">' is an admin.'</span>});
+            }
+            <span class="hljs-keyword">if</span>(!isCurrentUserKickeable){ <span class="hljs-comment">//you can't kick out a user that is actively using the tool.</span>
+              <span class="hljs-comment">//console.log("current user is active");</span>
+              <span class="hljs-keyword">return</span> done(<span class="hljs-literal">null</span>, <span class="hljs-literal">false</span>, { message: <span class="hljs-string">'The user '</span>+currentUser.username+<span class="hljs-string">' is still active.'</span>});
+            }
+            <span class="hljs-keyword">if</span>(machine.machine.status.state === <span class="hljs-string">'running'</span>) { <span class="hljs-comment">//you can't kick a user that is running a file.</span>
+                <span class="hljs-comment">//console.log("current user is running a file");</span>
+                <span class="hljs-keyword">return</span> done(<span class="hljs-literal">null</span>, <span class="hljs-literal">false</span>, { message: <span class="hljs-string">'The user '</span>+currentUser.username+<span class="hljs-string">' is running a file.'</span>});
+            }
+          }
+          userToKickout = currentUser;
+          eventEmitter.emit(<span class="hljs-string">"user_kickout"</span>,currentUser);
+          currentUser = user;
+          isCurrentUserKickeable = <span class="hljs-literal">false</span>;
+          startUserTimer();
+
+          <span class="hljs-keyword">return</span> done(<span class="hljs-literal">null</span>, user);
+          <span class="hljs-comment">/*****************************r*************************************************************************/</span>
+        }
+
+        <span class="hljs-keyword">if</span>(!currentUser){ <span class="hljs-comment">// first authentication</span>
+        <span class="hljs-comment">//We can login the user !</span>
+        currentUser = user;
+        isCurrentUserKickeable = <span class="hljs-literal">false</span>;
+        startUserTimer();
+        }
+        <span class="hljs-keyword">return</span> done(<span class="hljs-literal">null</span>, user);
+      });
+    }
+  ));
+};
+
+<span class="hljs-keyword">var</span> addUser = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">username,password,callback</span>)</span>{
+  config.user.add(username,password,<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err,user</span>)</span>{
+    <span class="hljs-keyword">if</span>(err){
+      callback(err);
+      <span class="hljs-keyword">return</span>;
+    } <span class="hljs-keyword">else</span> {
+      <span class="hljs-keyword">var</span> user = {
+        <span class="hljs-string">'username'</span>: username,
+        <span class="hljs-string">'password'</span>: user.password,
+        <span class="hljs-string">'isAdmin'</span> : user.isAdmin,
+        <span class="hljs-string">'created_at'</span>: user.created_at
+      }
+      user.password = <span class="hljs-literal">undefined</span>;  <span class="hljs-comment">// remove password from user object.</span>
+      callback(<span class="hljs-literal">null</span>,user);
+    }
+  });
+};
+
+<span class="hljs-keyword">var</span> getUsers = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">callback</span>)</span>{
+  <span class="hljs-keyword">var</span> users = [];
+  config.user.getAll(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">data</span>)</span>{
+    <span class="hljs-keyword">for</span>(key <span class="hljs-keyword">in</span> data){
+      <span class="hljs-keyword">var</span> user = {
+        <span class="hljs-string">'username'</span>: key,
+        <span class="hljs-string">'password'</span>: <span class="hljs-literal">undefined</span>,
+        <span class="hljs-string">'isAdmin'</span> : data[key].isAdmin,
+        <span class="hljs-string">'created_at'</span>: data[key].created_at
+      }
+      users.push(user);
+    }
+    callback(<span class="hljs-literal">null</span>,users)
+  })
+};
+
+<span class="hljs-keyword">var</span> getUser = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">username,callback</span>)</span>{
+  <span class="hljs-keyword">if</span>(!username){
+    callback(<span class="hljs-literal">null</span>,currentUser); <span class="hljs-keyword">return</span>;
+  }
+  config.user.findOne(username, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+    <span class="hljs-keyword">if</span>(data){
+      <span class="hljs-keyword">var</span> user = {
+        <span class="hljs-string">'username'</span>: username,
+        <span class="hljs-string">'password'</span>: <span class="hljs-literal">undefined</span>,
+        <span class="hljs-string">'isAdmin'</span> : data.isAdmin,
+        <span class="hljs-string">'created_at'</span>: data.created_at
+      }<span class="hljs-comment">// remove password from user object.</span>
+      callback(<span class="hljs-literal">null</span>,user);
+    } <span class="hljs-keyword">else</span>{
+      callback(err);
+    }
+  });
+};
+
+<span class="hljs-keyword">var</span> modifyUser = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">username, user_fields,callback</span>)</span>{
+  config.user.findOne(username, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+    <span class="hljs-keyword">var</span> user = {
+      <span class="hljs-string">'username'</span>: username,
+      <span class="hljs-string">'password'</span>: data.password,
+      <span class="hljs-string">'isAdmin'</span> : data.isAdmin,
+      <span class="hljs-string">'created_at'</span>: data.created_at
+    }
+    <span class="hljs-keyword">if</span>(err){
+      callback(err);
+      <span class="hljs-keyword">return</span>;
+    }<span class="hljs-keyword">else</span>{
+      <span class="hljs-keyword">if</span>(user_fields.username !== <span class="hljs-literal">undefined</span>) {
+        <span class="hljs-keyword">delete</span> user_fields.username;
+      }
+      <span class="hljs-keyword">for</span>(field <span class="hljs-keyword">in</span> user_fields){
+        <span class="hljs-keyword">switch</span>(field){
+          <span class="hljs-keyword">case</span> <span class="hljs-string">'_id'</span>:
+          <span class="hljs-keyword">case</span> <span class="hljs-string">'created_at'</span>:
+          <span class="hljs-keyword">case</span> <span class="hljs-string">'username'</span>:
+            callback(<span class="hljs-string">"your object contains an unchangeable field ! : "</span>+field,<span class="hljs-literal">null</span>);
+            <span class="hljs-keyword">return</span>;
+            <span class="hljs-keyword">break</span>;
+          <span class="hljs-keyword">case</span> <span class="hljs-string">'password'</span>:
+            password = config.user.verifyAndEncryptPassword(user_fields[<span class="hljs-string">'password'</span>]);
+            <span class="hljs-keyword">if</span>(!password){
+              callback(<span class="hljs-string">'Password not valid, it should contain between 5 and 15 characters. The only special characters authorized are "@ * #".'</span>,<span class="hljs-literal">null</span>);
+              <span class="hljs-keyword">return</span>;
+            }
+            user[<span class="hljs-string">'password'</span>]=password;
+            <span class="hljs-keyword">break</span>;
+          <span class="hljs-keyword">default</span>:
+            user[field] = user_fields[field];
+            <span class="hljs-keyword">break</span>;
+        }
+      }
+      <span class="hljs-keyword">var</span> newData = {};
+      newData[username] = {};
+      <span class="hljs-keyword">for</span> (field <span class="hljs-keyword">in</span> user) {
+        <span class="hljs-keyword">switch</span>(field){
+          <span class="hljs-keyword">case</span> <span class="hljs-string">'username'</span>:
+            <span class="hljs-keyword">break</span>;
+          <span class="hljs-keyword">default</span>:
+            newData[username][field] = user[field];
+            <span class="hljs-keyword">break</span>;
+        }
+      }
+      config.user.update(newData, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err,user</span>)</span>{
+        <span class="hljs-keyword">if</span>(user)user.password=<span class="hljs-literal">undefined</span>; <span class="hljs-comment">// don't transmit the password back</span>
+        callback(err,user);
+        <span class="hljs-keyword">return</span>;
+      });
+    }
+  });
+};
+
+<span class="hljs-keyword">var</span> deleteUser = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">username,callback</span>)</span>{
+  config.user.delete(username, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+    <span class="hljs-keyword">if</span>(err)callback(err);
+    <span class="hljs-keyword">else</span>{
+      callback(<span class="hljs-literal">null</span>, data);
+    }
+  });
+};
+
+
+passport.serializeUser(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">user, done</span>) </span>{
+  done(<span class="hljs-literal">null</span>, user.username);
+});
+
+passport.deserializeUser(<span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">username, done</span>) </span>{
+  config.user.findOne(username, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+    <span class="hljs-keyword">if</span>(err) {
+      done(<span class="hljs-literal">null</span>, <span class="hljs-literal">false</span>, { message: <span class="hljs-string">'User does not exist'</span> });
+    }<span class="hljs-keyword">else</span> {
+      <span class="hljs-keyword">var</span> user = {
+        <span class="hljs-string">'username'</span>: username,
+        <span class="hljs-string">'password'</span>: data.password,
+        <span class="hljs-string">'isAdmin'</span> : data.isAdmin,
+        <span class="hljs-string">'created_at'</span>: data.created_at
+      }
+      done(err, user);
+    }
+  });
+});
+
+exports.eventEmitter = eventEmitter;
+
+exports.addUser = addUser;
+exports.getUsers = getUsers;
+exports.getUser = getUser;
+exports.modifyUser = modifyUser;
+exports.deleteUser = deleteUser;
+
+exports.passport = passport;
+
+exports.getUserById = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">username,cb</span>)</span>{
+  config.user.findOne(username, <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">err, data</span>) </span>{
+    <span class="hljs-keyword">if</span>(data){
+      <span class="hljs-keyword">var</span> user = {
+        <span class="hljs-string">'username'</span>: username,
+        <span class="hljs-string">'password'</span>: data.password,
+        <span class="hljs-string">'isAdmin'</span> : data.isAdmin,
+        <span class="hljs-string">'created_at'</span>: data.created_at
+      }
+      cb(<span class="hljs-literal">null</span>, user);
+    } <span class="hljs-keyword">else</span> {
+      cb(<span class="hljs-string">"no user"</span>);
+    }
+
+  });
+}
+
+exports.getCurrentUser = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">u</span>)</span>{
+  <span class="hljs-keyword">return</span> currentUser;
+}
+exports.setCurrentUser = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params">u</span>)</span>{
+  currentUser = u;
+  eventEmitter.emit(<span class="hljs-string">'user_change'</span>, currentUser);
+};
+exports.setUserAsActive = <span class="hljs-function"><span class="hljs-keyword">function</span>(<span class="hljs-params"></span>)</span>{resetUserTimer();}</div></div></div></div></body></html>
