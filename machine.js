@@ -841,6 +841,7 @@ Machine.prototype.getRuntime = function(name) {
 // newstate - The state to transition to
 // stateinfo - The contents of the 'info' field of the status report, if needed.
 Machine.prototype.setState = function(source, newstate, stateinfo) {
+	//console.log("newstate: " + newstate);
 	this.fireButtonDebounce = false ;
 	if ((source === this) || (source === this.current_runtime)) {
 		// Set the info field

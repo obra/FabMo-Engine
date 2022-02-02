@@ -48,6 +48,7 @@ GCodeRuntime.prototype.pause = function() {
 
 GCodeRuntime.prototype.quit = function() {
 	this.driver.quit();
+	//this.driver.quit_pending = false;
 }
 
 GCodeRuntime.prototype.resume = function() {
@@ -175,6 +176,8 @@ GCodeRuntime.prototype._handleStateChange = function(stat) {
             	this.driver.sendM30();
                 this._file_or_stream_in_progress = false;
             }
+			//this.driver.quit_pending = false;
+			//break;
 		default:
 			// TODO:  Logging or error handling?
 			break;

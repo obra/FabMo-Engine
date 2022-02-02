@@ -537,6 +537,7 @@ G2.prototype.handleStatusReport = function(response) {
 						setTimeout(function() {
 							this._write('\x04\n', function() {});
 						}.bind(this), 50)
+						//this.quit_pending = false;
 						break;
 					case STAT_END:
 						log.info("Clearing the quit pending state.")
@@ -545,6 +546,7 @@ G2.prototype.handleStatusReport = function(response) {
 						this.pause_flag = false;
 						break;
 				}
+				//this.quit_pending = false;
 			} else {
 				// If we move into the holding state, set a flag indicating that we're paused, 
 				// and pause the cycle context if it exists.
@@ -1002,6 +1004,7 @@ G2.prototype.getInfo = function() {
 // https://github.com/synthetos/g2/wiki/g2core-Communications
 G2.prototype.sendMore = function() {
 
+	//console.log("pause_flag: " + this.pause_flag);
   // Don't ever send anything if we're paused
 	if(this.pause_flag) {
 		return;
