@@ -44,8 +44,9 @@ function SBPRuntime() {
     this.label_index = {};
     this.stack = [];
     this.file_stack = [];
-
+    this.i = 0;
     this.output = [];
+    //this.running is never used
     this.running = false;
     this.quit_pending = false;
     this.cmd_result = 0;
@@ -725,6 +726,20 @@ SBPRuntime.prototype._run = function() {
     // 2. Set the machine state to paused or running based on the state of the motion system
     // 3. Handle a feedhold edge case (feedhold issued while system was not executing motion)
     var onStat = function(stat) {
+        console.log(
+            "OpenSBP" + "\n" +
+            "info: " + i + "\n" +
+            "this.quit_pending: "              + this.quit_pending + "\n" +
+            "this.paused: "                    + this.paused + "\n" +
+            "this.running: "                   + this.running + "\n" +
+            "this.machine.status.state: "      + this.machine.status.state + "\n" +
+            "this.driver.stat: "               + this.driver.stat + "\n" +
+            "this.pendingFeedhold: "           + this.pendingFeedhold + "\n" +
+            "this.machine.status.inFeedHold: " + this.machine.status.inFeedHold + "\n" +
+            "this.gcodesPending: "             + this.gcodesPending + "\n" +
+            "this.resumeAllowed: "             + this.resumeAllowed + "\n"
+        )
+        i++;
         log.debug("onSTAT ..." + stat)
         if(this.inManualMode) {
             return;
@@ -738,8 +753,12 @@ SBPRuntime.prototype._run = function() {
                 }
                 break;
             case this.driver.STAT_HOLDING:
+                //openSBP pause sets infeedhold to true
                 // TODO: Possibly set this.paused = true to catch pause state from mechanical pause
-                this.machine.setState(this, 'paused');
+                //this.paused = true;
+                this.machine.setState(this, 'paused'); 
+                //this.machine.setState(this, 'paused');
+                //this.paused = true;
                 break;
             case this.driver.STAT_PROBE:
             case this.driver.STAT_RUNNING:
@@ -750,6 +769,7 @@ SBPRuntime.prototype._run = function() {
                             this.pendingFeedhold = false;
                             this.driver.feedHold();
                             this.machine.status.inFeedHold = true;
+                            //this.machine.status.inFeedHold = false;
                         }
                     }
                 }
@@ -1071,6 +1091,7 @@ SBPRuntime.prototype.runCustomCut = function(number, callback) {
 //   command - A single parsed line of OpenSBP code
 
 SBPRuntime.prototype._execute = function(command, callback) {
+    //this.paused = false;
     // Just skip over blank lines, undefined, etc.
     if(!command) {
         this.pc += 1;
@@ -1944,6 +1965,7 @@ SBPRuntime.prototype.pause = function() {
         this.pendingFeedhold = true;
     } else {
         this.machine.driver.feedHold();
+        //this.paused = true;
         this.machine.status.inFeedHold = true;
     }
 }
@@ -1958,6 +1980,7 @@ SBPRuntime.prototype.quit = function() {
 
 // Resume a program from the paused state
 //   TODO - make some indication that this action was successful (resume is not always allowed, and sometimes it fails)
+//interest
 SBPRuntime.prototype.resume = function(input=false) {
         if(this.resumeAllowed) {
             if(this.paused) {
@@ -1979,6 +2002,7 @@ SBPRuntime.prototype.resume = function(input=false) {
             } else {
                 this.driver.resume();
                 this.machine.status.inFeedHold = false;
+                //this.paused = false;
             }
         }
 }

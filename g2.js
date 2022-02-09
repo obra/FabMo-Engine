@@ -548,6 +548,7 @@ G2.prototype.handleStatusReport = function(response) {
 			} else {
 				// If we move into the holding state, set a flag indicating that we're paused, 
 				// and pause the cycle context if it exists.
+				//Hits here first when stop is pressed
 				switch(response.sr.stat) {
 					case STAT_HOLDING:
 						this.pause_flag = true;
@@ -556,6 +557,7 @@ G2.prototype.handleStatusReport = function(response) {
 						}
 						break;
 					default:
+						//Hits here consistently. Every debug step pretty much
 						this.pause_flag = false;
 						if(this.context) {
 							this.context.resume();
@@ -690,6 +692,8 @@ G2.prototype.queueFlush = function(callback) {
 // Like the quit() function below, to issue another resume while the first one is pending can
 // make the system crashy - so we're careful not to do that.
 // This function returns a promise that resolves when the machining cycle has resumed.
+//interest
+//Does not get to "in g2 resume 2 or 3" when FH button is pressed during dwell. 
 G2.prototype.resume = function() {
 	var thisPromise = _promiseCounter;
 	if(resumePending){

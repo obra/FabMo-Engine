@@ -1009,12 +1009,15 @@ Machine.prototype.quit = function(callback) {
 
 // Resume from the paused state.
 Machine.prototype.resume = function(callback, input=false) {
+	console.log("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!CALLBACK: " + callback);
 	if (this.driver.pause_hold) {
 		//Release driver pause hold
 		this.driver.pause_hold = false;
+		//this.status.inFeedHold = false;
 	}
 	if (this.current_runtime && this.status.inFeedHold){
 		this._resume();
+		this.status.inFeedHold = false;
 	} else {
 		//clear any timed pause
 		if (this.pauseTimer) {
@@ -1028,6 +1031,7 @@ Machine.prototype.resume = function(callback, input=false) {
 		if (callback) {
 	    	callback(null, 'resumed');
 	    } else {
+			//this is where you end up when FH directly after resume
 	    	log.debug('Undefined callback passed to resume');
 	    }
 	}
@@ -1131,6 +1135,7 @@ Machine.prototype._executeRuntimeCode = function(runtimeName, code, callback) {
 	}
 }
 
+//interest
 Machine.prototype._resume = function(input) {
 	switch(this.status.state) {
 		case 'interlock':
