@@ -31,6 +31,7 @@ GCodeRuntime.prototype.connect = function(machine) {
 	this.status_report = {};
 	this.driver.on('status',this.status_handler);
 	this.driver.on('error',this.error_handler);
+	this.ok_to_disconnect = false;
 	log.info("Connected G-Code Runtime");
 };
 
@@ -178,9 +179,13 @@ GCodeRuntime.prototype._handleStateChange = function(stat) {
             // OTOH, an extra M30 should not cause a problem.
 			this._changeState('stopped');
             if (this._file_or_stream_in_progress) {
-            	this.driver.sendM30();
-                this._file_or_stream_in_progress = false;
+				this.driver.sendCycleStart();
+				this._file_or_stream_in_progress = false;
             }
+			else{
+				this.driver.sendM30();
+                this._file_or_stream_in_progress = false;
+			}
 		default:
 			// TODO:  Logging or error handling?
 			break;

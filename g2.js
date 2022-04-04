@@ -761,7 +761,9 @@ G2.prototype.quit = function() {
 	});
 }
 
-
+G2.prototype.sendCycleStart = function() {
+	this._write('~');
+}
 // When the gcode runtime asks that an M30 be sent, send it. This is pulled out from the
 //  normal queuing and writing path because of a timing issue with the g2core that needs to be
 //  resolved. Right now, when the g2core runs out of gcode in the buffer, it seems like it
