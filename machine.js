@@ -329,7 +329,7 @@ Machine.prototype.handleFireButton = function(stat, auth_input) {
 	}
 	this.fireButtonPressed = stat[auth_input]
 }
-
+//Is okay authorize?
 // Given the status report and specified input process the "okay" behavior
 // Hitting the "okay" button on the machine essentially causes it to behave as if you had
 // hit the okay/resume in the dashboard UI.  It is a convenience that prevents you from 
@@ -439,6 +439,7 @@ function decideNextAction(require_auth_in, current_state_in, driver_status_inter
 			break;
 		case 'paused':
 		case 'stopped':
+			require_auth_in = false;
 			if(current_action_io.type != 'resume') {
 				result_arm_obj['error_thrown'] = new Error('Cannot arm the machine for ' + current_action_io.type + ' when ' + current_state_in);
 			}
