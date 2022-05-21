@@ -13,7 +13,6 @@ var events = require('events');
 var async = require('async');
 var process = require('process');
 var machine = require('./machine');
-var detection_daemon = require('./detection_daemon');
 var config = require('./config');
 var OS = process.platform;
 var PLATFORM = process.env.PLATFORM;
@@ -38,7 +37,6 @@ var Util = require('util');
 
 
 var GenericNetworkManager = require('./network_manager').NetworkManager;
-var Beacon = require('./beacon');
 
 var BEACON_INTERVAL = 1*60*60*1000 // 1 Hour (in milliseconds)
 var TASK_TIMEOUT = 10800000;    // 3 hours (in milliseconds)
@@ -608,9 +606,6 @@ Engine.prototype.start = function(callback) {
                         log.info('Network is possibly available:  Going to check for packages in ' + PACKAGE_CHECK_DELAY + ' seconds.')
                         setTimeout(function() {
                             //TODO re-imlpement for dashboard only updates?
-                            //log.info('Doing beacon report due to network change');
-                            //this.beacon.setLocalAddresses(this.networkManager.getLocalAddresses());
-                            //this.beacon.once('network');
                             // log.info('Running package check due to network change');
                             // this.runAllPackageChecks();
                         }.bind(this), PACKAGE_CHECK_DELAY*1000);
@@ -635,23 +630,6 @@ Engine.prototype.start = function(callback) {
 
 
         function setup_config_events(callback) {
-            config.engine.on('change', function(evt) {
-                if(evt.beacon_url) {
-                    this.beacon.set('url', config.updater.get('beacon_url'));
-                }
-        //TODO ... as part of dealing with beacon
-        ////## this 'once' generating can't read prop error on first config changes    
-                // If the tool name changes, report the change to beacon
-                if(evt.name) {
-                    this.beacon.once('config');
-                }
-    
-                // If beacon consent changes, let the beacon daemon know (possibly do a report)
-                if (evt.consent_for_beacon) {
-                    this.beacon.set("consent_for_beacon", evt.consent_for_beacon);
-                    log.info("Consent for beacon is " + evt.consent_for_beacon);
-                }
-            }.bind(this));
             callback();
         }.bind(this),
 
@@ -799,40 +777,6 @@ Engine.prototype.start = function(callback) {
 
         }.bind(this)
 
-        // TODO:  IS Beacon still in use or supported?
-        // Start the beacon service
-        // function start_beacon(callback) {
-        //     var url = config.engine.get('beacon_url');
-        //     var consent = config.engine.get('consent_for_beacon');
-
-        //     log.info("Starting beacon service");
-        //     this.beacon = new Beacon({
-        //         url : url,
-        //         interval : BEACON_INTERVAL
-        //     });
-        //     switch(consent) {
-        //         case "true":
-        //         case true:
-        //                     log.info("Beacon is enabled");
-        //                     this.beacon.set("consent_for_beacon", "true");
-        //             break;
-
-        //         case "false":
-        //         case false:
-        //             log.info("Beacon is disabled");
-        //                     this.beacon.set("consent_for_beacon", "false");
-        //             break;
-        //         default:
-        //             log.info("Beacon consent is unspecified");
-        //                     this.beacon.set("consent_for_beacon", "true");
-        //             break;
-        //     }
-
-        //     //this.beacon.start();
-
-        // }.bind(this)
-        ],
-        // Print some kind of sane debugging information if anything above fails
         function(err, results) {
             if(err) {
                 log.stack();

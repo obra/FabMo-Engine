@@ -39,7 +39,6 @@ require("../css/toastr.min.css");
     var keyPressed = false;
     var isAuth = false;
     var lastInfoSeen = null;
-    var consent = '';
     var disconnected = false;
     var last_state_seen = null;
     var in_goto_flag = false;
@@ -58,23 +57,6 @@ require("../css/toastr.min.css");
             window.location.href = '#/authentication';
         } 
     });
-
-    // engine.getUpdaterConfig(function(err, data){
-    //    consent =  data.consent_for_beacon;
-
-    //    if (consent === "none") {
-    //         showConsent();
-    //         $(document).keyup(function(e) {
-    //             if (e.keyCode == 27) {
-    //                 hideConsent();
-    //             }
-    //         });
-            
-    //    }
-    //    return consent;
-    // }); 
-    
-
 
     setUpManual = function(){
         engine.getConfig(function(err, config){
@@ -503,28 +485,6 @@ require("../css/toastr.min.css");
     })
 
 
-    function showConsent () {
-           $('.modalDim').show();
-           $('#beacon_consent_container').show();
-         
-    }
-    function hideConsent (){
-        $('.modalDim').hide();
-        $('#beacon_consent_container').hide();
-    }
-
-    $('#beacon_consent_button').on('click', function(conf){
-                conf = {consent_for_beacon : "true"};
-                dashboard.engine.setUpdaterConfig(conf,function(err){
-                if(err){
-                    return;
-                }
-                });
-                consent = "true";
-            $('.modalDim').hide();
-            $('#beacon_consent_container').hide();
-    });
-
     function showDaisy(callback) {
 
         if (daisyIsShown) {
@@ -732,7 +692,6 @@ console.log('zero- ',axi,obj,obj[axi]);
         if (!disconnected) {
             disconnected = true;
             setConnectionStrength(null);
-            hideConsent();
             showDaisy();
             
         }
@@ -744,9 +703,6 @@ console.log('zero- ',axi,obj,obj[axi]);
             setConnectionStrength(5);
         }
         hideDaisy(null);
-        if (consent === "none") {
-            showConsent();
-        }
     });
 
     
